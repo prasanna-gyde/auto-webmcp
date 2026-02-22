@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>auto-webmcp — Drop in one script tag. Every &lt;form&gt; is instantly callable by AI agents.</title>
+  <meta name="description" content="auto-webmcp automatically registers all HTML forms as WebMCP tools via the imperative API. Zero manual coding. Drop-in script tag or ESM import.">
+  <meta property="og:title" content="auto-webmcp — Every &lt;form&gt; instantly callable by AI agents">
+  <meta property="og:description" content="Drop in one script tag and every HTML form on your site becomes callable by AI agents via WebMCP. No manual coding required.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://autowebmcp.dev">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:            #0d1117;
+      --bg-surface:    #161b22;
+      --border:        #30363d;
+      --text:          #e6edf3;
+      --text-muted:    #8b949e;
+      --accent:        #58a6ff;
+      --accent-purple: #bc8cff;
+      --radius:        8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    code {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.875em;
+    }
+
+    /* ─── Navbar ─── */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(13, 17, 23, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+    }
+    .navbar-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .navbar-brand {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .navbar-brand .version {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 400;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1px 8px;
+    }
+    .navbar-links {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .navbar-links a {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      transition: color 0.15s;
+    }
+    .navbar-links a:hover { color: var(--text); text-decoration: none; }
+
+    /* ─── Hero ─── */
+    .hero {
+      padding: 5rem 1.5rem 4rem;
+      text-align: center;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      background: rgba(88, 166, 255, 0.1);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      color: var(--accent);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge:hover { text-decoration: none; background: rgba(88, 166, 255, 0.15); }
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .hero h1 {
+      font-size: clamp(1.875rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      margin-bottom: 1.25rem;
+    }
+    .hero h1 code {
+      color: var(--accent-purple);
+      background: rgba(188, 140, 255, 0.1);
+      padding: 0 6px;
+      border-radius: 4px;
+    }
+    .hero-sub {
+      font-size: 1.125rem;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.7;
+    }
+    .hero-sub code {
+      color: var(--accent);
+      background: rgba(88, 166, 255, 0.1);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    /* ─── Install Tabs ─── */
+    .install-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      max-width: 600px;
+      margin: 0 auto 2rem;
+      text-align: left;
+    }
+    .tab-radios { display: none; }
+    .tab-labels {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-label {
+      padding: 0.625rem 1.25rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-right: 1px solid var(--border);
+      transition: color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .tab-label:hover { color: var(--text); }
+    #tab-cdn:checked ~ .tab-labels label[for="tab-cdn"],
+    #tab-npm:checked ~ .tab-labels label[for="tab-npm"] {
+      color: var(--accent);
+      background: rgba(88, 166, 255, 0.08);
+    }
+    .tab-panels { padding: 0; }
+    .tab-panel { display: none; }
+    #tab-cdn:checked ~ .tab-panels #panel-cdn,
+    #tab-npm:checked ~ .tab-panels #panel-npm { display: block; }
+    .code-block-wrapper {
+      position: relative;
+    }
+    .code-block-wrapper pre {
+      margin: 0;
+      border-radius: 0;
+      background: transparent !important;
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
+    .copy-btn.copied { color: #3fb950; border-color: #3fb950; }
+
+    /* ─── Hero CTAs ─── */
+    .hero-ctas {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1.25rem;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      border: none;
+      text-decoration: none;
+    }
+    .btn:hover { opacity: 0.85; text-decoration: none; transform: translateY(-1px); }
+    .btn-primary { background: var(--accent); color: #0d1117; }
+    .btn-secondary { background: var(--bg-surface); color: var(--text); border: 1px solid var(--border); }
+
+    /* ─── Section layout ─── */
+    section { padding: 4rem 1.5rem; }
+    .section-inner { max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+    .section-title {
+      font-size: clamp(1.375rem, 3vw, 1.875rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.75rem;
+    }
+    .section-sub {
+      color: var(--text-muted);
+      font-size: 1rem;
+      margin-bottom: 2.5rem;
+      max-width: 560px;
+    }
+
+    /* ─── How it works ─── */
+    .how-section { background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .how-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.5rem;
+    }
+    .how-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      position: relative;
+    }
+    .how-card-num {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      margin-bottom: 0.75rem;
+      font-family: 'SF Mono', monospace;
+    }
+    .how-card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .how-card p { font-size: 0.875rem; color: var(--text-muted); line-height: 1.6; }
+    .how-card code {
+      color: var(--accent-purple);
+      background: rgba(188, 140, 255, 0.1);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    /* ─── Positioning ─── */
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .compare-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+    .compare-card.highlight {
+      border-color: rgba(88, 166, 255, 0.4);
+      background: rgba(88, 166, 255, 0.04);
+    }
+    .compare-card h3 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .compare-card.highlight h3 { color: var(--accent); }
+    .compare-list { list-style: none; }
+    .compare-list li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.625rem;
+    }
+    .compare-list li:last-child { border-bottom: none; }
+    .compare-list li::before {
+      content: '→';
+      color: var(--text-muted);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .compare-card.highlight .compare-list li::before { color: var(--accent); content: '⚡'; }
+    .note-callout {
+      background: rgba(188, 140, 255, 0.07);
+      border: 1px solid rgba(188, 140, 255, 0.2);
+      border-radius: var(--radius);
+      padding: 0.875rem 1.25rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+    .note-callout strong { color: var(--accent-purple); }
+
+    /* ─── Config snippet ─── */
+    .config-section { background: var(--bg); }
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    .config-block h3 {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+    .config-snippet {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .config-snippet .code-block-wrapper pre {
+      padding: 1.25rem;
+    }
+
+    /* ─── Testing tip ─── */
+    .tip-section { background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .tip-box {
+      background: rgba(88, 166, 255, 0.06);
+      border: 1px solid rgba(88, 166, 255, 0.25);
+      border-radius: var(--radius);
+      padding: 1.5rem 2rem;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .tip-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .tip-content h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .tip-content p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+    .tip-content code {
+      color: var(--accent);
+      background: rgba(88, 166, 255, 0.1);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    /* ─── Links grid ─── */
+    .links-section { background: var(--bg); }
+    .links-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+    }
+    .link-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      transition: border-color 0.15s, transform 0.1s;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .link-card:hover { border-color: var(--accent); transform: translateY(-2px); text-decoration: none; }
+    .link-card-icon { font-size: 1.5rem; }
+    .link-card h3 { font-size: 1rem; font-weight: 700; color: var(--text); }
+    .link-card p { font-size: 0.875rem; color: var(--text-muted); line-height: 1.5; }
+
+    /* ─── Footer ─── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem 1.5rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--text); }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 1023px) {
+      .how-grid { grid-template-columns: repeat(2, 1fr); }
+      .links-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 767px) {
+      .hero { padding: 3rem 1.25rem 2.5rem; }
+      .how-grid { grid-template-columns: 1fr; }
+      .compare-grid { grid-template-columns: 1fr; }
+      .config-grid { grid-template-columns: 1fr; }
+      .links-grid { grid-template-columns: 1fr; }
+      .navbar-brand .version { display: none; }
+      section { padding: 3rem 1.25rem; }
+      .tip-box { flex-direction: column; padding: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ Navbar ═══ -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <div class="navbar-brand">
+        <span>⚡ auto-webmcp</span>
+        <span class="version">v0.1.0</span>
+      </div>
+      <div class="navbar-links">
+        <a href="https://github.com/prasannav7/auto-webmcp" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+        <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 0v16h16V0H0zm13 13H8v-2H3V3h10v10z"/></svg>
+          npm
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══ Hero ═══ -->
+  <div class="hero">
+    <a class="badge" href="https://developer.chrome.com/blog/webmcp-epp" target="_blank" rel="noopener">
+      <span class="badge-dot"></span>
+      Chrome WebMCP · Early Preview
+    </a>
+    <h1>Drop in one script tag.<br>Every <code>&lt;form&gt;</code> is instantly callable by AI agents.</h1>
+    <p class="hero-sub">
+      auto-webmcp uses the WebMCP imperative API (<code>navigator.modelContext.registerTool()</code>) to auto-register every form on your page — inferred from your existing HTML. Zero manual coding. Gracefully degrades when WebMCP is unavailable.
+    </p>
+
+    <!-- Install tabs -->
+    <div class="install-box">
+      <input type="radio" name="tab" id="tab-cdn" class="tab-radios" checked>
+      <input type="radio" name="tab" id="tab-npm" class="tab-radios">
+      <div class="tab-labels">
+        <label class="tab-label" for="tab-cdn">CDN</label>
+        <label class="tab-label" for="tab-npm">npm</label>
+      </div>
+      <div class="tab-panels">
+        <div class="tab-panel" id="panel-cdn">
+          <div class="code-block-wrapper">
+            <button class="copy-btn" data-copy="&lt;script src=&quot;https://unpkg.com/auto-webmcp&quot;&gt;&lt;/script&gt;" aria-label="Copy CDN snippet">Copy</button>
+            <pre><code class="language-xml">&lt;script src="https://unpkg.com/auto-webmcp"&gt;&lt;/script&gt;</code></pre>
+          </div>
+        </div>
+        <div class="tab-panel" id="panel-npm">
+          <div class="code-block-wrapper">
+            <button class="copy-btn" data-copy="npm install auto-webmcp" aria-label="Copy npm install">Copy</button>
+            <pre><code class="language-bash">npm install auto-webmcp</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-ctas">
+      <a class="btn btn-primary" href="https://github.com/prasannav7/auto-webmcp" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+      <a class="btn btn-secondary" href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 0v16h16V0H0zm13 13H8v-2H3V3h10v10z"/></svg>
+        View on npm
+      </a>
+    </div>
+  </div>
+
+  <!-- ═══ How it works ═══ -->
+  <section class="how-section">
+    <div class="section-inner">
+      <div class="section-label">How it works</div>
+      <h2 class="section-title">From HTML to AI-callable tools in four steps</h2>
+      <p class="section-sub">auto-webmcp runs entirely in the browser — no server changes, no build pipeline required.</p>
+      <div class="how-grid">
+        <div class="how-card">
+          <div class="how-card-num">01</div>
+          <h3>Scans forms</h3>
+          <p>Discovers all <code>&lt;form&gt;</code> elements on page load and watches for new ones via <code>MutationObserver</code>. Forms with an existing <code>toolname</code> attribute are skipped — the browser handles those natively.</p>
+        </div>
+        <div class="how-card">
+          <div class="how-card-num">02</div>
+          <h3>Infers schema</h3>
+          <p>Maps each HTML input type to a JSON Schema property. Text → string, number → number, checkbox → boolean, radio groups → enum. Labels, placeholders, and <code>required</code> attributes become schema metadata.</p>
+        </div>
+        <div class="how-card">
+          <div class="how-card-num">03</div>
+          <h3>Registers tools</h3>
+          <p>Calls <code>navigator.modelContext.registerTool()</code> per form with the inferred name, description, and input schema. Fills fields and triggers submission when an AI agent invokes the tool.</p>
+        </div>
+        <div class="how-card">
+          <div class="how-card-num">04</div>
+          <h3>Degrades gracefully</h3>
+          <p>When <code>navigator.modelContext</code> is absent — any browser other than Chrome 146+ with the flag enabled — auto-webmcp silently no-ops. Your page is unaffected for regular users.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Positioning ═══ -->
+  <section>
+    <div class="section-inner">
+      <div class="section-label">Why auto-webmcp?</div>
+      <h2 class="section-title">Declarative API vs. auto-webmcp</h2>
+      <p class="section-sub">WebMCP offers two paths. auto-webmcp makes the imperative path automatic.</p>
+      <div class="compare-grid">
+        <div class="compare-card">
+          <h3>Native Declarative API</h3>
+          <ul class="compare-list">
+            <li>Add <code>toolname</code> to each individual <code>&lt;form&gt;</code></li>
+            <li>Full manual control over name and schema</li>
+            <li>Best for new sites built with WebMCP in mind</li>
+            <li>Each form requires explicit annotation</li>
+          </ul>
+        </div>
+        <div class="compare-card highlight">
+          <h3>auto-webmcp</h3>
+          <ul class="compare-list">
+            <li>Drop in one script tag — done</li>
+            <li>Names and schemas inferred from existing HTML</li>
+            <li>Best for existing sites with zero code changes</li>
+            <li>All forms covered automatically</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note-callout">
+        <strong>Already using the declarative API?</strong> auto-webmcp detects forms with an existing <code>toolname</code> attribute and skips them automatically — no conflicts, no duplicates.
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Config ═══ -->
+  <section class="config-section" style="border-top: 1px solid var(--border);">
+    <div class="section-inner">
+      <div class="section-label">Configuration</div>
+      <h2 class="section-title">Zero config required. Customize when you need to.</h2>
+      <p class="section-sub">Override the auto-inferred values with <code>data-webmcp-*</code> attributes or the JavaScript API.</p>
+      <div class="config-grid">
+        <div class="config-block">
+          <h3>JavaScript API</h3>
+          <div class="config-snippet">
+            <div class="code-block-wrapper">
+              <button class="copy-btn" data-copy="import { autoWebMCP } from 'auto-webmcp';
+
+autoWebMCP({
+  // Override tool name globally
+  toolName: (form) => form.id || 'my-form',
+  // Custom description
+  description: (form) => form.title || 'Submit this form',
+  // Auto-submit after agent fills fields
+  autoSubmit: true,
+});" aria-label="Copy JS config">Copy</button>
+              <pre><code class="language-javascript">import { autoWebMCP } from 'auto-webmcp';
+
+autoWebMCP({
+  // Override tool name globally
+  toolName: (form) => form.id || 'my-form',
+  // Custom description
+  description: (form) => form.title || 'Submit this form',
+  // Auto-submit after agent fills fields
+  autoSubmit: true,
+});</code></pre>
+            </div>
+          </div>
+        </div>
+        <div class="config-block">
+          <h3>HTML Attributes</h3>
+          <div class="config-snippet">
+            <div class="code-block-wrapper">
+              <button class="copy-btn" data-copy='&lt;!-- Custom name + description per form --&gt;
+&lt;form
+  data-webmcp-name="search-products"
+  data-webmcp-description="Search the product catalog"
+  data-webmcp-autosubmit="true"
+&gt;
+  &lt;input type="search" name="q" placeholder="Search..."&gt;
+&lt;/form&gt;
+
+&lt;!-- Exclude a form entirely --&gt;
+&lt;form data-no-webmcp&gt;
+  &lt;input type="password" name="token"&gt;
+&lt;/form&gt;' aria-label="Copy HTML attributes">Copy</button>
+              <pre><code class="language-xml">&lt;!-- Custom name + description per form --&gt;
+&lt;form
+  data-webmcp-name="search-products"
+  data-webmcp-description="Search the product catalog"
+  data-webmcp-autosubmit="true"
+&gt;
+  &lt;input type="search" name="q" placeholder="Search..."&gt;
+&lt;/form&gt;
+
+&lt;!-- Exclude a form entirely --&gt;
+&lt;form data-no-webmcp&gt;
+  &lt;input type="password" name="token"&gt;
+&lt;/form&gt;</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Testing tip ═══ -->
+  <section class="tip-section">
+    <div class="section-inner" style="text-align:center;">
+      <div class="section-label" style="margin-bottom:1.5rem;">Testing</div>
+      <div class="tip-box">
+        <div class="tip-icon">🔬</div>
+        <div class="tip-content">
+          <h3>Test with Chrome 146+</h3>
+          <p>
+            Enable <code>chrome://flags/#enable-webmcp-testing</code> in Chrome 146+ and install the
+            <strong>Model Context Tool Inspector</strong> Chrome Extension to inspect and invoke your
+            registered tools in real time. auto-webmcp registers your forms as first-class tools
+            visible directly in the inspector.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Links ═══ -->
+  <section class="links-section">
+    <div class="section-inner">
+      <div class="section-label" style="text-align:center;">Resources</div>
+      <h2 class="section-title" style="text-align:center; margin-bottom:2rem;">Everything you need</h2>
+      <div class="links-grid">
+        <a class="link-card" href="https://github.com/prasannav7/auto-webmcp" target="_blank" rel="noopener">
+          <div class="link-card-icon">
+            <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          </div>
+          <h3>GitHub</h3>
+          <p>Source code, issues, and contributions. MIT licensed and open to PRs.</p>
+        </a>
+        <a class="link-card" href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">
+          <div class="link-card-icon">
+            <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor"><path d="M0 0v16h16V0H0zm13 13H8v-2H3V3h10v10z"/></svg>
+          </div>
+          <h3>npm</h3>
+          <p>Install via npm, yarn, or pnpm. ESM and IIFE builds included.</p>
+        </a>
+        <a class="link-card" href="https://developer.chrome.com/blog/webmcp-epp" target="_blank" rel="noopener">
+          <div class="link-card-icon">🌐</div>
+          <h3>Chrome WebMCP Early Preview</h3>
+          <p>Official documentation from the Chrome team on the WebMCP APIs and early preview program.</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Footer ═══ -->
+  <footer>
+    <p>
+      Built by <a href="https://github.com/prasannav7" target="_blank" rel="noopener">Prasanna Vaidya</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/prasannav7/auto-webmcp/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+      &nbsp;·&nbsp;
+      v0.1.0
+    </p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/xml.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      hljs.highlightAll();
+
+      document.querySelectorAll('.copy-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var text = btn.getAttribute('data-copy');
+          navigator.clipboard.writeText(text).then(function () {
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            setTimeout(function () {
+              btn.textContent = 'Copy';
+              btn.classList.remove('copied');
+            }, 2000);
+          });
+        });
+      });
+    });
+  </script>
+</body>
+</html>
