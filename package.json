@@ -1,0 +1,46 @@
+{
+  "name": "auto-webmcp",
+  "version": "0.1.0",
+  "description": "Automatically make any HTML form WebMCP-ready — zero coding required",
+  "author": "Prasanna Vaidya <prasanna@gyde.ai>",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/auto-webmcp.esm.js",
+  "module": "./dist/auto-webmcp.esm.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/auto-webmcp.esm.js",
+      "require": "./dist/auto-webmcp.cjs.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "build:watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.19.0",
+    "serve": "^14.2.5",
+    "typescript": "^5.3.0"
+  },
+  "keywords": [
+    "webmcp",
+    "model-context",
+    "ai-agent",
+    "web-standard",
+    "forms",
+    "accessibility"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/prasanna-gyde/auto-webmcp.git"
+  }
+}

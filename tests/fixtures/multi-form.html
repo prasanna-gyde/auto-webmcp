@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multi-Form Page</title>
+</head>
+<body>
+  <h1>Dashboard</h1>
+
+  <!-- Search form -->
+  <section>
+    <h2>Search Products</h2>
+    <form id="product-search" action="/products">
+      <input name="q" type="search" placeholder="Search products..." required>
+      <input name="min_price" type="number" min="0" placeholder="Min price">
+      <input name="max_price" type="number" min="0" placeholder="Max price">
+      <select name="category">
+        <option value="">All Categories</option>
+        <option value="electronics">Electronics</option>
+        <option value="clothing">Clothing</option>
+        <option value="books">Books</option>
+      </select>
+      <button type="submit">Search</button>
+    </form>
+  </section>
+
+  <!-- Newsletter form — should be skipped with data-no-webmcp -->
+  <form data-no-webmcp action="/newsletter">
+    <input name="email" type="email" placeholder="Your email">
+    <button type="submit">Subscribe</button>
+  </form>
+
+  <!-- Login form -->
+  <section>
+    <h2>Sign In</h2>
+    <form id="login-form" action="/login" method="POST">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required>
+      <label>
+        <input type="checkbox" name="remember_me"> Remember me
+      </label>
+      <button type="submit">Sign In</button>
+    </form>
+  </section>
+
+  <!-- Appointment booking -->
+  <section>
+    <h3>Book Appointment</h3>
+    <form
+      data-webmcp-name="book_appointment"
+      data-webmcp-description="Schedule a service appointment"
+      action="/appointments"
+    >
+      <label for="service">Service</label>
+      <select id="service" name="service" required>
+        <option value="consultation">Consultation</option>
+        <option value="repair">Repair</option>
+        <option value="installation">Installation</option>
+      </select>
+
+      <label for="appt-date">Date</label>
+      <input
+        id="appt-date"
+        name="date"
+        type="date"
+        required
+        data-webmcp-title="Appointment Date"
+        data-webmcp-description="Preferred date for the appointment"
+      >
+
+      <label for="appt-time">Time</label>
+      <input id="appt-time" name="time" type="time" required>
+
+      <label for="notes">Notes</label>
+      <textarea id="notes" name="notes" rows="3" placeholder="Any special requests..."></textarea>
+
+      <button type="submit">Book Now</button>
+    </form>
+  </section>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Checkout — My Shop</title>
+</head>
+<body>
+  <h2>Complete Your Order</h2>
+
+  <form
+    id="checkout-form"
+    action="/checkout"
+    method="POST"
+    data-webmcp-name="checkout"
+    data-webmcp-description="Complete a purchase by providing shipping address and payment details"
+  >
+    <fieldset>
+      <legend>Shipping Address</legend>
+
+      <label for="full-name">Full Name</label>
+      <input id="full-name" name="full_name" type="text" required>
+
+      <label for="email">Email Address</label>
+      <input id="email" name="email" type="email" required>
+
+      <label for="address">Street Address</label>
+      <input id="address" name="address" type="text" required>
+
+      <label for="city">City</label>
+      <input id="city" name="city" type="text" required>
+
+      <label for="state">State</label>
+      <input id="state" name="state" type="text" required minlength="2" maxlength="2">
+
+      <label for="zip">ZIP Code</label>
+      <input id="zip" name="zip" type="text" pattern="[0-9]{5}" required>
+
+      <label for="country">Country</label>
+      <select id="country" name="country">
+        <option value="US">United States</option>
+        <option value="CA">Canada</option>
+        <option value="GB">United Kingdom</option>
+        <option value="AU">Australia</option>
+      </select>
+    </fieldset>
+
+    <fieldset>
+      <legend>Payment</legend>
+
+      <label for="card-number">Card Number</label>
+      <input id="card-number" name="card_number" type="text" pattern="[0-9]{16}" required
+             data-webmcp-title="Credit Card Number">
+
+      <label for="expiry">Expiry</label>
+      <input id="expiry" name="card_expiry" type="month" required>
+
+      <label for="cvv">CVV</label>
+      <input id="cvv" name="cvv" type="text" pattern="[0-9]{3,4}" required>
+
+      <label>
+        <input type="checkbox" name="save_card"> Save card for future purchases
+      </label>
+    </fieldset>
+
+    <label for="promo">Promo Code</label>
+    <input id="promo" name="promo_code" type="text" placeholder="Optional discount code">
+
+    <button type="submit">Place Order</button>
+  </form>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

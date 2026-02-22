@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Flight Search</title>
+</head>
+<body>
+  <h1>Search Flights</h1>
+
+  <form id="flight-search" action="/search">
+    <label for="origin">From</label>
+    <input id="origin" name="origin" type="text" placeholder="City or airport" required>
+
+    <label for="destination">To</label>
+    <input id="destination" name="destination" type="text" placeholder="City or airport" required>
+
+    <label for="depart">Departure Date</label>
+    <input id="depart" name="depart_date" type="date" required>
+
+    <label for="return">Return Date</label>
+    <input id="return" name="return_date" type="date">
+
+    <label for="passengers">Passengers</label>
+    <input id="passengers" name="passengers" type="number" min="1" max="9" value="1">
+
+    <label>Class</label>
+    <select name="cabin_class">
+      <option value="economy">Economy</option>
+      <option value="premium_economy">Premium Economy</option>
+      <option value="business">Business</option>
+      <option value="first">First</option>
+    </select>
+
+    <label>Trip Type</label>
+    <label><input type="radio" name="trip_type" value="roundtrip" checked> Round Trip</label>
+    <label><input type="radio" name="trip_type" value="oneway"> One Way</label>
+    <label><input type="radio" name="trip_type" value="multicity"> Multi-City</label>
+
+    <button type="submit">Search Flights</button>
+  </form>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>
