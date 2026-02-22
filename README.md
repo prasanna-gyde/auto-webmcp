@@ -4,8 +4,8 @@
 
 Drop in one script tag (or one `import`) and every `<form>` on your page is
 instantly registered as a structured tool that in-browser AI agents can
-discover and use via Google Chrome's
-[WebMCP proposal](https://github.com/nicktindall/mcp-browser).
+discover and use via Chrome's
+[WebMCP](https://developer.chrome.com/blog/webmcp-epp) early preview.
 
 ---
 
