@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>auto-webmcp — Drop in one script tag. Every &lt;form&gt; is instantly callable by AI agents.</title>
+  <title>auto-webmcp: Drop in one script tag. Every &lt;form&gt; is instantly callable by AI agents.</title>
   <meta name="description" content="auto-webmcp automatically registers all HTML forms as WebMCP tools via the imperative API. Zero manual coding. Drop-in script tag or ESM import.">
-  <meta property="og:title" content="auto-webmcp — Every form instantly callable by AI agents">
+  <meta property="og:title" content="auto-webmcp | Every form instantly callable by AI agents">
   <meta property="og:description" content="Drop in one script tag and every HTML form on your site becomes callable by AI agents via WebMCP. No manual coding required.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://autowebmcp.dev">
@@ -14,7 +14,7 @@
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://autowebmcp.dev/og-image.png">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300C851'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -273,7 +273,7 @@
     .faq-list {
       display: flex; flex-direction: column; gap: 0;
       border: 1px solid var(--border); border-radius: var(--radius);
-      overflow: hidden; max-width: 760px;
+      overflow: hidden; max-width: 760px; margin: 0 auto;
     }
     .faq-item { border-bottom: 1px solid var(--border); background: var(--bg); }
     .faq-item:last-child { border-bottom: none; }
@@ -416,7 +416,7 @@
       flex-shrink: 0;
       margin-top: 1px;
     }
-    .compare-card.highlight .compare-list li::before { color: var(--accent); content: '⚡'; }
+    .compare-card.highlight .compare-list li::before { color: var(--accent); content: '→'; }
     .note-callout {
       background: rgba(74, 222, 128, 0.07);
       border: 1px solid rgba(74, 222, 128, 0.2);
@@ -543,7 +543,7 @@
   <nav class="navbar">
     <div class="navbar-inner">
       <div class="navbar-brand">
-        <span>⚡ auto-webmcp</span>
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" style="vertical-align:-2px;flex-shrink:0"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> auto-webmcp</span>
         <span class="version">v0.2.1</span>
       </div>
       <div class="navbar-links">
@@ -568,7 +568,7 @@
     </a>
     <h1>Drop in one script tag.<br>Every <code>&lt;form&gt;</code> is instantly callable by AI agents.</h1>
     <p class="hero-sub">
-      Add one script tag to any page — ServiceNow, HubSpot, Zendesk, React apps, plain HTML — and every form on that page becomes invocable by an AI agent. No modifications to your existing forms, no backend changes, no build pipeline. Invisible to regular users until an agent is present.
+      Add one script tag to any page (ServiceNow, HubSpot, Zendesk, React apps, plain HTML) and every form on that page becomes invocable by an AI agent. No modifications to your existing forms, no backend changes, no build pipeline. Invisible to regular users until an agent is present.
     </p>
 
     <!-- Install tabs -->
@@ -638,7 +638,7 @@
     <div class="section-inner">
       <div class="section-label">How it works</div>
       <h2 class="section-title">From HTML to AI-callable tools in four steps</h2>
-      <p class="section-sub">auto-webmcp runs entirely in the browser — no server changes, no build pipeline required.</p>
+      <p class="section-sub">auto-webmcp runs entirely in the browser. No server changes, no build pipeline required.</p>
       <div class="how-grid">
         <div class="how-card">
           <div class="how-card-num">01</div>
@@ -658,7 +658,7 @@
         <div class="how-card">
           <div class="how-card-num">04</div>
           <h3>Degrades gracefully</h3>
-          <p>When <code>navigator.modelContext</code> is absent — any browser other than Chrome 146+ with the flag enabled — auto-webmcp silently no-ops. Your page is unaffected for regular users.</p>
+          <p>When <code>navigator.modelContext</code> is absent (any browser other than Chrome 146+ with the flag enabled), auto-webmcp silently no-ops. Your page is unaffected for regular users.</p>
         </div>
       </div>
     </div>
@@ -684,7 +684,7 @@
         <div class="compare-card highlight">
           <h3>auto-webmcp</h3>
           <ul class="compare-list">
-            <li>Drop in one script tag — done</li>
+            <li>Drop in one script tag. Done.</li>
             <li>Reads native <code>toolname</code>/<code>tooldescription</code> when present</li>
             <li>Infers names and schemas from existing HTML for all other forms</li>
             <li>Best for existing sites, CMSs, and SPAs with zero code changes</li>
@@ -694,7 +694,7 @@
         </div>
       </div>
       <div class="note-callout">
-        <strong>Already using the declarative API?</strong> auto-webmcp detects forms with an existing <code>toolname</code> attribute and skips them automatically — no conflicts, no duplicates.
+        <strong>Already using the declarative API?</strong> auto-webmcp detects forms with an existing <code>toolname</code> attribute and skips them automatically. No conflicts, no duplicates.
       </div>
     </div>
   </section>
@@ -775,7 +775,7 @@ autoWebMCP({
     <div class="section-inner" style="text-align:center;">
       <div class="section-label" style="margin-bottom:1.5rem;">Testing</div>
       <div class="tip-box">
-        <div class="tip-icon">🔬</div>
+        <div class="tip-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6m-5 0v7l-5 10a1 1 0 0 0 .9 1.5h10.2a1 1 0 0 0 .9-1.5l-5-10V3"/><line x1="6" y1="6" x2="18" y2="6"/></svg></div>
         <div class="tip-content">
           <h3>Test with Chrome 146+</h3>
           <p>
@@ -798,7 +798,7 @@ autoWebMCP({
         <details class="faq-item">
           <summary class="faq-q">Does this require a special Chrome flag?</summary>
           <div class="faq-a">
-            Yes, for now. WebMCP is in Early Preview and requires enabling <code>chrome://flags/#enable-webmcp-testing</code> in Chrome 146+. For regular users without the flag, auto-webmcp silently does nothing — your page is completely unaffected. Once Chrome ships WebMCP to stable, it will activate automatically for all users.
+            Yes, for now. WebMCP is in Early Preview and requires enabling <code>chrome://flags/#enable-webmcp-testing</code> in Chrome 146+. For regular users without the flag, auto-webmcp silently does nothing. Your page is completely unaffected. Once Chrome ships WebMCP to stable, it will activate automatically for all users.
           </div>
         </details>
         <details class="faq-item">
@@ -810,13 +810,13 @@ autoWebMCP({
         <details class="faq-item">
           <summary class="faq-q">Do I need to modify my existing forms?</summary>
           <div class="faq-a">
-            No. auto-webmcp reads your forms as-is and infers names, descriptions, and schemas from your existing HTML — labels, placeholders, input types, and <code>required</code> attributes. Optionally, add <code>data-webmcp-name</code> and <code>data-webmcp-description</code> attributes to any form to sharpen the descriptions visible to agents.
+            No. auto-webmcp reads your forms as-is and infers names, descriptions, and schemas from your existing HTML (labels, placeholders, input types, and <code>required</code> attributes). Optionally, add <code>data-webmcp-name</code> and <code>data-webmcp-description</code> attributes to any form to sharpen the descriptions visible to agents.
           </div>
         </details>
         <details class="faq-item">
           <summary class="faq-q">Does it work with React, Vue, Angular?</summary>
           <div class="faq-a">
-            Yes. auto-webmcp uses a <code>MutationObserver</code> to watch for forms that are dynamically added to the DOM. Forms rendered by any frontend framework — React, Vue, Angular, Svelte — are picked up automatically after they mount.
+            Yes. auto-webmcp uses a <code>MutationObserver</code> to watch for forms that are dynamically added to the DOM. Forms rendered by any frontend framework (React, Vue, Angular, Svelte) are picked up automatically after they mount.
           </div>
         </details>
         <details class="faq-item">
@@ -828,7 +828,7 @@ autoWebMCP({
         <details class="faq-item">
           <summary class="faq-q">Can I use it on ServiceNow, HubSpot, or Zendesk?</summary>
           <div class="faq-a">
-            Yes. See the <a href="/platforms">platform install guides</a> for step-by-step instructions on adding auto-webmcp to ServiceNow, HubSpot, and Zendesk — including where to paste the script tag in each platform's admin UI.
+            Yes. See the <a href="/platforms">platform install guides</a> for step-by-step instructions on adding auto-webmcp to ServiceNow, HubSpot, and Zendesk, including where to paste the script tag in each platform's admin UI.
           </div>
         </details>
       </div>
@@ -856,7 +856,7 @@ autoWebMCP({
           <p>Install via npm, yarn, or pnpm. ESM and IIFE builds included.</p>
         </a>
         <a class="link-card" href="https://developer.chrome.com/blog/webmcp-epp" target="_blank" rel="noopener">
-          <div class="link-card-icon">🌐</div>
+          <div class="link-card-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
           <h3>Chrome WebMCP Early Preview</h3>
           <p>Official documentation from the Chrome team on the WebMCP APIs and early preview program.</p>
         </a>

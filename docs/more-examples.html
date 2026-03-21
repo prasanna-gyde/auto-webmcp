@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>More Examples — auto-webmcp</title>
-  <meta name="description" content="5 real-world HTML forms tested with auto-webmcp. No custom toolname attributes — pure inference from vanilla HTML.">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <title>More Examples | auto-webmcp</title>
+  <meta name="description" content="5 real-world HTML forms tested with auto-webmcp. No custom toolname attributes: pure inference from vanilla HTML.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300C851'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -303,7 +303,7 @@
   <nav class="navbar" aria-label="Site navigation">
     <div class="navbar-inner">
       <a href="/" class="navbar-brand">
-        <span>⚡</span>
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" style="vertical-align:-2px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
         <span>auto-webmcp</span>
         <span class="version">v0.2.1</span>
         <span class="crumb" aria-hidden="true">/</span>
@@ -322,10 +322,10 @@
   <!-- Intro -->
   <div class="page-intro">
     <h1>Real-World Forms</h1>
-    <p>Five realistic forms tested with <strong>pure inference</strong> — no <code style="font-size:0.85em;background:rgba(101,130,0,0.1);padding:1px 5px;border-radius:4px;color:var(--dark-green)">toolname</code> attributes. The library infers tool names, descriptions, and schemas entirely from HTML structure and field semantics.</p>
+    <p>Five realistic forms tested with <strong>pure inference</strong>: no <code style="font-size:0.85em;background:rgba(101,130,0,0.1);padding:1px 5px;border-radius:4px;color:var(--dark-green)">toolname</code> attributes. The library infers tool names, descriptions, and schemas entirely from HTML structure and field semantics.</p>
     <span class="inference-badge">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-      All tool names &amp; schemas inferred — vanilla HTML only
+      All tool names &amp; schemas inferred: vanilla HTML only
     </span>
   </div>
 
@@ -340,7 +340,7 @@
         <div class="form-card-header">
           <div>
             <h2 class="form-card-title">User Login</h2>
-            <p class="form-card-desc">Email + password — password field must be excluded from schema</p>
+            <p class="form-card-desc">Email + password: password field excluded from schema</p>
           </div>
           <span class="inference-tag">inferred</span>
         </div>
@@ -540,7 +540,7 @@
         <div class="form-card-header">
           <div>
             <h2 class="form-card-title">Hotel Room Search</h2>
-            <p class="form-card-desc">Date pickers, number inputs, select — classic travel search form</p>
+            <p class="form-card-desc">Date pickers, number inputs, select: classic travel search form</p>
           </div>
           <span class="inference-tag">inferred</span>
         </div>
@@ -641,10 +641,10 @@
               <label for="evt-ticket">Ticket Type</label>
               <select id="evt-ticket" name="ticket_type" required>
                 <option value="">Select ticket</option>
-                <option value="general">General Admission — Free</option>
-                <option value="vip">VIP — $149</option>
-                <option value="workshop">Workshop + Conference — $299</option>
-                <option value="virtual">Virtual Attendance — Free</option>
+                <option value="general">General Admission: Free</option>
+                <option value="vip">VIP: $149</option>
+                <option value="workshop">Workshop + Conference: $299</option>
+                <option value="virtual">Virtual Attendance: Free</option>
               </select>
             </div>
             <div class="form-group">
@@ -722,9 +722,9 @@
 
   <!-- Footer -->
   <footer class="page-footer">
-    <a href="demo">← Back to Demo</a> &mdash;
-    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
-    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
+    <a href="demo">← Back to Demo</a> ·
+    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> ·
+    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> ·
     A <a href="https://gyde.ai" target="_blank" rel="noopener">Gyde</a> initiative
   </footer>
 
@@ -924,7 +924,7 @@
         }
       }
       if (!toolName) {
-        view.innerHTML = '<p class="schema-not-ready">Tool not registered yet — check the panel for registered names.</p>';
+        view.innerHTML = '<p class="schema-not-ready">Tool not registered yet. Check the panel for registered names.</p>';
         return;
       }
       var meta = window.__registeredToolMeta[toolName];

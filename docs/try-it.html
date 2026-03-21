@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Try It on Real Forms — auto-webmcp</title>
+  <title>Try It on Real Forms | auto-webmcp</title>
   <meta name="description" content="Inject auto-webmcp into any page from the browser console. Floating inspector panel shows registered tools, schemas, and lets you invoke them.">
-  <meta property="og:title" content="Try It on Real Forms — auto-webmcp">
+  <meta property="og:title" content="Try It on Real Forms | auto-webmcp">
   <meta property="og:description" content="One console paste. Floating inspector panel. Test auto-webmcp against real public forms in seconds.">
   <meta property="og:url" content="https://autowebmcp.dev/try-it">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300C851'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -240,7 +240,7 @@
   <nav class="navbar" aria-label="Site navigation">
     <div class="navbar-inner">
       <a href="/" class="navbar-brand">
-        <span>⚡</span>
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" style="vertical-align:-2px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
         <span>auto-webmcp</span>
         <span class="version">v0.2.1</span>
         <span class="crumb" aria-hidden="true">/</span>
@@ -262,10 +262,10 @@
     <!-- Intro -->
     <div class="page-intro">
       <h1>Try It on Real Forms</h1>
-      <p>Paste one snippet into any page's DevTools console to inject auto-webmcp and get a floating inspector panel — no install required.</p>
+      <p>Paste one snippet into any page's DevTools console to inject auto-webmcp and get a floating inspector panel. No install required.</p>
       <span class="intro-badge">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-        Works on any public form — just open DevTools and paste
+        Works on any public form. Just open DevTools and paste.
       </span>
     </div>
 
@@ -278,7 +278,7 @@
       <ol class="steps">
         <li>
           <span class="step-num">1</span>
-          <span>Pick a URL from the table below and open it in Chrome (WebMCP flag optional — the inspector works regardless).</span>
+          <span>Pick a URL from the table below and open it in Chrome (WebMCP flag optional; the inspector works regardless).</span>
         </li>
         <li>
           <span class="step-num">2</span>
@@ -286,7 +286,7 @@
         </li>
         <li>
           <span class="step-num">3</span>
-          <span>A floating <strong>auto-webmcp Inspector</strong> panel appears in the top-right corner — see registered tools, view their JSON schemas, and invoke them via <code class="inline">awmcpInvoke(name, params)</code>.</span>
+          <span>A floating <strong>auto-webmcp Inspector</strong> panel appears in the top-right corner. See registered tools, view their JSON schemas, and invoke them via <code class="inline">awmcpInvoke(name, params)</code>.</span>
         </li>
       </ol>
     </div>
@@ -300,7 +300,7 @@
 
       <div class="snippet-wrapper">
         <div class="snippet-toolbar">
-          <span class="snippet-toolbar-label">javascript — paste into DevTools Console</span>
+          <span class="snippet-toolbar-label">javascript: paste into DevTools Console</span>
           <button class="copy-btn" id="copy-btn" onclick="copySnippet()">Copy</button>
         </div>
         <pre class="snippet-pre" id="snippet-display"></pre>
@@ -338,7 +338,7 @@
                 <div class="form-type">Pizza order</div>
               </td>
               <td><span class="fields-note">radios, checkboxes, textarea, select</span></td>
-              <td><span class="csp-badge csp-none">✅ None — best first test</span></td>
+              <td><span class="csp-badge csp-none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00C851" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>None: best first test</span></td>
             </tr>
             <tr>
               <td><a class="url-link" href="https://news.ycombinator.com/submit" target="_blank" rel="noopener">news.ycombinator.com/submit</a></td>
@@ -346,7 +346,7 @@
                 <div class="form-type">Story submit</div>
               </td>
               <td><span class="fields-note">title, URL, text</span></td>
-              <td><span class="csp-badge csp-low">✅ Minimal</span></td>
+              <td><span class="csp-badge csp-low"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00C851" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>Minimal</span></td>
             </tr>
             <tr>
               <td><a class="url-link" href="https://news.ycombinator.com/login" target="_blank" rel="noopener">news.ycombinator.com/login</a></td>
@@ -354,7 +354,7 @@
                 <div class="form-type">HN Login</div>
               </td>
               <td><span class="fields-note">username (password excluded)</span></td>
-              <td><span class="csp-badge csp-low">✅ Minimal</span></td>
+              <td><span class="csp-badge csp-low"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00C851" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>Minimal</span></td>
             </tr>
             <tr>
               <td><a class="url-link" href="https://bugzilla.mozilla.org/enter_bug.cgi" target="_blank" rel="noopener">bugzilla.mozilla.org/enter_bug.cgi</a></td>
@@ -362,7 +362,7 @@
                 <div class="form-type">Bug report</div>
               </td>
               <td><span class="fields-note">many fields, selects, textareas</span></td>
-              <td><span class="csp-badge csp-low">✅ Low</span></td>
+              <td><span class="csp-badge csp-low"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00C851" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>Low</span></td>
             </tr>
             <tr>
               <td><a class="url-link" href="https://jsfiddle.net/user/signup" target="_blank" rel="noopener">jsfiddle.net/user/signup</a></td>
@@ -370,7 +370,7 @@
                 <div class="form-type">Developer signup</div>
               </td>
               <td><span class="fields-note">name, email (password excluded)</span></td>
-              <td><span class="csp-badge csp-low">✅ Low</span></td>
+              <td><span class="csp-badge csp-low"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00C851" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>Low</span></td>
             </tr>
             <tr>
               <td><a class="url-link" href="https://codepen.io/login" target="_blank" rel="noopener">codepen.io/login</a></td>
@@ -394,30 +394,30 @@
                 <div class="form-type">GitHub login</div>
               </td>
               <td><span class="fields-note">username (password excluded)</span></td>
-              <td><span class="csp-badge csp-strict">❌ Strict CSP</span></td>
+              <td><span class="csp-badge csp-strict"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Strict CSP</span></td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div class="note-box">
-        <strong>CSP restriction:</strong> Sites marked ❌ block loading scripts from external domains like unpkg.
+        <strong>CSP restriction:</strong> Sites marked <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> block loading scripts from external domains like unpkg.
         For those, download the IIFE locally first:
         <code class="inline">curl -o awmcp.js https://unpkg.com/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js</code>
-        — then open DevTools → Sources → drag the file in, or use the
+        Then open DevTools → Sources → drag the file in, or use the
         <a href="https://developer.chrome.com/docs/devtools/snippets" target="_blank" rel="noopener" style="color:var(--dark-green);text-decoration:underline;text-decoration-color:rgba(101,130,0,0.3)">Snippets</a>
         panel to paste and run a self-contained version.
-        Sites marked ⚠️ may work depending on current policy — try the snippet and check the console for CSP errors.
+        Sites marked ⚠️ may work depending on current policy. Try the snippet and check the console for CSP errors.
       </div>
     </div>
 
   </div><!-- /page-content -->
 
   <footer class="page-footer">
-    <a href="demo">Demo</a> &mdash;
-    <a href="more-examples">More Examples</a> &mdash;
-    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
-    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
+    <a href="demo">Demo</a> ·
+    <a href="more-examples">More Examples</a> ·
+    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> ·
+    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> ·
     A <a href="https://gyde.ai" target="_blank" rel="noopener">Gyde</a> initiative
   </footer>
 

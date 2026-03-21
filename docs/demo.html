@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Demo — auto-webmcp</title>
-  <meta name="description" content="See auto-webmcp in action. Three live forms registered as WebMCP tools — flight search, contact support, and a dynamically injected newsletter form.">
-  <meta property="og:title" content="Live Demo — auto-webmcp">
+  <title>Live Demo | auto-webmcp</title>
+  <meta name="description" content="See auto-webmcp in action. Three live forms registered as WebMCP tools: flight search, contact support, and a dynamically injected newsletter form.">
+  <meta property="og:title" content="Live Demo | auto-webmcp">
   <meta property="og:description" content="Three real forms, registered as WebMCP tools. Use the Agent Simulator to invoke them with real parameters.">
   <meta property="og:url" content="https://autowebmcp.dev/demo">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300C851'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -947,7 +947,7 @@
   <nav class="navbar" aria-label="Site navigation">
     <div class="navbar-inner">
       <a href="/" class="navbar-brand">
-        <span>⚡</span>
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" style="vertical-align:-2px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
         <span>auto-webmcp</span>
         <span class="version">v0.2.1</span>
         <span class="demo-crumb" aria-hidden="true">/</span>
@@ -970,7 +970,7 @@
     <p>Three real HTML forms, registered as WebMCP tools with a single script tag. Use the Agent Simulator to invoke them exactly as an AI agent would.</p>
     <span class="how-it-works">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>
-      Powered by auto-webmcp — one &lt;script&gt; tag, zero manual coding
+      Powered by auto-webmcp: one &lt;script&gt; tag, zero manual coding
     </span>
   </div>
 
@@ -1140,7 +1140,7 @@
           </div>
           <div class="dynamic-prompt" id="dynamic-prompt">
             <div class="dynamic-icon" aria-hidden="true">+</div>
-            <p>Click to inject a newsletter signup form into the DOM. Watch it appear as a registered tool in the panel instantly — powered by <code style="font-size:0.8em;background:rgba(101,130,0,0.1);padding:1px 4px;border-radius:3px;color:var(--dark-green)">MutationObserver</code>.</p>
+            <p>Click to inject a newsletter signup form into the DOM. Watch it appear as a registered tool in the panel instantly, powered by <code style="font-size:0.8em;background:rgba(101,130,0,0.1);padding:1px 4px;border-radius:3px;color:var(--dark-green)">MutationObserver</code>.</p>
             <button class="btn btn-dark" id="inject-btn" onclick="injectNewsletterForm()">Add Newsletter Form</button>
           </div>
           <div id="newsletter-container"></div>
@@ -1188,8 +1188,8 @@
         <!-- Card 4: Agent Simulator -->
         <div class="panel-card">
           <div class="panel-card-label">Agent Simulator</div>
-          <p class="simulator-hint">Invoke tools exactly as an AI agent would — fills fields and auto-submits the form.</p>
-          <p class="simulator-note">Real agents call tools via the WebMCP API. Chrome passes the tool call to your page's execute handler — the same function the simulator uses below.</p>
+          <p class="simulator-hint">Invoke tools exactly as an AI agent would. Fills fields and auto-submits the form.</p>
+          <p class="simulator-note">Real agents call tools via the WebMCP API. Chrome passes the tool call to your page's execute handler (the same function the simulator uses below).</p>
           <div class="simulator-buttons">
             <button class="sim-btn" onclick="runSimulator('search_flights', {origin:'New York (JFK)',destination:'London (LHR)',depart_date:'2026-04-15',passengers:2,cabin_class:'business',trip_type:'roundtrip'})">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
@@ -1226,9 +1226,9 @@
 
   <!-- ── Footer ──────────────────────────────────────────────────────────── -->
   <footer class="demo-footer">
-    <a href="more-examples">More Examples →</a> &mdash;
-    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
-    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
+    <a href="more-examples">More Examples →</a> ·
+    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> ·
+    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> ·
     A <a href="https://gyde.ai" target="_blank" rel="noopener">Gyde</a> initiative
   </footer>
 
@@ -1458,7 +1458,7 @@
               '<select id="nl-plan" name="plan">',
                 '<option value="">Select plan</option>',
                 '<option value="free">Free</option>',
-                '<option value="pro">Pro &mdash; $9/mo</option>',
+                '<option value="pro">Pro: $9/mo</option>',
                 '<option value="enterprise">Enterprise</option>',
               '</select>',
             '</div>',
@@ -1617,7 +1617,7 @@
       if (!view || view.dataset.populated) return;
       var meta = window.__registeredToolMeta[toolName];
       if (!meta) {
-        view.innerHTML = '<p style="font-size:0.8rem;color:var(--text-muted);padding:0.5rem 0">Tool not registered yet — add the form first.</p>';
+        view.innerHTML = '<p style="font-size:0.8rem;color:var(--text-muted);padding:0.5rem 0">Tool not registered yet. Add the form first.</p>';
         return;
       }
       var inner = document.getElementById('form-inner-' + toolName);

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HubSpot Install Guide — auto-webmcp</title>
+  <title>HubSpot Install Guide | auto-webmcp</title>
   <meta name="description" content="Install auto-webmcp on HubSpot in under 5 minutes via the Custom HTML tracking code. Every lead capture form, contact form, and ticket form becomes callable by Breeze AI agents.">
-  <meta property="og:title" content="HubSpot + auto-webmcp — Every form callable by Breeze AI agents">
+  <meta property="og:title" content="HubSpot + auto-webmcp: Every form callable by Breeze AI agents">
   <meta property="og:description" content="Paste one script tag into HubSpot's tracking code. Every form on your portal becomes AI-callable instantly. No coding required.">
   <meta property="og:url" content="https://autowebmcp.dev/platforms/hubspot">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300C851'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -169,7 +169,7 @@
   <nav class="navbar" aria-label="Site navigation">
     <div class="navbar-inner">
       <a href="/" class="navbar-brand">
-        <span>⚡</span>
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" style="vertical-align:-2px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
         <span>auto-webmcp</span>
         <span class="version">v0.2.1</span>
         <span class="crumb" aria-hidden="true">/</span>
@@ -196,13 +196,13 @@
       <h1><img src="https://www.vectorlogo.zone/logos/hubspot/hubspot-icon.svg" alt="HubSpot"> HubSpot</h1>
       <p>
         Make every lead capture form, contact form, ticket creation form, and feedback survey on your
-        HubSpot portal callable by Breeze AI agents — without touching a single form. Paste one script
+        HubSpot portal callable by Breeze AI agents, without touching a single form. Paste one script
         tag into the custom HTML tracking code section and you're done.
       </p>
       <div class="hero-badges">
-        <span class="hbadge hbadge-green">✅ Works with Breeze AI agents</span>
+        <span class="hbadge hbadge-green"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00C851" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg> Works with Breeze AI agents</span>
         <span class="hbadge hbadge-gray">⏱ ~5 min to deploy</span>
-        <span class="hbadge hbadge-gray">🌐 All pages, all portals</span>
+        <span class="hbadge hbadge-gray"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> All pages, all portals</span>
       </div>
     </div>
 
@@ -226,7 +226,7 @@
         <li>
           <span class="step-num">3</span>
           <div>In the <strong>Additional code snippets</strong> section, choose
-            <strong>Footer HTML — all pages</strong> and paste the snippet below.</div>
+            <strong>Footer HTML: all pages</strong> and paste the snippet below.</div>
         </li>
         <li>
           <span class="step-num">4</span>
@@ -234,7 +234,7 @@
         </li>
         <li>
           <span class="step-num">5</span>
-          <div>Open any page with a form and check the browser console — you should see
+          <div>Open any page with a form and check the browser console. You should see
             <code class="inline">[auto-webmcp] registered N tools</code>.</div>
         </li>
       </ul>
@@ -242,7 +242,7 @@
       <div style="margin-top:1rem;">
         <div class="snippet-wrapper">
           <div class="snippet-toolbar">
-            <span class="snippet-label">HubSpot — Footer HTML snippet</span>
+            <span class="snippet-label">HubSpot: Footer HTML snippet</span>
             <button class="copy-btn" onclick="copyCode(this, 'code-hs')">Copy</button>
           </div>
           <pre class="snippet-pre" id="code-hs">&lt;script src="https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js" async&gt;&lt;/script&gt;</pre>
@@ -255,7 +255,7 @@
     <div class="section">
       <div class="section-heading">
         <span class="section-num">2</span>
-        Alternative — per-page via CMS module
+        Alternative: per-page via CMS module
       </div>
 
       <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">
@@ -293,12 +293,12 @@
       <div class="info-card">
         <h3>HubSpot form types that become AI-callable out of the box</h3>
         <ul>
-          <li><strong>Lead capture forms</strong> — name, email, company, phone, lead source</li>
-          <li><strong>Contact forms</strong> — enquiry type, message, preferred contact method</li>
-          <li><strong>Ticket creation</strong> — subject, description, priority, category</li>
-          <li><strong>Feedback surveys</strong> — NPS, CSAT, open text responses</li>
-          <li><strong>Meeting / demo request forms</strong> — date, team, agenda</li>
-          <li><strong>Newsletter signup</strong> — email, subscription preferences</li>
+          <li><strong>Lead capture forms</strong>: name, email, company, phone, lead source</li>
+          <li><strong>Contact forms</strong>: enquiry type, message, preferred contact method</li>
+          <li><strong>Ticket creation</strong>: subject, description, priority, category</li>
+          <li><strong>Feedback surveys</strong>: NPS, CSAT, open text responses</li>
+          <li><strong>Meeting / demo request forms</strong>: date, team, agenda</li>
+          <li><strong>Newsletter signup</strong>: email, subscription preferences</li>
         </ul>
       </div>
 
@@ -314,7 +314,7 @@
     <div class="section">
       <div class="section-heading">
         <span class="section-num">4</span>
-        Optional — enrich with spec attributes
+        Optional: enrich with spec attributes
       </div>
 
       <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">
@@ -325,7 +325,7 @@
 
       <div class="snippet-wrapper">
         <div class="snippet-toolbar">
-          <span class="snippet-label">HubLang template — form attributes</span>
+          <span class="snippet-label">HubLang template: form attributes</span>
           <button class="copy-btn" onclick="copyCode(this, 'code-hs-attrs')">Copy</button>
         </div>
         <pre class="snippet-pre" id="code-hs-attrs">&lt;form
@@ -357,11 +357,11 @@
   </div><!-- /page-content -->
 
   <footer class="page-footer">
-    <a href="/platforms">Platform Guides</a> &mdash;
-    <a href="/demo">Demo</a> &mdash;
-    <a href="/try-it">Try It</a> &mdash;
-    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
-    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
+    <a href="/platforms">Platform Guides</a> ·
+    <a href="/demo">Demo</a> ·
+    <a href="/try-it">Try It</a> ·
+    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> ·
+    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> ·
     A <a href="https://gyde.ai" target="_blank" rel="noopener">Gyde</a> initiative
   </footer>
 
