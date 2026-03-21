@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zendesk Install Guide — auto-webmcp</title>
+  <meta name="description" content="Install auto-webmcp on Zendesk via the Apps Framework. Every ticket form, escalation flow, callback request, and survey becomes callable by Zendesk AI agents in 60 seconds.">
+  <meta property="og:title" content="Zendesk + auto-webmcp — Ticket forms become AI-native in 60 seconds">
+  <meta property="og:description" content="Inject auto-webmcp via a Zendesk App. Zero manual schema writing. Every support form callable by AI agents instantly.">
+  <meta property="og:url" content="https://autowebmcp.dev/platforms/zendesk">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --charcoal:      #262626;
+      --white:         #ffffff;
+      --lime:          #e5fe96;
+      --dark-green:    #698200;
+      --olive-bg:      #f5f5f2;
+      --light-gray:    #f8f9fa;
+      --border:        #e5e7eb;
+      --text:          #262626;
+      --text-muted:    #6b7280;
+      --radius:        12px;
+      --shadow-card:   0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-hover:  0 4px 16px rgba(0,0,0,0.1);
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      background: var(--olive-bg); color: var(--text);
+      line-height: 1.6; font-size: 16px; min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    .navbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(245,245,242,0.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border); padding: 0 1.5rem;
+    }
+    .navbar-inner {
+      max-width: 860px; margin: 0 auto; height: 56px;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .navbar-brand { font-weight: 700; font-size: 0.95rem; color: var(--charcoal); display: flex; align-items: center; gap: 0.5rem; }
+    .navbar-brand .version { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; background: var(--white); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; }
+    .navbar-brand .crumb { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; }
+    .navbar-links { display: flex; align-items: center; gap: 0.25rem; }
+    .navbar-links a { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; padding: 0.375rem 0.625rem; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+    .navbar-links a:hover { color: var(--charcoal); background: rgba(38,38,38,0.06); }
+
+    .page-content { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+
+    .breadcrumb { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.375rem; }
+    .breadcrumb a { color: var(--dark-green); }
+    .breadcrumb a:hover { text-decoration: underline; }
+
+    .guide-hero { margin-bottom: 2.5rem; }
+    .guide-hero h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.625rem; display: flex; align-items: center; gap: 0.625rem; }
+    .guide-hero p { color: var(--text-muted); font-size: 0.95rem; max-width: 680px; line-height: 1.65; }
+    .hero-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+    .hbadge { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+    .hbadge-green { background: rgba(229,254,150,0.3); color: var(--dark-green); border: 1px solid rgba(101,130,0,0.2); }
+    .hbadge-gray  { background: var(--light-gray); color: var(--text-muted); border: 1px solid var(--border); }
+
+    .section { margin-bottom: 2.5rem; }
+    .section-heading { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .section-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--charcoal); color: var(--white);
+      font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
+    }
+
+    .steps {
+      list-style: none; display: flex; flex-direction: column; gap: 0.75rem;
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem 1.5rem;
+      box-shadow: var(--shadow-card);
+    }
+    .steps li { display: flex; align-items: flex-start; gap: 0.875rem; font-size: 0.9rem; line-height: 1.55; }
+    .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: rgba(229,254,150,0.4); border: 1px solid rgba(101,130,0,0.25);
+      color: var(--dark-green); font-size: 0.7rem; font-weight: 700;
+      flex-shrink: 0; margin-top: 1px;
+    }
+    .steps strong { font-weight: 600; }
+    code.inline {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.82em; background: rgba(101,130,0,0.1);
+      padding: 1px 5px; border-radius: 4px; color: var(--dark-green);
+    }
+
+    .snippet-wrapper {
+      position: relative; background: #16213e;
+      border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18); overflow: hidden;
+    }
+    .snippet-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.625rem 1rem;
+      background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .snippet-label { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: rgba(255,255,255,0.35); letter-spacing: 0.04em; }
+    .copy-btn {
+      font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.75rem; font-weight: 600;
+      padding: 4px 14px; border-radius: 6px; cursor: pointer;
+      background: rgba(229,254,150,0.12); border: 1px solid rgba(229,254,150,0.25); color: #e5fe96;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .copy-btn:hover { background: rgba(229,254,150,0.2); border-color: rgba(229,254,150,0.4); }
+    .copy-btn.copied { background: rgba(134,239,172,0.15); border-color: rgba(134,239,172,0.35); color: #86efac; }
+    .snippet-pre {
+      margin: 0; padding: 1.25rem 1.25rem 1.5rem;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; line-height: 1.7;
+      color: #c9d1d9; overflow-x: auto; white-space: pre;
+    }
+    .snippet-note { margin-top: 0.75rem; font-size: 0.82rem; color: var(--text-muted); }
+
+    .note-box {
+      background: rgba(229,254,150,0.15); border: 1px solid rgba(101,130,0,0.2);
+      border-radius: 8px; padding: 0.875rem 1rem;
+      font-size: 0.85rem; color: var(--charcoal); line-height: 1.6;
+    }
+    .note-box strong { color: var(--dark-green); }
+
+    .info-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem 1.5rem;
+      box-shadow: var(--shadow-card); font-size: 0.875rem; line-height: 1.6;
+    }
+    .info-card h3 { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .info-card ul { padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.25rem; }
+    .info-card li { color: var(--text-muted); }
+    .info-card li strong { color: var(--charcoal); }
+
+    .next-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .next-card {
+      background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.25rem; box-shadow: var(--shadow-card); text-decoration: none; color: var(--text);
+      transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+    }
+    .next-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); border-color: rgba(101,130,0,0.35); }
+    .next-card .label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.375rem; }
+    .next-card .title { font-weight: 600; font-size: 0.9rem; }
+
+    .page-footer { border-top: 1px solid var(--border); padding: 1.5rem; text-align: center; font-size: 0.8rem; color: var(--text-muted); }
+    .page-footer a { color: var(--dark-green); font-weight: 500; }
+    .page-footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 640px) {
+      .guide-hero h1 { font-size: 1.4rem; }
+      .next-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar" aria-label="Site navigation">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <span>⚡</span>
+        <span>auto-webmcp</span>
+        <span class="version">v0.2.1</span>
+        <span class="crumb" aria-hidden="true">/</span>
+        <span class="crumb">platforms / zendesk</span>
+      </a>
+      <nav class="navbar-links">
+        <a href="/">Home</a>
+        <a href="/demo">Demo</a>
+        <a href="/platforms">Platforms</a>
+        <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </nav>
+
+  <div class="page-content">
+
+    <div class="breadcrumb">
+      <a href="/platforms">Platforms</a>
+      <span>›</span>
+      <span>Zendesk</span>
+    </div>
+
+    <div class="guide-hero">
+      <h1><span>🎫</span> Zendesk</h1>
+      <p>
+        Your ticket creation forms, escalation flows, callback requests, and knowledge article
+        submissions become AI-native in 60 seconds. Inject auto-webmcp via the Zendesk Apps
+        Framework — no schema writing, no RPA, no custom integration code.
+      </p>
+      <div class="hero-badges">
+        <span class="hbadge hbadge-green">✅ Zendesk Apps Framework</span>
+        <span class="hbadge hbadge-gray">⏱ ~15 min to deploy</span>
+        <span class="hbadge hbadge-gray">🤖 Works with Zendesk AI agents</span>
+      </div>
+    </div>
+
+    <!-- ── Method A: Zendesk App ───────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-num">1</span>
+        Create a private Zendesk App
+      </div>
+
+      <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">
+        The cleanest way to inject a script on every Zendesk page is a private app. No Marketplace
+        listing needed — private apps install directly to your account.
+      </p>
+
+      <ul class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <div>Install the <strong>Zendesk Apps Tools (ZAT)</strong> CLI:
+            <code class="inline">npm install -g zendesk-app-tools</code></div>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <div>Scaffold a new app: <code class="inline">zat new</code> — name it
+            <code class="inline">auto-webmcp-loader</code> and select <strong>Support</strong> as the product.</div>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <div>Open <code class="inline">assets/iframe.html</code> and replace the body content with the loader script below.</div>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <div>In <code class="inline">manifest.json</code>, set <code class="inline">location</code> to
+            <code class="inline">{ "support": { "ticket_sidebar": "#auto_webmcp_frame" } }</code>
+            so the app loads on every ticket page.</div>
+        </li>
+        <li>
+          <span class="step-num">5</span>
+          <div>Package and upload: <code class="inline">zat package</code>, then upload the zip in
+            Zendesk Admin &rsaquo; Apps &rsaquo; Manage &rsaquo; Upload private app.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- ── App script ──────────────────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-num">2</span>
+        The loader script (<code class="inline" style="font-size:0.9rem">iframe.html</code>)
+      </div>
+
+      <div class="snippet-wrapper">
+        <div class="snippet-toolbar">
+          <span class="snippet-label">assets/iframe.html</span>
+          <button class="copy-btn" onclick="copyCode(this, 'code-zd-app')">Copy</button>
+        </div>
+        <pre class="snippet-pre" id="code-zd-app">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;script src="https://static.zdassets.com/zendesk_app_framework_sdk/2.0/zaf_sdk.min.js"&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;script&gt;
+  // Initialise the ZAF client so the app is considered "loaded"
+  var client = ZAFClient.init();
+
+  // Inject auto-webmcp into the parent Zendesk page
+  client.invoke('resize', { width: '0px', height: '0px' });
+  client.context().then(function (ctx) {
+    // Zendesk's Content-Security-Policy allows scripts loaded by the parent frame.
+    // We use postMessage to ask the parent to load the script for us.
+    // Alternative: add the cdn.jsdelivr.net domain to your CSP allowlist in Admin.
+    client.request({
+      url: 'https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js',
+      type: 'GET',
+      dataType: 'text'
+    }).then(function (scriptText) {
+      // The ZAF SDK can execute JS in the host page via invoke
+      client.invoke('window.eval', scriptText);
+    });
+  });
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</pre>
+      </div>
+
+      <div class="note-box" style="margin-top:1rem;">
+        <strong>CSP note:</strong> If Zendesk's Content-Security-Policy blocks the CDN, add
+        <code style="font-family:monospace; font-size:0.85em; background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:3px;">cdn.jsdelivr.net</code>
+        to your Zendesk account's allowed script sources in
+        Admin &rsaquo; Account &rsaquo; Security &rsaquo; Content Security Policy.
+        Alternatively, self-host the auto-webmcp IIFE bundle on your own CDN.
+      </div>
+    </div>
+
+    <!-- ── Method B: Theme customisation ─────────────────────────────────── -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-num">3</span>
+        Alternative — Help Center theme injection
+      </div>
+
+      <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">
+        If your goal is to expose the <strong>Help Center</strong> submit request form to AI agents
+        (not the agent workspace), inject via the theme instead — simpler, no app needed.
+      </p>
+
+      <ul class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <div>In Zendesk Admin, go to <strong>Guide &rsaquo; Customize design &rsaquo; Edit theme</strong>.</div>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <div>Open the theme's <code class="inline">document_head.hbs</code> partial.</div>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <div>Add the script tag at the end of the <code class="inline">&lt;head&gt;</code> section:</div>
+        </li>
+      </ul>
+
+      <div style="margin-top:0.875rem;">
+        <div class="snippet-wrapper">
+          <div class="snippet-toolbar">
+            <span class="snippet-label">document_head.hbs — add before &lt;/head&gt;</span>
+            <button class="copy-btn" onclick="copyCode(this, 'code-zd-theme')">Copy</button>
+          </div>
+          <pre class="snippet-pre" id="code-zd-theme">&lt;script src="https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js" async&gt;&lt;/script&gt;</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── What gets registered ──────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-num">4</span>
+        What gets registered automatically
+      </div>
+
+      <div class="info-card">
+        <h3>Zendesk form types that become AI-callable out of the box</h3>
+        <ul>
+          <li><strong>Submit a request</strong> — subject, description, priority, category, attachments note</li>
+          <li><strong>Ticket creation (agent workspace)</strong> — requester, subject, type, priority, tags</li>
+          <li><strong>Callback request forms</strong> — name, phone, preferred time, issue summary</li>
+          <li><strong>Escalation forms</strong> — reason, target team, urgency level</li>
+          <li><strong>Knowledge article submission</strong> — title, section, body, labels</li>
+          <li><strong>CSAT / feedback surveys</strong> — rating, comment, improvement category</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ── Next steps ─────────────────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-heading">Next steps</div>
+      <div class="next-grid">
+        <a href="/try-it" class="next-card">
+          <div class="label">Test it</div>
+          <div class="title">Try auto-webmcp in your browser console →</div>
+        </a>
+        <a href="/platforms/servicenow" class="next-card">
+          <div class="label">Another platform</div>
+          <div class="title">ServiceNow install guide →</div>
+        </a>
+      </div>
+    </div>
+
+  </div><!-- /page-content -->
+
+  <footer class="page-footer">
+    <a href="/platforms">Platform Guides</a> &mdash;
+    <a href="/demo">Demo</a> &mdash;
+    <a href="/try-it">Try It</a> &mdash;
+    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
+    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
+    A <a href="https://gyde.ai" target="_blank" rel="noopener">Gyde</a> initiative
+  </footer>
+
+  <script>
+    function copyCode(btn, id) {
+      var text = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      }).catch(function () { window.prompt('Copy this snippet:', text); });
+    }
+  </script>
+
+</body>
+</html>

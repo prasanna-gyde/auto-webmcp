@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Platform Guides — auto-webmcp</title>
+  <meta name="description" content="Step-by-step install guides for auto-webmcp on ServiceNow, HubSpot, and Zendesk. Drop in one script tag and every form becomes callable by AI agents.">
+  <meta property="og:title" content="Platform Guides — auto-webmcp">
+  <meta property="og:description" content="Install auto-webmcp on ServiceNow, HubSpot, or Zendesk. Zero manual coding. Every form instantly callable by AI agents.">
+  <meta property="og:url" content="https://autowebmcp.dev/platforms">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --charcoal:      #262626;
+      --white:         #ffffff;
+      --lime:          #e5fe96;
+      --dark-green:    #698200;
+      --olive-bg:      #f5f5f2;
+      --light-gray:    #f8f9fa;
+      --border:        #e5e7eb;
+      --text:          #262626;
+      --text-muted:    #6b7280;
+      --radius:        12px;
+      --shadow-card:   0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-hover:  0 4px 16px rgba(0,0,0,0.1);
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      background: var(--olive-bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Navbar ──────────────────────────────────────────────────────────── */
+    .navbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(245,245,242,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+    }
+    .navbar-inner {
+      max-width: 900px; margin: 0 auto; height: 56px;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .navbar-brand { font-weight: 700; font-size: 0.95rem; color: var(--charcoal); display: flex; align-items: center; gap: 0.5rem; }
+    .navbar-brand .version { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; background: var(--white); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; }
+    .navbar-brand .crumb { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; }
+    .navbar-links { display: flex; align-items: center; gap: 0.25rem; }
+    .navbar-links a { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; padding: 0.375rem 0.625rem; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+    .navbar-links a:hover { color: var(--charcoal); background: rgba(38,38,38,0.06); }
+    .navbar-links a.active { color: var(--charcoal); }
+
+    /* ── Page layout ──────────────────────────────────────────────────────── */
+    .page-content {
+      max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem;
+    }
+
+    /* ── Intro ────────────────────────────────────────────────────────────── */
+    .page-intro { margin-bottom: 2.5rem; }
+    .page-intro h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+    .page-intro p { color: var(--text-muted); font-size: 0.95rem; max-width: 620px; }
+    .intro-badge {
+      margin-top: 0.875rem; display: inline-flex; align-items: center; gap: 0.375rem;
+      font-size: 0.8rem; color: var(--dark-green); font-weight: 500;
+      background: rgba(229,254,150,0.3); border: 1px solid rgba(101,130,0,0.2);
+      padding: 4px 10px; border-radius: 20px;
+    }
+
+    /* ── Platform cards ───────────────────────────────────────────────────── */
+    .platform-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.25rem;
+    }
+    .platform-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.5rem;
+      box-shadow: var(--shadow-card);
+      transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+      display: flex; flex-direction: column; gap: 0.875rem;
+      text-decoration: none; color: var(--text);
+    }
+    .platform-card:hover {
+      box-shadow: var(--shadow-hover); transform: translateY(-2px);
+      border-color: rgba(101,130,0,0.35); text-decoration: none;
+    }
+    .platform-icon {
+      font-size: 2rem; line-height: 1;
+    }
+    .platform-name {
+      font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em;
+    }
+    .platform-tagline {
+      font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;
+    }
+    .platform-fit {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      font-size: 0.75rem; font-weight: 600; padding: 3px 9px; border-radius: 20px;
+      background: rgba(229,254,150,0.3); color: var(--dark-green);
+      border: 1px solid rgba(101,130,0,0.2); width: fit-content;
+    }
+    .platform-cta {
+      margin-top: auto; font-size: 0.82rem; font-weight: 600;
+      color: var(--dark-green); display: flex; align-items: center; gap: 0.25rem;
+    }
+
+    /* ── Comparison table ─────────────────────────────────────────────────── */
+    .section { margin-top: 3rem; }
+    .section-heading {
+      font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em;
+      margin-bottom: 1rem;
+    }
+    .compare-table-wrapper {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-card);
+      overflow: hidden;
+    }
+    .compare-table {
+      width: 100%; border-collapse: collapse; font-size: 0.85rem;
+    }
+    .compare-table thead tr { background: var(--light-gray); border-bottom: 1px solid var(--border); }
+    .compare-table th {
+      text-align: left; padding: 0.625rem 1rem;
+      font-size: 0.72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+    }
+    .compare-table tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
+    .compare-table tbody tr:last-child { border-bottom: none; }
+    .compare-table tbody tr:hover { background: var(--light-gray); }
+    .compare-table td { padding: 0.75rem 1rem; vertical-align: middle; }
+    .compare-table td:first-child { font-weight: 600; }
+    .badge-yes {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+      background: rgba(229,254,150,0.25); color: var(--dark-green); border: 1px solid rgba(101,130,0,0.2);
+    }
+    .badge-hard {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+      background: rgba(239,68,68,0.08); color: #991b1b; border: 1px solid rgba(239,68,68,0.2);
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    .page-footer {
+      border-top: 1px solid var(--border); padding: 1.5rem;
+      text-align: center; font-size: 0.8rem; color: var(--text-muted);
+    }
+    .page-footer a { color: var(--dark-green); font-weight: 500; }
+    .page-footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 640px) {
+      .page-intro h1 { font-size: 1.4rem; }
+      .compare-table th:nth-child(4),
+      .compare-table td:nth-child(4) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Navbar ─────────────────────────────────────────────────────────── -->
+  <nav class="navbar" aria-label="Site navigation">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <span>⚡</span>
+        <span>auto-webmcp</span>
+        <span class="version">v0.2.1</span>
+        <span class="crumb" aria-hidden="true">/</span>
+        <span class="crumb">platforms</span>
+      </a>
+      <nav class="navbar-links">
+        <a href="/">Home</a>
+        <a href="demo">Demo</a>
+        <a href="more-examples">Examples</a>
+        <a href="platforms" class="active">Platforms</a>
+        <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </nav>
+
+  <!-- ── Page content ───────────────────────────────────────────────────── -->
+  <div class="page-content">
+
+    <div class="page-intro">
+      <h1>Platform install guides</h1>
+      <p>auto-webmcp works on any page that allows custom JavaScript. These guides show you exactly where to drop the script tag on the three platforms with the best fit.</p>
+      <span class="intro-badge">✅ No code changes needed — same script tag, every platform</span>
+    </div>
+
+    <!-- Platform cards -->
+    <div class="platform-grid">
+
+      <a href="platforms/servicenow" class="platform-card">
+        <div class="platform-icon">🔧</div>
+        <div class="platform-name">ServiceNow</div>
+        <div class="platform-tagline">Auto-expose every catalog form, incident, change request, and approval flow to Now Assist agents — without writing a single JSON schema.</div>
+        <div class="platform-fit">✅ Script injection via UI Scripts</div>
+        <div class="platform-cta">Read the guide →</div>
+      </a>
+
+      <a href="platforms/hubspot" class="platform-card">
+        <div class="platform-icon">🧲</div>
+        <div class="platform-name">HubSpot</div>
+        <div class="platform-tagline">Make every lead capture form, contact form, and ticket creation form callable by Breeze AI agents. Drop in one tracking code snippet.</div>
+        <div class="platform-fit">✅ Custom HTML tracking code</div>
+        <div class="platform-cta">Read the guide →</div>
+      </a>
+
+      <a href="platforms/zendesk" class="platform-card">
+        <div class="platform-icon">🎫</div>
+        <div class="platform-name">Zendesk</div>
+        <div class="platform-tagline">Your ticket forms, escalation flows, and callback requests become AI-native in 60 seconds via the Zendesk Apps Framework.</div>
+        <div class="platform-fit">✅ Zendesk Apps Framework</div>
+        <div class="platform-cta">Read the guide →</div>
+      </a>
+
+    </div>
+
+    <!-- Comparison table -->
+    <div class="section">
+      <div class="section-heading">Platform compatibility at a glance</div>
+      <div class="compare-table-wrapper">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Platform</th>
+              <th>Script injection</th>
+              <th>Mechanism</th>
+              <th>Effort</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ServiceNow</td>
+              <td><span class="badge-yes">✅ Yes</span></td>
+              <td>UI Scripts or Service Portal widget</td>
+              <td>Low–Medium</td>
+            </tr>
+            <tr>
+              <td>HubSpot</td>
+              <td><span class="badge-yes">✅ Yes</span></td>
+              <td>Custom HTML tracking code</td>
+              <td>Low (5 min)</td>
+            </tr>
+            <tr>
+              <td>Zendesk</td>
+              <td><span class="badge-yes">✅ Yes</span></td>
+              <td>Zendesk Apps Framework</td>
+              <td>Low–Medium</td>
+            </tr>
+            <tr>
+              <td>Salesforce Lightning</td>
+              <td><span class="badge-hard">❌ Blocked</span></td>
+              <td>CSP + LWS sandbox requires LWC wrapper</td>
+              <td>High</td>
+            </tr>
+            <tr>
+              <td>Workday</td>
+              <td><span class="badge-hard">❌ Not possible</span></td>
+              <td>Fully locked portal — needs full rewrite</td>
+              <td>Very high</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /page-content -->
+
+  <footer class="page-footer">
+    <a href="demo">Demo</a> &mdash;
+    <a href="more-examples">More Examples</a> &mdash;
+    <a href="try-it">Try It</a> &mdash;
+    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
+    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
+    A <a href="https://gyde.ai" target="_blank" rel="noopener">Gyde</a> initiative
+  </footer>
+
+</body>
+</html>
