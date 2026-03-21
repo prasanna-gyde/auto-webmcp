@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Try It on Real Forms — auto-webmcp</title>
+  <meta name="description" content="Inject auto-webmcp into any page from the browser console. Floating inspector panel shows registered tools, schemas, and lets you invoke them.">
+  <meta property="og:title" content="Try It on Real Forms — auto-webmcp">
+  <meta property="og:description" content="One console paste. Floating inspector panel. Test auto-webmcp against real public forms in seconds.">
+  <meta property="og:url" content="https://autowebmcp.dev/try-it">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --charcoal:         #262626;
+      --white:            #ffffff;
+      --lime:             #e5fe96;
+      --dark-green:       #698200;
+      --olive-bg:         #f5f5f2;
+      --light-gray:       #f8f9fa;
+      --border:           #e5e7eb;
+      --text:             #262626;
+      --text-muted:       #6b7280;
+      --radius:           12px;
+      --shadow-card:      0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-hover:     0 4px 16px rgba(0,0,0,0.1);
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      background: var(--olive-bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Navbar ─────────────────────────────────────────────────────────── */
+    .navbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(245,245,242,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+    }
+    .navbar-inner {
+      max-width: 900px; margin: 0 auto; height: 56px;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .navbar-brand { font-weight: 700; font-size: 0.95rem; color: var(--charcoal); display: flex; align-items: center; gap: 0.5rem; }
+    .navbar-brand .version { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; background: var(--white); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; }
+    .navbar-brand .crumb { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; }
+    .navbar-links { display: flex; align-items: center; gap: 0.25rem; }
+    .navbar-links a { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; padding: 0.375rem 0.625rem; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+    .navbar-links a:hover { color: var(--charcoal); background: rgba(38,38,38,0.06); }
+
+    /* ── Page layout ────────────────────────────────────────────────────── */
+    .page-content {
+      max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem;
+    }
+
+    /* ── Intro ──────────────────────────────────────────────────────────── */
+    .page-intro { margin-bottom: 2.5rem; }
+    .page-intro h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+    .page-intro p { color: var(--text-muted); font-size: 0.95rem; max-width: 620px; }
+    .intro-badge {
+      margin-top: 0.875rem; display: inline-flex; align-items: center; gap: 0.375rem;
+      font-size: 0.8rem; color: var(--dark-green); font-weight: 500;
+      background: rgba(229,254,150,0.3); border: 1px solid rgba(101,130,0,0.2);
+      padding: 4px 10px; border-radius: 20px;
+    }
+
+    /* ── Section ────────────────────────────────────────────────────────── */
+    .section { margin-bottom: 2.5rem; }
+    .section-heading {
+      font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em;
+      margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .section-heading-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--charcoal); color: var(--white);
+      font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
+    }
+
+    /* ── Steps ──────────────────────────────────────────────────────────── */
+    .steps {
+      list-style: none; display: flex; flex-direction: column; gap: 0.75rem;
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem 1.5rem;
+      box-shadow: var(--shadow-card);
+    }
+    .steps li {
+      display: flex; align-items: flex-start; gap: 0.875rem;
+      font-size: 0.9rem; color: var(--text); line-height: 1.5;
+    }
+    .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: rgba(229,254,150,0.4); border: 1px solid rgba(101,130,0,0.25);
+      color: var(--dark-green); font-size: 0.7rem; font-weight: 700;
+      flex-shrink: 0; margin-top: 1px;
+    }
+    .steps .key {
+      display: inline-block; font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.75rem; background: var(--light-gray); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 6px; color: var(--charcoal);
+    }
+    .steps strong { font-weight: 600; }
+
+    /* ── Snippet block ──────────────────────────────────────────────────── */
+    .snippet-wrapper {
+      position: relative;
+      background: #16213e;
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+      overflow: hidden;
+    }
+    .snippet-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.625rem 1rem;
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .snippet-toolbar-label {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.72rem; color: rgba(255,255,255,0.35); letter-spacing: 0.04em;
+    }
+    .copy-btn {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 0.75rem; font-weight: 600;
+      padding: 4px 14px; border-radius: 6px; cursor: pointer;
+      background: rgba(229,254,150,0.12);
+      border: 1px solid rgba(229,254,150,0.25);
+      color: #e5fe96;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .copy-btn:hover { background: rgba(229,254,150,0.2); border-color: rgba(229,254,150,0.4); }
+    .copy-btn.copied { background: rgba(134,239,172,0.15); border-color: rgba(134,239,172,0.35); color: #86efac; }
+    .snippet-pre {
+      margin: 0; padding: 1.25rem 1.25rem 1.5rem;
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.72rem; line-height: 1.7;
+      color: #c9d1d9;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .snippet-note {
+      margin-top: 0.75rem;
+      font-size: 0.82rem; color: var(--text-muted);
+      display: flex; align-items: flex-start; gap: 0.375rem;
+    }
+
+    /* ── URL table ──────────────────────────────────────────────────────── */
+    .url-table-wrapper {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow-card);
+      overflow: hidden;
+    }
+    .url-table {
+      width: 100%; border-collapse: collapse; font-size: 0.85rem;
+    }
+    .url-table thead tr {
+      background: var(--light-gray); border-bottom: 1px solid var(--border);
+    }
+    .url-table th {
+      text-align: left; padding: 0.625rem 1rem;
+      font-size: 0.72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+    }
+    .url-table tbody tr {
+      border-bottom: 1px solid var(--border); transition: background 0.12s;
+    }
+    .url-table tbody tr:last-child { border-bottom: none; }
+    .url-table tbody tr:hover { background: var(--light-gray); }
+    .url-table td { padding: 0.75rem 1rem; vertical-align: top; }
+    .url-link {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.75rem; color: var(--dark-green); font-weight: 500;
+      text-decoration: underline; text-decoration-color: rgba(101,130,0,0.3);
+    }
+    .url-link:hover { text-decoration-color: var(--dark-green); }
+    .form-type { font-weight: 600; color: var(--charcoal); font-size: 0.82rem; }
+    .fields-note { font-size: 0.78rem; color: var(--text-muted); }
+    .csp-badge {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+      white-space: nowrap;
+    }
+    .csp-none  { background: rgba(229,254,150,0.25); color: var(--dark-green); border: 1px solid rgba(101,130,0,0.2); }
+    .csp-low   { background: rgba(229,254,150,0.25); color: var(--dark-green); border: 1px solid rgba(101,130,0,0.2); }
+    .csp-mod   { background: rgba(251,191,36,0.15);  color: #92400e;           border: 1px solid rgba(251,191,36,0.3); }
+    .csp-strict { background: rgba(239,68,68,0.1);   color: #991b1b;           border: 1px solid rgba(239,68,68,0.25); }
+
+    /* ── Note box ────────────────────────────────────────────────────────── */
+    .note-box {
+      margin-top: 1.25rem;
+      background: rgba(229,254,150,0.15);
+      border: 1px solid rgba(101,130,0,0.2);
+      border-radius: 8px; padding: 0.875rem 1rem;
+      font-size: 0.82rem; color: var(--charcoal); line-height: 1.6;
+    }
+    .note-box strong { color: var(--dark-green); }
+    code.inline {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.82em; background: rgba(101,130,0,0.1);
+      padding: 1px 5px; border-radius: 4px; color: var(--dark-green);
+    }
+
+    @media (max-width: 640px) {
+      .page-intro h1 { font-size: 1.4rem; }
+      .url-table th:nth-child(3),
+      .url-table td:nth-child(3) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Navbar ──────────────────────────────────────────────────────────── -->
+  <nav class="navbar" aria-label="Site navigation">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <span>⚡</span>
+        <span>auto-webmcp</span>
+        <span class="version">v0.2.1</span>
+        <span class="crumb" aria-hidden="true">/</span>
+        <span class="crumb">try-it</span>
+      </a>
+      <nav class="navbar-links">
+        <a href="/">Home</a>
+        <a href="demo">Demo</a>
+        <a href="more-examples">Examples</a>
+        <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </nav>
+
+  <!-- ── Page content ────────────────────────────────────────────────────── -->
+  <div class="page-content">
+
+    <!-- Intro -->
+    <div class="page-intro">
+      <h1>Try It on Real Forms</h1>
+      <p>Paste one snippet into any page's DevTools console to inject auto-webmcp and get a floating inspector panel — no install required.</p>
+      <span class="intro-badge">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        Works on any public form — just open DevTools and paste
+      </span>
+    </div>
+
+    <!-- ── Section 1: How it works ────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-num">1</span>
+        How it works
+      </div>
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <span>Pick a URL from the table below and open it in Chrome (WebMCP flag optional — the inspector works regardless).</span>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <span>Open DevTools with <span class="key">F12</span>, click the <strong>Console</strong> tab, paste the snippet below, and hit <span class="key">Enter</span>.</span>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <span>A floating <strong>auto-webmcp Inspector</strong> panel appears in the top-right corner — see registered tools, view their JSON schemas, and invoke them via <code class="inline">awmcpInvoke(name, params)</code>.</span>
+        </li>
+      </ol>
+    </div>
+
+    <!-- ── Section 2: Snippet ─────────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-num">2</span>
+        Console Snippet
+      </div>
+
+      <div class="snippet-wrapper">
+        <div class="snippet-toolbar">
+          <span class="snippet-toolbar-label">javascript — paste into DevTools Console</span>
+          <button class="copy-btn" id="copy-btn" onclick="copySnippet()">Copy</button>
+        </div>
+        <pre class="snippet-pre" id="snippet-display"></pre>
+      </div>
+
+      <div class="snippet-note">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        After pasting, the IIFE loads from unpkg and auto-discovers all forms on the page.
+        Run <code class="inline">awmcpInvoke('tool_name', { field: 'value' })</code> in the console to invoke a tool.
+        Password, file, and hidden inputs are never exposed.
+      </div>
+    </div>
+
+    <!-- ── Section 3: Test URLs ───────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-heading">
+        <span class="section-heading-num">3</span>
+        Curated Test URLs
+      </div>
+
+      <div class="url-table-wrapper">
+        <table class="url-table">
+          <thead>
+            <tr>
+              <th>URL</th>
+              <th>Form type</th>
+              <th>Fields</th>
+              <th>CSP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a class="url-link" href="https://httpbin.org/forms/post" target="_blank" rel="noopener">httpbin.org/forms/post</a></td>
+              <td>
+                <div class="form-type">Pizza order</div>
+              </td>
+              <td><span class="fields-note">radios, checkboxes, textarea, select</span></td>
+              <td><span class="csp-badge csp-none">✅ None — best first test</span></td>
+            </tr>
+            <tr>
+              <td><a class="url-link" href="https://news.ycombinator.com/submit" target="_blank" rel="noopener">news.ycombinator.com/submit</a></td>
+              <td>
+                <div class="form-type">Story submit</div>
+              </td>
+              <td><span class="fields-note">title, URL, text</span></td>
+              <td><span class="csp-badge csp-low">✅ Minimal</span></td>
+            </tr>
+            <tr>
+              <td><a class="url-link" href="https://news.ycombinator.com/login" target="_blank" rel="noopener">news.ycombinator.com/login</a></td>
+              <td>
+                <div class="form-type">HN Login</div>
+              </td>
+              <td><span class="fields-note">username (password excluded)</span></td>
+              <td><span class="csp-badge csp-low">✅ Minimal</span></td>
+            </tr>
+            <tr>
+              <td><a class="url-link" href="https://bugzilla.mozilla.org/enter_bug.cgi" target="_blank" rel="noopener">bugzilla.mozilla.org/enter_bug.cgi</a></td>
+              <td>
+                <div class="form-type">Bug report</div>
+              </td>
+              <td><span class="fields-note">many fields, selects, textareas</span></td>
+              <td><span class="csp-badge csp-low">✅ Low</span></td>
+            </tr>
+            <tr>
+              <td><a class="url-link" href="https://jsfiddle.net/user/signup" target="_blank" rel="noopener">jsfiddle.net/user/signup</a></td>
+              <td>
+                <div class="form-type">Developer signup</div>
+              </td>
+              <td><span class="fields-note">name, email (password excluded)</span></td>
+              <td><span class="csp-badge csp-low">✅ Low</span></td>
+            </tr>
+            <tr>
+              <td><a class="url-link" href="https://codepen.io/login" target="_blank" rel="noopener">codepen.io/login</a></td>
+              <td>
+                <div class="form-type">Login</div>
+              </td>
+              <td><span class="fields-note">email (password excluded)</span></td>
+              <td><span class="csp-badge csp-mod">⚠️ Moderate</span></td>
+            </tr>
+            <tr>
+              <td><a class="url-link" href="https://stackoverflow.com/questions/ask" target="_blank" rel="noopener">stackoverflow.com/questions/ask</a></td>
+              <td>
+                <div class="form-type">Ask a question</div>
+              </td>
+              <td><span class="fields-note">title, body, tags</span></td>
+              <td><span class="csp-badge csp-mod">⚠️ Moderate</span></td>
+            </tr>
+            <tr>
+              <td><a class="url-link" href="https://github.com/login" target="_blank" rel="noopener">github.com/login</a></td>
+              <td>
+                <div class="form-type">GitHub login</div>
+              </td>
+              <td><span class="fields-note">username (password excluded)</span></td>
+              <td><span class="csp-badge csp-strict">❌ Strict CSP</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note-box">
+        <strong>CSP restriction:</strong> Sites marked ❌ block loading scripts from external domains like unpkg.
+        For those, download the IIFE locally first:
+        <code class="inline">curl -o awmcp.js https://unpkg.com/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js</code>
+        — then open DevTools → Sources → drag the file in, or use the
+        <a href="https://developer.chrome.com/docs/devtools/snippets" target="_blank" rel="noopener" style="color:var(--dark-green);text-decoration:underline;text-decoration-color:rgba(101,130,0,0.3)">Snippets</a>
+        panel to paste and run a self-contained version.
+        Sites marked ⚠️ may work depending on current policy — try the snippet and check the console for CSP errors.
+      </div>
+    </div>
+
+  </div><!-- /page-content -->
+
+  <script>
+    // ── The console snippet ──────────────────────────────────────────────────
+    // Stored as a JS string so the <pre> doesn't need HTML-entity escaping.
+    var SNIPPET = [
+      '(function () {',
+      "  if (window.__awmcp_injected) return;",
+      "  window.__awmcp_injected = true;",
+      "  window.__executeHandlers = {};",
+      "  window.__registeredToolMeta = {};",
+      '',
+      '  // Capture existing Chrome WebMCP API before proxying',
+      '  var _real = typeof navigator !== "undefined" ? navigator.modelContext : undefined;',
+      '',
+      '  var _proxy = {',
+      '    registerTool: function (t) {',
+      '      window.__executeHandlers[t.name] = t.execute;',
+      '      window.__registeredToolMeta[t.name] = {',
+      '        description: t.description,',
+      '        fieldCount: Object.keys((t.inputSchema && t.inputSchema.properties) || {}).length,',
+      '        inputSchema: t.inputSchema || null',
+      '      };',
+      '      if (typeof window.__onToolRegistered === "function") window.__onToolRegistered(t.name);',
+      '      if (_real) { try { return _real.registerTool(t).catch(function () {}); } catch (e) {} }',
+      '      return Promise.resolve();',
+      '    },',
+      '    unregisterTool: function (n) {',
+      '      delete window.__executeHandlers[n];',
+      '      delete window.__registeredToolMeta[n];',
+      '      if (_real) { try { return _real.unregisterTool(n).catch(function () {}); } catch (e) {} }',
+      '      return Promise.resolve();',
+      '    }',
+      '  };',
+      '',
+      '  try {',
+      '    Object.defineProperty(navigator, "modelContext", { get: function () { return _proxy; }, configurable: true });',
+      '  } catch (e) { navigator.modelContext = _proxy; }',
+      '',
+      '  // awmcpInvoke(toolName, params) — call a registered tool from the console',
+      '  window.awmcpInvoke = function (name, params) {',
+      '    var h = window.__executeHandlers[name];',
+      '    if (!h) {',
+      '      console.error("[awmcp] Tool not found:", name, "— available:", Object.keys(window.__executeHandlers));',
+      '      return;',
+      '    }',
+      '    return h(params).then(function (r) { console.log("[awmcp result]", r); return r; });',
+      '  };',
+      '',
+      '  // Load IIFE from CDN — auto-init fires on load, discovers all forms',
+      '  var s = document.createElement("script");',
+      '  s.src = "https://unpkg.com/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js";',
+      '  s.onload = function () { _awmcpShowPanel(); };',
+      '  document.head.appendChild(s);',
+      '',
+      '  // Floating inspector panel',
+      '  window._awmcpShowPanel = function () {',
+      '    if (document.getElementById("__awmcp_panel")) return;',
+      '    var p = document.createElement("div");',
+      '    p.id = "__awmcp_panel";',
+      '    p.style.cssText = [',
+      '      "position:fixed;top:16px;right:16px;z-index:2147483647;width:300px",',
+      '      "background:#1a1a2e;color:#e2e8f0;border-radius:10px",',
+      '      "font-family:system-ui,sans-serif;font-size:13px",',
+      '      "box-shadow:0 8px 32px rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.1)",',
+      '      "overflow:hidden;user-select:none"',
+      '    ].join(";");',
+      '    p.innerHTML =',
+      '      \'<div id="__awmcp_hdr" style="padding:10px 12px;background:#16213e;display:flex;\' +',
+      '      \'align-items:center;justify-content:space-between;cursor:move;\' +',
+      '      \'border-bottom:1px solid rgba(255,255,255,0.08)">\' +',
+      '      \'<span style="font-weight:700;font-size:12px;letter-spacing:0.04em">\' +',
+      '      \'&#x26A1; auto-webmcp Inspector</span>\' +',
+      '      \'<button id="__awmcp_close" style="background:none;border:none;\' +',
+      '      \'color:rgba(255,255,255,0.5);cursor:pointer;font-size:16px;line-height:1;padding:0 2px">\' +',
+      '      \'&#x2715;</button></div>\' +',
+      '      \'<div id="__awmcp_body" style="padding:8px 10px;max-height:420px;overflow-y:auto"></div>\' +',
+      '      \'<div style="padding:8px 12px;border-top:1px solid rgba(255,255,255,0.08);\' +',
+      '      \'font-size:11px;color:rgba(255,255,255,0.35)">\' +',
+      '      \'Console: <code style="color:#86efac">awmcpInvoke(name, {})</code></div>\';',
+      '    document.body.appendChild(p);',
+      '    document.getElementById("__awmcp_close").onclick = function () { p.remove(); };',
+      '    _awmcpRenderTools();',
+      '    window.__onToolRegistered = function () { _awmcpRenderTools(); };',
+      '    // Drag by header',
+      '    var hdr = document.getElementById("__awmcp_hdr"), ox, oy, mx, my;',
+      '    hdr.onmousedown = function (e) {',
+      '      if (e.target.id === "__awmcp_close") return;',
+      '      e.preventDefault(); ox = p.offsetLeft; oy = p.offsetTop; mx = e.clientX; my = e.clientY;',
+      '      document.onmousemove = function (e) {',
+      '        p.style.right = "auto";',
+      '        p.style.left = (ox + e.clientX - mx) + "px";',
+      '        p.style.top  = (oy + e.clientY - my) + "px";',
+      '      };',
+      '      document.onmouseup = function () { document.onmousemove = null; document.onmouseup = null; };',
+      '    };',
+      '  };',
+      '',
+      '  window._awmcpRenderTools = function () {',
+      '    var body = document.getElementById("__awmcp_body");',
+      '    if (!body) return;',
+      '    var names = Object.keys(window.__registeredToolMeta);',
+      '    if (!names.length) {',
+      '      body.innerHTML = \'<div style="color:rgba(255,255,255,0.4);padding:12px 2px;font-size:12px">\' +',
+      '        \'No tools registered yet&#x2026;</div>\';',
+      '      return;',
+      '    }',
+      '    body.innerHTML =',
+      '      \'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;\' +',
+      '      \'color:rgba(255,255,255,0.4);margin-bottom:6px">REGISTERED TOOLS &nbsp;[\' +',
+      '      names.length + \']</div>\' +',
+      '      names.map(function (n) {',
+      '        var m  = window.__registeredToolMeta[n];',
+      '        var sid = "__awmcp_s_" + n.replace(/\\W/g, "_");',
+      '        var fc  = m.fieldCount + " field" + (m.fieldCount !== 1 ? "s" : "");',
+      '        return \'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:6px;\' +',
+      '          \'padding:8px 10px;margin-bottom:6px;background:rgba(255,255,255,0.03)">\' +',
+      '          \'<div style="display:flex;align-items:center;justify-content:space-between">\' +',
+      '          \'<span style="font-weight:600;font-size:12px;color:#86efac">\' + _awmcpEsc(n) + \'</span>\' +',
+      '          \'<span style="font-size:11px;color:rgba(255,255,255,0.4)">\' + fc + \'</span></div>\' +',
+      '          (m.description ? \'<div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px;\' +',
+      '            \'overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\' +',
+      '            _awmcpEsc(m.description) + \'">\' + _awmcpEsc(m.description) + \'</div>\' : "") +',
+      '          \'<div style="display:flex;gap:6px;margin-top:6px">\' +',
+      '          \'<button onclick="_awmcpToggleSchema(\\"\' + n + \'\\")" style="font-size:10px;padding:2px 8px;\' +',
+      '          \'border-radius:4px;border:1px solid rgba(255,255,255,0.15);\' +',
+      '          \'background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);cursor:pointer">\' +',
+      '          \'View Schema</button>\' +',
+      '          \'<button onclick="_awmcpCopyMcp(\\"\' + n + \'\\",this)" style="font-size:10px;padding:2px 8px;\' +',
+      '          \'border-radius:4px;border:1px solid rgba(134,239,172,0.3);\' +',
+      '          \'background:rgba(134,239,172,0.08);color:#86efac;cursor:pointer">\' +',
+      '          \'Copy MCP</button></div>\' +',
+      '          \'<pre id="\' + sid + \'" style="display:none;margin-top:6px;background:rgba(0,0,0,0.3);\' +',
+      '          \'border:1px solid rgba(255,255,255,0.07);border-radius:4px;padding:6px 8px;\' +',
+      '          \'font-size:10px;font-family:monospace;color:#d1d5db;\' +',
+      '          \'overflow:auto;max-height:180px;white-space:pre-wrap;word-break:break-word"></pre>\' +',
+      '          \'</div>\';',
+      '      }).join("");',
+      '  };',
+      '',
+      '  window._awmcpToggleSchema = function (name) {',
+      '    var el = document.getElementById("__awmcp_s_" + name.replace(/\\W/g, "_"));',
+      '    if (!el) return;',
+      '    if (el.style.display === "none") {',
+      '      el.style.display = "block";',
+      '      if (!el.dataset.filled) {',
+      '        var m = window.__registeredToolMeta[name];',
+      '        el.textContent = JSON.stringify({ name: name, description: m.description, inputSchema: m.inputSchema }, null, 2);',
+      '        el.dataset.filled = "1";',
+      '      }',
+      '    } else { el.style.display = "none"; }',
+      '  };',
+      '',
+      '  window._awmcpCopyMcp = function (name, btn) {',
+      '    var payload = JSON.stringify({ type: "tool_use", name: name, input: {} }, null, 2);',
+      '    navigator.clipboard.writeText(payload).then(function () {',
+      '      var prev = btn.textContent; btn.textContent = "Copied!";',
+      '      setTimeout(function () { btn.textContent = prev; }, 1500);',
+      '    }).catch(function () { window.prompt("Copy:", payload); });',
+      '  };',
+      '',
+      '  function _awmcpEsc(s) {',
+      '    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")',
+      '      .replace(/"/g,"&quot;").replace(/\'/g,"&#39;");',
+      '  }',
+      '',
+      '})();'
+    ].join('\n');
+
+    // ── Render snippet into <pre> ────────────────────────────────────────────
+    document.getElementById('snippet-display').textContent = SNIPPET;
+
+    // ── Copy button ──────────────────────────────────────────────────────────
+    function copySnippet() {
+      var btn = document.getElementById('copy-btn');
+      navigator.clipboard.writeText(SNIPPET).then(function () {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      }).catch(function () {
+        window.prompt('Copy this snippet:', SNIPPET);
+      });
+    }
+  </script>
+
+</body>
+</html>
