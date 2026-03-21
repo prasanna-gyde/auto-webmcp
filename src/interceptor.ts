@@ -23,10 +23,7 @@ declare global {
 }
 
 export interface ExecuteResult {
-  success: boolean;
-  data?: Record<string, unknown>;
-  url?: string;
-  error?: string;
+  content: Array<{ type: 'text'; text: string }>;
 }
 
 type Resolver = (result: ExecuteResult) => void;
@@ -49,17 +46,25 @@ const pendingExecutions = new WeakMap<
 export function buildExecuteHandler(
   form: HTMLFormElement,
   config: ResolvedConfig,
+  toolName: string,
 ): (params: Record<string, unknown>) => Promise<ExecuteResult> {
-  // Attach submit listener once per form
-  attachSubmitInterceptor(form);
+  // Attach submit/reset listeners once per form
+  attachSubmitInterceptor(form, toolName);
 
   return async (params: Record<string, unknown>): Promise<ExecuteResult> => {
     fillFormFields(form, params);
 
+    // Dispatch toolactivated event per spec
+    window.dispatchEvent(new CustomEvent('toolactivated', { detail: { toolName } }));
+
     return new Promise<ExecuteResult>((resolve, reject) => {
       pendingExecutions.set(form, { resolve, reject });
 
-      if (config.autoSubmit || form.dataset['webmcpAutosubmit'] !== undefined) {
+      if (
+        config.autoSubmit ||
+        form.hasAttribute('toolautosubmit') ||
+        form.dataset['webmcpAutosubmit'] !== undefined
+      ) {
         // Programmatically submit
         form.requestSubmit();
       }
@@ -69,7 +74,7 @@ export function buildExecuteHandler(
   };
 }
 
-function attachSubmitInterceptor(form: HTMLFormElement): void {
+function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void {
   // Guard against attaching multiple times
   if ((form as unknown as Record<string, unknown>)['__awmcp_intercepted']) return;
   (form as unknown as Record<string, unknown>)['__awmcp_intercepted'] = true;
@@ -83,22 +88,20 @@ function attachSubmitInterceptor(form: HTMLFormElement): void {
     pendingExecutions.delete(form);
 
     const formData = serializeFormData(form);
+    const text = JSON.stringify(formData);
+    const result: ExecuteResult = { content: [{ type: 'text', text }] };
 
     if (e.agentInvoked && typeof e.respondWith === 'function') {
       // Native WebMCP path: use respondWith to return to browser
       e.preventDefault();
-      e.respondWith(
-        Promise.resolve({
-          success: true,
-          data: formData,
-        }),
-      );
-      resolve({ success: true, data: formData });
-    } else {
-      // Fallback path: let form submit normally, resolve with data + target URL
-      const targetUrl = resolveFormAction(form);
-      resolve({ success: true, data: formData, url: targetUrl });
+      e.respondWith(Promise.resolve(result));
     }
+    resolve(result);
+  });
+
+  // Dispatch toolcancel when form is reset
+  form.addEventListener('reset', () => {
+    window.dispatchEvent(new CustomEvent('toolcancel', { detail: { toolName } }));
   });
 }
 

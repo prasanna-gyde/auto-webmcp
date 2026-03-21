@@ -8,6 +8,7 @@ export interface JsonSchemaProperty {
   description?: string;
   title?: string;
   enum?: string[];
+  oneOf?: Array<{ const: string; title: string }>;
   minimum?: number;
   maximum?: number;
   minLength?: number;
@@ -112,18 +113,16 @@ function buildStringSchema(input: HTMLInputElement): JsonSchemaProperty {
 }
 
 function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
-  const options = Array.from(select.options)
-    .filter((o) => o.value !== '')
-    .map((o) => o.value);
+  const filtered = Array.from(select.options).filter((o) => o.value !== '');
 
-  if (options.length === 0) {
+  if (filtered.length === 0) {
     return { type: 'string' };
   }
 
-  return {
-    type: 'string',
-    enum: options,
-  };
+  const enumValues = filtered.map((o) => o.value);
+  const oneOf = filtered.map((o) => ({ const: o.value, title: o.text.trim() || o.value }));
+
+  return { type: 'string', enum: enumValues, oneOf };
 }
 
 /** Collect all radio button values for a given name within a form */
@@ -132,4 +131,39 @@ export function collectRadioEnum(form: HTMLFormElement, name: string): string[] 
     form.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${CSS.escape(name)}"]`),
   );
   return radios.map((r) => r.value).filter((v) => v !== '');
+}
+
+/** Collect radio button values + label titles as oneOf entries */
+export function collectRadioOneOf(
+  form: HTMLFormElement,
+  name: string,
+): Array<{ const: string; title: string }> {
+  const radios = Array.from(
+    form.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${CSS.escape(name)}"]`),
+  ).filter((r) => r.value !== '');
+
+  return radios.map((r) => {
+    const title = getRadioLabelText(r);
+    return { const: r.value, title: title || r.value };
+  });
+}
+
+function getRadioLabelText(radio: HTMLInputElement): string {
+  // 1. Wrapping label
+  const parent = radio.closest('label');
+  if (parent) {
+    const clone = parent.cloneNode(true) as HTMLLabelElement;
+    clone.querySelectorAll('input, select, textarea, button').forEach((el) => el.remove());
+    const text = clone.textContent?.trim() ?? '';
+    if (text) return text;
+  }
+  // 2. Label pointing to radio by id
+  if (radio.id) {
+    const label = document.querySelector<HTMLLabelElement>(`label[for="${CSS.escape(radio.id)}"]`);
+    if (label) {
+      const text = label.textContent?.trim() ?? '';
+      if (text) return text;
+    }
+  }
+  return '';
 }

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Native WebMCP Attributes</title>
+</head>
+<body>
+  <h1>Native Attributes Test</h1>
+
+  <!-- Form using native WebMCP spec attributes -->
+  <form
+    toolname="subscribe_newsletter"
+    tooldescription="Subscribe to our newsletter with your email and preferences"
+    action="/subscribe"
+  >
+    <label for="email">Email Address</label>
+    <input
+      id="email"
+      name="email"
+      type="email"
+      required
+      toolparamdescription="Your email address for the newsletter"
+    >
+
+    <label for="frequency">Frequency</label>
+    <select
+      id="frequency"
+      name="frequency"
+      toolparamdescription="How often you want to receive the newsletter"
+    >
+      <option value="daily">Daily</option>
+      <option value="weekly">Weekly</option>
+      <option value="monthly">Monthly</option>
+    </select>
+
+    <button type="submit">Subscribe</button>
+    <button type="reset">Reset</button>
+  </form>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

@@ -150,20 +150,47 @@ function buildStringSchema(input) {
   return prop;
 }
 function mapSelectElement(select) {
-  const options = Array.from(select.options).filter((o) => o.value !== "").map((o) => o.value);
-  if (options.length === 0) {
+  const filtered = Array.from(select.options).filter((o) => o.value !== "");
+  if (filtered.length === 0) {
     return { type: "string" };
   }
-  return {
-    type: "string",
-    enum: options
-  };
+  const enumValues = filtered.map((o) => o.value);
+  const oneOf = filtered.map((o) => ({ const: o.value, title: o.text.trim() || o.value }));
+  return { type: "string", enum: enumValues, oneOf };
 }
 function collectRadioEnum(form, name) {
   const radios = Array.from(
     form.querySelectorAll(`input[type="radio"][name="${CSS.escape(name)}"]`)
   );
   return radios.map((r) => r.value).filter((v) => v !== "");
+}
+function collectRadioOneOf(form, name) {
+  const radios = Array.from(
+    form.querySelectorAll(`input[type="radio"][name="${CSS.escape(name)}"]`)
+  ).filter((r) => r.value !== "");
+  return radios.map((r) => {
+    const title = getRadioLabelText(r);
+    return { const: r.value, title: title || r.value };
+  });
+}
+function getRadioLabelText(radio) {
+  const parent = radio.closest("label");
+  if (parent) {
+    const clone = parent.cloneNode(true);
+    clone.querySelectorAll("input, select, textarea, button").forEach((el) => el.remove());
+    const text = clone.textContent?.trim() ?? "";
+    if (text)
+      return text;
+  }
+  if (radio.id) {
+    const label = document.querySelector(`label[for="${CSS.escape(radio.id)}"]`);
+    if (label) {
+      const text = label.textContent?.trim() ?? "";
+      if (text)
+        return text;
+    }
+  }
+  return "";
 }
 
 // src/analyzer.ts
@@ -175,6 +202,9 @@ function analyzeForm(form, override) {
   return { name, description, inputSchema };
 }
 function inferToolName(form) {
+  const nativeName = form.getAttribute("toolname");
+  if (nativeName)
+    return sanitizeName(nativeName);
   const explicit = form.dataset["webmcpName"];
   if (explicit)
     return sanitizeName(explicit);
@@ -238,6 +268,9 @@ function getLastPathSegment(url) {
   }
 }
 function inferToolDescription(form) {
+  const nativeDesc = form.getAttribute("tooldescription");
+  if (nativeDesc)
+    return nativeDesc.trim();
   const explicit = form.dataset["webmcpDescription"];
   if (explicit)
     return explicit.trim();
@@ -290,6 +323,9 @@ function buildSchema(form) {
       schemaProp.description = desc;
     if (control instanceof HTMLInputElement && control.type === "radio") {
       schemaProp.enum = collectRadioEnum(form, name);
+      const radioOneOf = collectRadioOneOf(form, name);
+      if (radioOneOf.length > 0)
+        schemaProp.oneOf = radioOneOf;
     }
     properties[name] = schemaProp;
     if (control.required) {
@@ -312,6 +348,9 @@ function inferFieldTitle(control) {
   return "";
 }
 function inferFieldDescription(control) {
+  const nativeParamDesc = control.getAttribute("toolparamdescription");
+  if (nativeParamDesc)
+    return nativeParamDesc.trim();
   const el = control;
   if (el.dataset["webmcpDescription"])
     return el.dataset["webmcpDescription"];
@@ -362,19 +401,20 @@ init_registry();
 
 // src/interceptor.ts
 var pendingExecutions = /* @__PURE__ */ new WeakMap();
-function buildExecuteHandler(form, config) {
-  attachSubmitInterceptor(form);
+function buildExecuteHandler(form, config, toolName) {
+  attachSubmitInterceptor(form, toolName);
   return async (params) => {
     fillFormFields(form, params);
+    window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
     return new Promise((resolve, reject) => {
       pendingExecutions.set(form, { resolve, reject });
-      if (config.autoSubmit || form.dataset["webmcpAutosubmit"] !== void 0) {
+      if (config.autoSubmit || form.hasAttribute("toolautosubmit") || form.dataset["webmcpAutosubmit"] !== void 0) {
         form.requestSubmit();
       }
     });
   };
 }
-function attachSubmitInterceptor(form) {
+function attachSubmitInterceptor(form, toolName) {
   if (form["__awmcp_intercepted"])
     return;
   form["__awmcp_intercepted"] = true;
@@ -385,19 +425,16 @@ function attachSubmitInterceptor(form) {
     const { resolve } = pending;
     pendingExecutions.delete(form);
     const formData = serializeFormData(form);
+    const text = JSON.stringify(formData);
+    const result = { content: [{ type: "text", text }] };
     if (e.agentInvoked && typeof e.respondWith === "function") {
       e.preventDefault();
-      e.respondWith(
-        Promise.resolve({
-          success: true,
-          data: formData
-        })
-      );
-      resolve({ success: true, data: formData });
-    } else {
-      const targetUrl = resolveFormAction(form);
-      resolve({ success: true, data: formData, url: targetUrl });
+      e.respondWith(Promise.resolve(result));
     }
+    resolve(result);
+  });
+  form.addEventListener("reset", () => {
+    window.dispatchEvent(new CustomEvent("toolcancel", { detail: { toolName } }));
   });
 }
 function fillFormFields(form, params) {
@@ -461,15 +498,6 @@ function serializeFormData(form) {
     }
   }
   return result;
-}
-function resolveFormAction(form) {
-  if (form.action) {
-    try {
-      return new URL(form.action, window.location.href).href;
-    } catch {
-    }
-  }
-  return window.location.href;
 }
 
 // src/enhancer.ts
@@ -547,8 +575,6 @@ function emit(type, form, toolName) {
   );
 }
 function isExcluded(form, config) {
-  if (form.hasAttribute("toolname"))
-    return true;
   if (form.dataset["noWebmcp"] !== void 0)
     return true;
   for (const selector of config.exclude) {
@@ -579,7 +605,10 @@ async function registerForm(form, config) {
       console.debug(`[auto-webmcp] Enriching: ${metadata.name}\u2026`);
     metadata = await enrichMetadata(metadata, config.enhance);
   }
-  const execute = buildExecuteHandler(form, config);
+  if (config.debug) {
+    warnToolQuality(metadata.name, metadata.description);
+  }
+  const execute = buildExecuteHandler(form, config, metadata.name);
   await registerFormTool(form, metadata, execute);
   if (config.debug) {
     console.debug(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
@@ -642,6 +671,17 @@ function listenForRouteChanges(config) {
 async function scanForms(config) {
   const forms = Array.from(document.querySelectorAll("form"));
   await Promise.all(forms.map((form) => registerForm(form, config)));
+}
+function warnToolQuality(name, description) {
+  if (/^form_\d+$|^submit$|^form$/.test(name)) {
+    console.warn(`[auto-webmcp] Tool "${name}" has a generic name. Consider adding a toolname or data-webmcp-name attribute.`);
+  }
+  if (!description || description === "Submit form") {
+    console.warn(`[auto-webmcp] Tool "${name}" has no meaningful description.`);
+  }
+  if (/don'?t|do not|never|avoid|not for/i.test(description)) {
+    console.warn(`[auto-webmcp] Tool "${name}" description contains negative instructions. Per spec best practices, prefer positive descriptions.`);
+  }
 }
 async function startDiscovery(config) {
   if (document.readyState === "loading") {

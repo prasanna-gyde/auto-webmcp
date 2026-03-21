@@ -16,10 +16,10 @@ declare global {
     }
 }
 export interface ExecuteResult {
-    success: boolean;
-    data?: Record<string, unknown>;
-    url?: string;
-    error?: string;
+    content: Array<{
+        type: 'text';
+        text: string;
+    }>;
 }
 /**
  * Build an `execute` function for a form tool.
@@ -29,5 +29,5 @@ export interface ExecuteResult {
  *  2. Fires a submit event (or auto-submits if configured)
  *  3. Resolves with structured form data once submitted
  */
-export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig): (params: Record<string, unknown>) => Promise<ExecuteResult>;
+export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string): (params: Record<string, unknown>) => Promise<ExecuteResult>;
 //# sourceMappingURL=interceptor.d.ts.map

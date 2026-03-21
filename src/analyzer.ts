@@ -2,7 +2,7 @@
  * analyzer.ts — Infer tool name, description, and JSON Schema from form DOM
  */
 
-import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum } from './schema.js';
+import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum, collectRadioOneOf } from './schema.js';
 import { FormOverride } from './config.js';
 
 export interface ToolMetadata {
@@ -33,7 +33,11 @@ export function analyzeForm(form: HTMLFormElement, override?: FormOverride): Too
 // ---------------------------------------------------------------------------
 
 function inferToolName(form: HTMLFormElement): string {
-  // 1. Explicit data attribute
+  // 1. Native toolname attribute (spec)
+  const nativeName = form.getAttribute('toolname');
+  if (nativeName) return sanitizeName(nativeName);
+
+  // 2. Explicit data attribute
   const explicit = form.dataset['webmcpName'];
   if (explicit) return sanitizeName(explicit);
 
@@ -119,7 +123,11 @@ function getLastPathSegment(url: string): string {
 // ---------------------------------------------------------------------------
 
 function inferToolDescription(form: HTMLFormElement): string {
-  // 1. Explicit data attribute
+  // 1. Native tooldescription attribute (spec)
+  const nativeDesc = form.getAttribute('tooldescription');
+  if (nativeDesc) return nativeDesc.trim();
+
+  // 2. Explicit data attribute
   const explicit = form.dataset['webmcpDescription'];
   if (explicit) return explicit.trim();
 
@@ -187,12 +195,14 @@ function buildSchema(form: HTMLFormElement): JsonSchema {
     const desc = inferFieldDescription(control);
     if (desc) schemaProp.description = desc;
 
-    // For radio groups, add enum values
+    // For radio groups, add enum and oneOf values
     if (
       control instanceof HTMLInputElement &&
       control.type === 'radio'
     ) {
       schemaProp.enum = collectRadioEnum(form, name);
+      const radioOneOf = collectRadioOneOf(form, name);
+      if (radioOneOf.length > 0) schemaProp.oneOf = radioOneOf;
     }
 
     properties[name] = schemaProp;
@@ -230,7 +240,11 @@ function inferFieldTitle(
 function inferFieldDescription(
   control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
 ): string {
-  // 1. data-webmcp-description
+  // 1. Native toolparamdescription attribute (spec)
+  const nativeParamDesc = control.getAttribute('toolparamdescription');
+  if (nativeParamDesc) return nativeParamDesc.trim();
+
+  // 2. data-webmcp-description
   const el = control as HTMLElement;
   if (el.dataset['webmcpDescription']) return el.dataset['webmcpDescription']!;
 

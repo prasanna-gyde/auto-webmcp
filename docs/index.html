@@ -480,7 +480,7 @@
     <div class="navbar-inner">
       <div class="navbar-brand">
         <span>⚡ auto-webmcp</span>
-        <span class="version">v0.1.0</span>
+        <span class="version">v0.2.0</span>
       </div>
       <div class="navbar-links">
         <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">
@@ -517,14 +517,14 @@
       <div class="tab-panels">
         <div class="tab-panel" id="panel-cdn">
           <div class="code-block-wrapper">
-            <button class="copy-btn" data-copy="&lt;script src=&quot;https://unpkg.com/auto-webmcp&quot;&gt;&lt;/script&gt;" aria-label="Copy CDN snippet">Copy</button>
-            <pre><code class="language-xml">&lt;script src="https://unpkg.com/auto-webmcp"&gt;&lt;/script&gt;</code></pre>
+            <button class="copy-btn" data-copy="&lt;script src=&quot;https://unpkg.com/auto-webmcp@0.2.0&quot;&gt;&lt;/script&gt;" aria-label="Copy CDN snippet">Copy</button>
+            <pre><code class="language-xml">&lt;script src="https://unpkg.com/auto-webmcp@0.2.0"&gt;&lt;/script&gt;</code></pre>
           </div>
         </div>
         <div class="tab-panel" id="panel-npm">
           <div class="code-block-wrapper">
-            <button class="copy-btn" data-copy="npm install auto-webmcp" aria-label="Copy npm install">Copy</button>
-            <pre><code class="language-bash">npm install auto-webmcp</code></pre>
+            <button class="copy-btn" data-copy="npm install auto-webmcp@0.2.0" aria-label="Copy npm install">Copy</button>
+            <pre><code class="language-bash">npm install auto-webmcp@0.2.0</code></pre>
           </div>
         </div>
       </div>
@@ -552,7 +552,7 @@
         <div class="how-card">
           <div class="how-card-num">01</div>
           <h3>Scans forms</h3>
-          <p>Discovers all <code>&lt;form&gt;</code> elements on page load and watches for new ones via <code>MutationObserver</code>. Forms with an existing <code>toolname</code> attribute are skipped — the browser handles those natively.</p>
+          <p>Discovers all <code>&lt;form&gt;</code> elements on page load and watches for new ones via <code>MutationObserver</code>. Reads native <code>toolname</code> and <code>tooldescription</code> attributes when present, and enhances forms that are missing descriptions.</p>
         </div>
         <div class="how-card">
           <div class="how-card-num">02</div>
@@ -577,15 +577,16 @@
   <section>
     <div class="section-inner">
       <div class="section-label">Why auto-webmcp?</div>
-      <h2 class="section-title">Declarative API vs. auto-webmcp</h2>
-      <p class="section-sub">WebMCP offers two paths. auto-webmcp makes the imperative path automatic.</p>
+      <h2 class="section-title">Native Chrome API vs. auto-webmcp</h2>
+      <p class="section-sub">Chrome 146+ ships WebMCP with two paths. auto-webmcp is a polyfill + enhancement layer that works with both.</p>
       <div class="compare-grid">
         <div class="compare-card">
           <h3>Native Declarative API</h3>
           <ul class="compare-list">
-            <li>Add <code>toolname</code> to each individual <code>&lt;form&gt;</code></li>
+            <li>Add <code>toolname</code> to each <code>&lt;form&gt;</code> manually</li>
             <li>Full manual control over name and schema</li>
             <li>Best for new sites built with WebMCP in mind</li>
+            <li>Requires Chrome 146+ with <code>#enable-webmcp-testing</code> flag</li>
             <li>Each form requires explicit annotation</li>
           </ul>
         </div>
@@ -593,9 +594,11 @@
           <h3>auto-webmcp</h3>
           <ul class="compare-list">
             <li>Drop in one script tag — done</li>
-            <li>Names and schemas inferred from existing HTML</li>
-            <li>Best for existing sites with zero code changes</li>
-            <li>All forms covered automatically</li>
+            <li>Reads native <code>toolname</code>/<code>tooldescription</code> when present</li>
+            <li>Infers names and schemas from existing HTML for all other forms</li>
+            <li>Best for existing sites, CMSs, and SPAs with zero code changes</li>
+            <li>MutationObserver handles dynamic forms automatically</li>
+            <li>Gracefully degrades when WebMCP is unavailable</li>
           </ul>
         </div>
       </div>

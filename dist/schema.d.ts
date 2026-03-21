@@ -7,6 +7,10 @@ export interface JsonSchemaProperty {
     description?: string;
     title?: string;
     enum?: string[];
+    oneOf?: Array<{
+        const: string;
+        title: string;
+    }>;
     minimum?: number;
     maximum?: number;
     minLength?: number;
@@ -22,4 +26,9 @@ export interface JsonSchema {
 export declare function inputTypeToSchema(input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): JsonSchemaProperty | null;
 /** Collect all radio button values for a given name within a form */
 export declare function collectRadioEnum(form: HTMLFormElement, name: string): string[];
+/** Collect radio button values + label titles as oneOf entries */
+export declare function collectRadioOneOf(form: HTMLFormElement, name: string): Array<{
+    const: string;
+    title: string;
+}>;
 //# sourceMappingURL=schema.d.ts.map

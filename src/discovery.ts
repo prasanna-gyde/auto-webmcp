@@ -29,8 +29,6 @@ function emit(type: 'form:registered' | 'form:unregistered', form: HTMLFormEleme
 
 /** Check whether a form should be excluded per config */
 function isExcluded(form: HTMLFormElement, config: ResolvedConfig): boolean {
-  // Skip forms that already have explicit WebMCP attributes (browser handles)
-  if (form.hasAttribute('toolname')) return true;
   // Skip forms with data-no-webmcp
   if (form.dataset['noWebmcp'] !== undefined) return true;
   // Skip per config exclude list
@@ -65,7 +63,12 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
     if (config.debug) console.debug(`[auto-webmcp] Enriching: ${metadata.name}…`);
     metadata = await enrichMetadata(metadata, config.enhance);
   }
-  const execute = buildExecuteHandler(form, config);
+
+  if (config.debug) {
+    warnToolQuality(metadata.name, metadata.description);
+  }
+
+  const execute = buildExecuteHandler(form, config, metadata.name);
 
   await registerFormTool(form, metadata, execute);
 
@@ -169,6 +172,18 @@ async function scanForms(config: ResolvedConfig): Promise<void> {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+function warnToolQuality(name: string, description: string): void {
+  if (/^form_\d+$|^submit$|^form$/.test(name)) {
+    console.warn(`[auto-webmcp] Tool "${name}" has a generic name. Consider adding a toolname or data-webmcp-name attribute.`);
+  }
+  if (!description || description === 'Submit form') {
+    console.warn(`[auto-webmcp] Tool "${name}" has no meaningful description.`);
+  }
+  if (/don'?t|do not|never|avoid|not for/i.test(description)) {
+    console.warn(`[auto-webmcp] Tool "${name}" description contains negative instructions. Per spec best practices, prefer positive descriptions.`);
+  }
+}
 
 export async function startDiscovery(config: ResolvedConfig): Promise<void> {
   if (document.readyState === 'loading') {

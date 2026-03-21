@@ -267,6 +267,162 @@ test.describe('Enhancer integration', () => {
   });
 });
 
+// Enhanced mock that preserves execute handlers for invocation testing
+const MOCK_WEBMCP_WITH_EXECUTE = `
+  window.__registeredTools = [];
+  window.__executeHandlers = {};
+  navigator.modelContext = {
+    registerTool(tool) {
+      window.__registeredTools.push(JSON.parse(JSON.stringify(tool)));
+      window.__executeHandlers[tool.name] = tool.execute;
+      return Promise.resolve();
+    },
+    unregisterTool(name) {
+      window.__registeredTools = window.__registeredTools.filter(t => t.name !== name);
+      delete window.__executeHandlers[name];
+      return Promise.resolve();
+    }
+  };
+`;
+
+test.describe('Native WebMCP attributes', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/native-attrs.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('uses toolname attribute for tool name', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    expect(tools[0]?.['name']).toBe('subscribe_newsletter');
+  });
+
+  test('uses tooldescription attribute for description', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    expect(tools[0]?.['description']).toBe('Subscribe to our newsletter with your email and preferences');
+  });
+
+  test('uses toolparamdescription for field description', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
+    const props = schema['properties'] as Record<string, Record<string, unknown>>;
+    expect(props['email']?.['description']).toBe('Your email address for the newsletter');
+    expect(props['frequency']?.['description']).toBe('How often you want to receive the newsletter');
+  });
+
+  test('select field has oneOf with titles', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
+    const props = schema['properties'] as Record<string, Record<string, unknown>>;
+    const oneOf = props['frequency']?.['oneOf'] as Array<Record<string, string>>;
+    expect(oneOf).toBeDefined();
+    expect(oneOf).toContainEqual({ const: 'daily', title: 'Daily' });
+    expect(oneOf).toContainEqual({ const: 'weekly', title: 'Weekly' });
+    expect(oneOf).toContainEqual({ const: 'monthly', title: 'Monthly' });
+  });
+
+  test('select field still has enum alongside oneOf', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
+    const props = schema['properties'] as Record<string, Record<string, unknown>>;
+    expect(props['frequency']?.['enum']).toEqual(['daily', 'weekly', 'monthly']);
+  });
+});
+
+test.describe('toolactivated and toolcancel events', () => {
+  test('fires toolactivated event after agent invocation', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await page.goto('/tests/fixtures/native-attrs.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    // Listen for toolactivated event
+    await page.evaluate(() => {
+      (window as unknown as Record<string, unknown>)['__toolActivatedEvents'] = [];
+      window.addEventListener('toolactivated', (e) => {
+        ((window as unknown as Record<string, unknown>)['__toolActivatedEvents'] as unknown[]).push(
+          (e as CustomEvent).detail,
+        );
+      });
+    });
+
+    // Invoke the execute handler
+    await page.evaluate(() => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      const fn = handlers['subscribe_newsletter'];
+      if (fn) fn({ email: 'test@example.com', frequency: 'weekly' }).catch(() => {});
+    });
+
+    await page.waitForTimeout(100);
+
+    const events = await page.evaluate(() =>
+      (window as unknown as Record<string, unknown>)['__toolActivatedEvents'] as Array<Record<string, unknown>>,
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]?.['toolName']).toBe('subscribe_newsletter');
+  });
+
+  test('fires toolcancel event on form reset', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await page.goto('/tests/fixtures/native-attrs.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    // Listen for toolcancel event
+    await page.evaluate(() => {
+      (window as unknown as Record<string, unknown>)['__toolCancelEvents'] = [];
+      window.addEventListener('toolcancel', (e) => {
+        ((window as unknown as Record<string, unknown>)['__toolCancelEvents'] as unknown[]).push(
+          (e as CustomEvent).detail,
+        );
+      });
+    });
+
+    // Trigger a form reset
+    await page.evaluate(() => {
+      const form = document.querySelector('form');
+      if (form) form.reset();
+    });
+
+    await page.waitForTimeout(100);
+
+    const events = await page.evaluate(() =>
+      (window as unknown as Record<string, unknown>)['__toolCancelEvents'] as Array<Record<string, unknown>>,
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]?.['toolName']).toBe('subscribe_newsletter');
+  });
+});
+
+test.describe('radio oneOf labels', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/search.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('radio group has oneOf with human-readable titles', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
+    const props = schema['properties'] as Record<string, Record<string, unknown>>;
+    const oneOf = props['trip_type']?.['oneOf'] as Array<Record<string, string>>;
+    expect(oneOf).toBeDefined();
+    expect(oneOf).toContainEqual({ const: 'roundtrip', title: 'Round Trip' });
+    expect(oneOf).toContainEqual({ const: 'oneway', title: 'One Way' });
+    expect(oneOf).toContainEqual({ const: 'multicity', title: 'Multi-City' });
+  });
+});
+
 test.describe('Contact form', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(MOCK_WEBMCP);
