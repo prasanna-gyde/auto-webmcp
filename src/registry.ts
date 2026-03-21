@@ -53,12 +53,28 @@ export async function registerFormTool(
     await unregisterFormTool(form);
   }
 
-  await navigator.modelContext!.registerTool({
-    name: metadata.name,
-    description: metadata.description,
-    inputSchema: metadata.inputSchema,
-    execute,
-  });
+  try {
+    await navigator.modelContext!.registerTool({
+      name: metadata.name,
+      description: metadata.description,
+      inputSchema: metadata.inputSchema,
+      execute,
+    });
+  } catch {
+    // Chrome may hold a stale registration from a previous page load.
+    // Unregister by name and retry once.
+    try {
+      await navigator.modelContext!.unregisterTool(metadata.name);
+      await navigator.modelContext!.registerTool({
+        name: metadata.name,
+        description: metadata.description,
+        inputSchema: metadata.inputSchema,
+        execute,
+      });
+    } catch {
+      // Give up Chrome registration — local handlers and form:registered still work.
+    }
+  }
 
   registeredTools.set(form, metadata.name);
 }

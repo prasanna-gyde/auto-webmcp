@@ -166,7 +166,7 @@ function listenForRouteChanges(config: ResolvedConfig): void {
 
 async function scanForms(config: ResolvedConfig): Promise<void> {
   const forms = Array.from(document.querySelectorAll<HTMLFormElement>('form'));
-  await Promise.all(forms.map((form) => registerForm(form, config)));
+  await Promise.allSettled(forms.map((form) => registerForm(form, config)));
 }
 
 // ---------------------------------------------------------------------------
@@ -192,9 +192,9 @@ export async function startDiscovery(config: ResolvedConfig): Promise<void> {
     );
   }
 
-  await scanForms(config);
   startObserver(config);
   listenForRouteChanges(config);
+  await scanForms(config);
 }
 
 export function stopDiscovery(): void {

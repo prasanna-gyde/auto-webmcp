@@ -28,12 +28,25 @@ async function registerFormTool(form, metadata, execute) {
   if (existing) {
     await unregisterFormTool(form);
   }
-  await navigator.modelContext.registerTool({
-    name: metadata.name,
-    description: metadata.description,
-    inputSchema: metadata.inputSchema,
-    execute
-  });
+  try {
+    await navigator.modelContext.registerTool({
+      name: metadata.name,
+      description: metadata.description,
+      inputSchema: metadata.inputSchema,
+      execute
+    });
+  } catch {
+    try {
+      await navigator.modelContext.unregisterTool(metadata.name);
+      await navigator.modelContext.registerTool({
+        name: metadata.name,
+        description: metadata.description,
+        inputSchema: metadata.inputSchema,
+        execute
+      });
+    } catch {
+    }
+  }
   registeredTools.set(form, metadata.name);
 }
 async function unregisterFormTool(form) {
@@ -670,7 +683,7 @@ function listenForRouteChanges(config) {
 }
 async function scanForms(config) {
   const forms = Array.from(document.querySelectorAll("form"));
-  await Promise.all(forms.map((form) => registerForm(form, config)));
+  await Promise.allSettled(forms.map((form) => registerForm(form, config)));
 }
 function warnToolQuality(name, description) {
   if (/^form_\d+$|^submit$|^form$/.test(name)) {
@@ -689,9 +702,9 @@ async function startDiscovery(config) {
       (resolve) => document.addEventListener("DOMContentLoaded", () => resolve(), { once: true })
     );
   }
-  await scanForms(config);
   startObserver(config);
   listenForRouteChanges(config);
+  await scanForms(config);
 }
 function stopDiscovery() {
   observer?.disconnect();
