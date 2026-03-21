@@ -701,6 +701,170 @@
       to   { opacity: 0; transform: translateY(8px); }
     }
 
+    /* ── Form tab bar ────────────────────────────────────────────────────── */
+    .form-tab-bar {
+      display: flex;
+      width: fit-content;
+      background: var(--light-gray);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+      padding: 2px;
+      gap: 2px;
+    }
+    .form-tab-btn {
+      padding: 0.28rem 0.75rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: background 0.15s, color 0.15s;
+    }
+    .form-tab-btn.active { background: var(--white); color: var(--charcoal); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .form-tab-btn:hover:not(.active) { color: var(--text); }
+
+    .form-schema-view { display: none; }
+    .form-schema-view.visible { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; }
+    @media (max-width: 600px) { .form-schema-view.visible { grid-template-columns: 1fr; } }
+    .schema-pane-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      margin-bottom: 0.375rem;
+    }
+    .schema-pane pre {
+      margin: 0;
+      padding: 0.625rem 0.75rem;
+      background: var(--light-gray);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.66rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--text);
+      overflow: auto;
+      max-height: 260px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.6;
+    }
+
+    /* ── Tool card schema panel ─────────────────────────────────────────── */
+    .tool-card-actions {
+      margin-top: 0.375rem;
+      display: flex;
+      gap: 0.375rem;
+      flex-wrap: wrap;
+    }
+    .schema-toggle-btn {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 5px;
+      color: var(--text-muted-light);
+      font-size: 0.65rem;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      cursor: pointer;
+      padding: 2px 8px;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .schema-toggle-btn:hover { border-color: rgba(229,254,150,0.35); color: var(--lime); background: rgba(229,254,150,0.07); }
+    .copy-mcp-btn {
+      background: rgba(229,254,150,0.08);
+      border: 1px solid rgba(229,254,150,0.18);
+      border-radius: 5px;
+      color: var(--lime);
+      font-size: 0.65rem;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      cursor: pointer;
+      padding: 2px 8px;
+      transition: background 0.15s;
+    }
+    .copy-mcp-btn:hover { background: rgba(229,254,150,0.15); }
+    .tool-schema-panel { display: none; margin-top: 0.5rem; }
+    .tool-schema-panel.open { display: block; }
+    .tool-schema-panel pre {
+      margin: 0;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 6px;
+      padding: 0.5rem 0.625rem;
+      font-size: 0.62rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: #d1d5db;
+      overflow: auto;
+      max-height: 180px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.55;
+    }
+
+    /* ── Call log ─────────────────────────────────────────────────────────── */
+    .call-log {
+      margin-top: 0.875rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      max-height: 220px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.1) transparent;
+    }
+    .call-log::-webkit-scrollbar { width: 4px; }
+    .call-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    .call-log-entry {
+      background: rgba(0,0,0,0.22);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 7px;
+      padding: 0.4375rem 0.625rem;
+      animation: slideIn 0.2s ease;
+    }
+    .call-log-entry summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.7rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--lime);
+      user-select: none;
+    }
+    .call-log-entry summary::-webkit-details-marker { display: none; }
+    .call-log-marker { opacity: 0.6; font-size: 0.6rem; transition: transform 0.15s; }
+    details[open].call-log-entry > summary .call-log-marker { transform: rotate(90deg); }
+    .call-log-time { color: var(--text-muted-light); font-size: 0.62rem; margin-left: auto; font-family: 'DM Sans', system-ui, sans-serif; }
+    .call-log-body { margin-top: 0.375rem; }
+    .call-log-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted-light); margin-bottom: 0.1875rem; }
+    .call-log-pre {
+      margin: 0 0 0.3125rem;
+      padding: 0.3125rem 0.5rem;
+      background: rgba(0,0,0,0.2);
+      border-radius: 4px;
+      font-size: 0.6rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: #d1d5db;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+    .call-log-empty { font-size: 0.7rem; color: var(--text-muted-light); font-style: italic; text-align: center; padding: 0.25rem 0; }
+    .simulator-note {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 0.875rem;
+      line-height: 1.55;
+      font-style: italic;
+    }
+
     /* ── Footer ──────────────────────────────────────────────────────────── */
     .demo-footer {
       border-top: 1px solid var(--border);
@@ -729,7 +893,8 @@
         window.__executeHandlers[tool.name] = tool.execute;
         window.__registeredToolMeta[tool.name] = {
           description: tool.description,
-          fieldCount: Object.keys((tool.inputSchema && tool.inputSchema.properties) || {}).length
+          fieldCount: Object.keys((tool.inputSchema && tool.inputSchema.properties) || {}).length,
+          inputSchema: tool.inputSchema || null
         };
         if (typeof window.__onToolRegistered === 'function') {
           window.__onToolRegistered(tool.name);
@@ -823,11 +988,17 @@
             </div>
             <span class="tool-name-tag">search_flights</span>
           </div>
+          <div class="form-tab-bar" id="tab-bar-search_flights">
+            <button class="form-tab-btn active" onclick="showFormTab('search_flights','form')">Form</button>
+            <button class="form-tab-btn" onclick="showFormTab('search_flights','schema')">Tool JSON</button>
+          </div>
+          <div class="form-inner" id="form-inner-search_flights">
           <form id="flight-form"
                 toolname="search_flights"
                 tooldescription="Search for available flights between two airports on a given date with specified passengers and cabin class"
                 action="#"
-                onsubmit="event.preventDefault(); handleFormSubmit(this, 'Flight search submitted')">
+                onsubmit="event.preventDefault(); handleFormSubmit(this, 'Flight search submitted')"
+                data-tab-form="search_flights">
             <div class="form-grid">
               <div class="form-group">
                 <label for="origin">Origin Airport</label>
@@ -878,6 +1049,8 @@
               <button type="submit" class="btn btn-primary">Search Flights</button>
             </div>
           </form>
+          </div><!-- /form-inner -->
+          <div class="form-schema-view" id="schema-view-search_flights"></div>
         </div>
       </section>
 
@@ -891,11 +1064,17 @@
             </div>
             <span class="tool-name-tag">contact_support</span>
           </div>
+          <div class="form-tab-bar" id="tab-bar-contact_support">
+            <button class="form-tab-btn active" onclick="showFormTab('contact_support','form')">Form</button>
+            <button class="form-tab-btn" onclick="showFormTab('contact_support','schema')">Tool JSON</button>
+          </div>
+          <div class="form-inner" id="form-inner-contact_support">
           <form id="support-form"
                 toolname="contact_support"
                 tooldescription="Submit a support ticket with a subject, priority level, and detailed message"
                 action="#"
-                onsubmit="event.preventDefault(); handleFormSubmit(this, 'Support ticket submitted')">
+                onsubmit="event.preventDefault(); handleFormSubmit(this, 'Support ticket submitted')"
+                data-tab-form="contact_support">
             <div class="form-grid">
               <div class="form-group">
                 <label for="support-name">Your Name</label>
@@ -942,6 +1121,8 @@
               <button type="submit" class="btn btn-primary">Send Ticket</button>
             </div>
           </form>
+          </div><!-- /form-inner -->
+          <div class="form-schema-view" id="schema-view-contact_support"></div>
         </div>
       </section>
 
@@ -1006,6 +1187,7 @@
         <div class="panel-card">
           <div class="panel-card-label">Agent Simulator</div>
           <p class="simulator-hint">Invoke tools exactly as an AI agent would — fills fields and auto-submits the form.</p>
+          <p class="simulator-note">Real agents call tools via the WebMCP API. Chrome passes the tool call to your page's execute handler — the same function the simulator uses below.</p>
           <div class="simulator-buttons">
             <button class="sim-btn" onclick="runSimulator('search_flights', {origin:'New York (JFK)',destination:'London (LHR)',depart_date:'2026-04-15',passengers:2,cabin_class:'business',trip_type:'roundtrip'})">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
@@ -1020,6 +1202,9 @@
               Subscribe Pro Plan
               <span class="btn-tag" id="newsletter-btn-tag">add form first</span>
             </button>
+          </div>
+          <div id="call-log" class="call-log">
+            <p class="call-log-empty">Call log appears here after simulator runs...</p>
           </div>
         </div>
 
@@ -1039,6 +1224,7 @@
 
   <!-- ── Footer ──────────────────────────────────────────────────────────── -->
   <footer class="demo-footer">
+    <a href="real-world-forms.html">Test Library on Real Forms →</a> &mdash;
     Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
     open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
     A <a href="https://gyde.ai" target="_blank" rel="noopener">Gyde</a> initiative
@@ -1121,7 +1307,14 @@
         '</div>',
         meta.description
           ? '<div class="tool-card-desc">' + escHtml(meta.description) + '</div>'
-          : ''
+          : '',
+        '<div class="tool-card-actions">',
+          '<button class="schema-toggle-btn" data-tool="' + escHtml(name) + '" onclick="toggleSchema(this)">View Schema</button>',
+          '<button class="copy-mcp-btn" data-tool="' + escHtml(name) + '" onclick="copyMcpCall(this)">&#128203; Copy MCP call</button>',
+        '</div>',
+        '<div class="tool-schema-panel">',
+          '<pre></pre>',
+        '</div>'
       ].join('');
 
       list.appendChild(card);
@@ -1220,6 +1413,7 @@
 
         if (section) section.classList.remove('is-filling');
         showToast(result);
+        appendCallLog(toolName, params, result);
       } catch (err) {
         if (section) section.classList.remove('is-filling');
         console.error('[auto-webmcp demo] execute error:', err);
@@ -1243,9 +1437,15 @@
             '<h3 style="font-size:0.95rem;font-weight:700;color:var(--charcoal)">Newsletter Signup</h3>',
             '<span style="font-size:0.72rem;font-weight:600;font-family:monospace;background:var(--charcoal);color:var(--lime);padding:3px 9px;border-radius:6px">subscribe_newsletter</span>',
           '</div>',
+          '<div class="form-tab-bar" id="tab-bar-subscribe_newsletter">',
+            '<button class="form-tab-btn active" onclick="showFormTab(\'subscribe_newsletter\',\'form\')">Form</button>',
+            '<button class="form-tab-btn" onclick="showFormTab(\'subscribe_newsletter\',\'schema\')">Tool JSON</button>',
+          '</div>',
+          '<div class="form-inner" id="form-inner-subscribe_newsletter">',
           '<form id="newsletter-form" toolname="subscribe_newsletter"',
                 ' tooldescription="Subscribe an email address to the newsletter with a chosen plan tier"',
                 ' action="#"',
+                ' data-tab-form="subscribe_newsletter"',
                 ' onsubmit="event.preventDefault(); handleFormSubmit(this, \'Subscribed!\')">',
             '<div class="form-group">',
               '<label for="nl-email">Email Address</label>',
@@ -1265,6 +1465,8 @@
               '<button type="submit" class="btn btn-primary">Subscribe</button>',
             '</div>',
           '</form>',
+          '</div>',
+          '<div class="form-schema-view" id="schema-view-subscribe_newsletter"></div>',
         '</div>'
       ].join('');
 
@@ -1343,6 +1545,155 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+    }
+
+    // ── 11. Schema toggle (tool card panel) ────────────────────────────────
+    function toggleSchema(btn) {
+      var name  = btn.dataset.tool;
+      var card  = btn.closest('.tool-card');
+      var panel = card.querySelector('.tool-schema-panel');
+      var isOpen = panel.classList.contains('open');
+      if (!isOpen) {
+        var meta    = window.__registeredToolMeta[name] || {};
+        var toolDef = { name: name, description: meta.description, inputSchema: meta.inputSchema };
+        panel.querySelector('pre').textContent = JSON.stringify(toolDef, null, 2);
+        panel.classList.add('open');
+        btn.textContent = 'Hide Schema';
+      } else {
+        panel.classList.remove('open');
+        btn.textContent = 'View Schema';
+      }
+    }
+
+    function copyMcpCall(btn) {
+      var name  = btn.dataset.tool;
+      var meta  = window.__registeredToolMeta[name] || {};
+      var props = (meta.inputSchema && meta.inputSchema.properties) || {};
+      var sampleInput = {};
+      Object.keys(props).forEach(function(k) {
+        var p = props[k];
+        if (p.enum && p.enum.length) sampleInput[k] = p.enum[0];
+        else if (p.type === 'string')  sampleInput[k] = 'example';
+        else if (p.type === 'number' || p.type === 'integer') sampleInput[k] = 1;
+        else if (p.type === 'boolean') sampleInput[k] = true;
+        else sampleInput[k] = null;
+      });
+      var mcpCall = { type: 'tool_use', name: name, input: sampleInput };
+      navigator.clipboard.writeText(JSON.stringify(mcpCall, null, 2)).then(function() {
+        var orig = btn.textContent;
+        btn.textContent = '\u2713 Copied!';
+        setTimeout(function() { btn.textContent = orig; }, 1500);
+      }).catch(function() {
+        btn.textContent = '\u2717 Failed';
+        setTimeout(function() { btn.textContent = '\uD83D\uDCCB Copy MCP call'; }, 1500);
+      });
+    }
+
+    // ── 12. Form tab bar ───────────────────────────────────────────────────
+    function showFormTab(toolName, tab) {
+      var inner = document.getElementById('form-inner-' + toolName);
+      var view  = document.getElementById('schema-view-' + toolName);
+      var bar   = document.getElementById('tab-bar-' + toolName);
+      if (!inner || !view || !bar) return;
+      var btns = bar.querySelectorAll('.form-tab-btn');
+      if (tab === 'form') {
+        inner.style.display = '';
+        view.classList.remove('visible');
+        btns[0].classList.add('active');
+        btns[1].classList.remove('active');
+      } else {
+        inner.style.display = 'none';
+        view.classList.add('visible');
+        btns[0].classList.remove('active');
+        btns[1].classList.add('active');
+        populateFormSchemaView(toolName);
+      }
+    }
+
+    function populateFormSchemaView(toolName) {
+      var view = document.getElementById('schema-view-' + toolName);
+      if (!view || view.dataset.populated) return;
+      var meta = window.__registeredToolMeta[toolName];
+      if (!meta) {
+        view.innerHTML = '<p style="font-size:0.8rem;color:var(--text-muted);padding:0.5rem 0">Tool not registered yet — add the form first.</p>';
+        return;
+      }
+      var inner = document.getElementById('form-inner-' + toolName);
+      var form  = inner ? inner.querySelector('form') : null;
+      var htmlSnippet = form ? getHtmlSnippet(form) : '(form not found)';
+      var toolDef = { name: toolName, description: meta.description, inputSchema: meta.inputSchema };
+      view.innerHTML = [
+        '<div class="schema-pane">',
+          '<div class="schema-pane-label">HTML Form</div>',
+          '<pre>' + escHtml(htmlSnippet) + '</pre>',
+        '</div>',
+        '<div class="schema-pane">',
+          '<div class="schema-pane-label">Generated Tool JSON</div>',
+          '<pre>' + escHtml(JSON.stringify(toolDef, null, 2)) + '</pre>',
+        '</div>'
+      ].join('');
+      view.dataset.populated = '1';
+    }
+
+    function getHtmlSnippet(form) {
+      var lines = [];
+      var openTag = '<form';
+      ['toolname','tooldescription','action','id'].forEach(function(a) {
+        var v = form.getAttribute(a);
+        if (v) openTag += '\n  ' + a + '="' + v.replace(/"/g, '&quot;') + '"';
+      });
+      openTag += '>';
+      lines.push(openTag);
+      var fields = Array.from(form.querySelectorAll(
+        'input:not([type=hidden]):not([type=submit]):not([type=reset]):not([type=button]),' +
+        'select, textarea'
+      ));
+      fields.slice(0, 7).forEach(function(el) {
+        var tag  = el.tagName.toLowerCase();
+        var line = '  <' + tag;
+        if (el.name) line += ' name="' + el.name + '"';
+        if (el.type && el.type !== 'text' && el.tagName === 'INPUT') line += ' type="' + el.type + '"';
+        if (el.id)   line += ' id="' + el.id + '"';
+        line += '>';
+        lines.push(line);
+      });
+      if (fields.length > 7) lines.push('  ... (' + (fields.length - 7) + ' more fields)');
+      lines.push('</form>');
+      return lines.join('\n');
+    }
+
+    // ── 13. Call log ───────────────────────────────────────────────────────
+    function appendCallLog(toolName, input, output) {
+      var log = document.getElementById('call-log');
+      if (!log) return;
+      var empty = log.querySelector('.call-log-empty');
+      if (empty) empty.remove();
+      while (log.children.length >= 5) { log.removeChild(log.lastElementChild); }
+
+      var now  = new Date();
+      var time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      var outputJson;
+      try { outputJson = JSON.stringify(typeof output === 'string' ? JSON.parse(output) : output, null, 2); }
+      catch(_) { outputJson = String(output); }
+
+      var entry = document.createElement('details');
+      entry.className = 'call-log-entry';
+      entry.open = true;
+      entry.innerHTML = [
+        '<summary>',
+          '<span class="call-log-marker">&#9654;</span>',
+          '<span>' + escHtml(toolName) + '</span>',
+          '<span class="call-log-time">' + time + '</span>',
+        '</summary>',
+        '<div class="call-log-body">',
+          '<div class="call-log-label">Input</div>',
+          '<pre class="call-log-pre">' + escHtml(JSON.stringify(input, null, 2)) + '</pre>',
+          '<div class="call-log-label">Output</div>',
+          '<pre class="call-log-pre">' + escHtml(outputJson) + '</pre>',
+        '</div>'
+      ].join('');
+      log.insertBefore(entry, log.firstChild);
     }
   </script>
 

@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-World Forms — auto-webmcp</title>
+  <meta name="description" content="5 real-world HTML forms tested with auto-webmcp. No custom toolname attributes — pure inference from vanilla HTML.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --charcoal:         #262626;
+      --white:            #ffffff;
+      --lime:             #e5fe96;
+      --dark-green:       #698200;
+      --olive-bg:         #f5f5f2;
+      --light-gray:       #f8f9fa;
+      --border:           #e5e7eb;
+      --text:             #262626;
+      --text-muted:       #6b7280;
+      --text-light:       #ffffff;
+      --text-muted-light: rgba(255,255,255,0.55);
+      --radius:           12px;
+      --shadow-card:      0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-hover:     0 4px 16px rgba(0,0,0,0.1);
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      background: var(--olive-bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Navbar ─────────────────────────────────────────────────────────── */
+    .navbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(245,245,242,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+    }
+    .navbar-inner {
+      max-width: 1280px; margin: 0 auto; height: 56px;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .navbar-brand { font-weight: 700; font-size: 0.95rem; color: var(--charcoal); display: flex; align-items: center; gap: 0.5rem; }
+    .navbar-brand .version { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; background: var(--white); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; }
+    .navbar-brand .crumb { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; }
+    .navbar-links { display: flex; align-items: center; gap: 0.25rem; }
+    .navbar-links a { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; padding: 0.375rem 0.625rem; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+    .navbar-links a:hover { color: var(--charcoal); background: rgba(38,38,38,0.06); }
+
+    /* ── Intro ──────────────────────────────────────────────────────────── */
+    .page-intro {
+      max-width: 1280px; margin: 0 auto; padding: 2.5rem 1.5rem 1.5rem;
+    }
+    .page-intro h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+    .page-intro p { color: var(--text-muted); font-size: 0.95rem; max-width: 620px; }
+    .inference-badge {
+      margin-top: 0.875rem; display: inline-flex; align-items: center; gap: 0.375rem;
+      font-size: 0.8rem; color: var(--dark-green); font-weight: 500;
+      background: rgba(229,254,150,0.3); border: 1px solid rgba(101,130,0,0.2);
+      padding: 4px 10px; border-radius: 20px;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────────── */
+    .page-layout {
+      max-width: 1280px; margin: 0 auto; padding: 0 1.5rem 4rem;
+      display: grid; grid-template-columns: 3fr 2fr; gap: 1.5rem; align-items: start;
+    }
+    @media (max-width: 900px) {
+      .page-layout { grid-template-columns: 1fr; }
+      .panel-col { order: -1; }
+      .panel-sticky { position: static; }
+    }
+
+    .forms-col { display: flex; flex-direction: column; gap: 1.25rem; }
+
+    /* ── Form cards ─────────────────────────────────────────────────────── */
+    .form-card {
+      background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-card); padding: 1.5rem; transition: box-shadow 0.2s;
+    }
+    .form-card:hover { box-shadow: var(--shadow-hover); }
+    .form-card-header {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+      margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);
+    }
+    .form-card-title { font-size: 1rem; font-weight: 700; color: var(--charcoal); line-height: 1.3; }
+    .form-card-desc  { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+    .inference-tag {
+      flex-shrink: 0; font-size: 0.68rem; font-weight: 600; font-family: 'SF Mono','Fira Code',monospace;
+      background: rgba(229,254,150,0.15); color: var(--dark-green);
+      border: 1px solid rgba(101,130,0,0.25); padding: 3px 9px; border-radius: 6px;
+      letter-spacing: 0.02em; white-space: nowrap;
+    }
+
+    /* ── Form elements ──────────────────────────────────────────────────── */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem 1rem; }
+    @media (max-width: 500px) { .form-grid { grid-template-columns: 1fr; } }
+    .form-group { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 0.875rem; }
+    .form-grid .form-group { margin-bottom: 0; }
+    label, .field-label { font-size: 0.82rem; font-weight: 600; color: var(--charcoal); display: block; }
+
+    input[type="text"], input[type="email"], input[type="date"], input[type="number"],
+    input[type="tel"], input[type="url"], textarea, select {
+      width: 100%; padding: 0.5625rem 0.8125rem; border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 0.875rem; font-family: 'DM Sans', system-ui, sans-serif; color: var(--text);
+      background: var(--white); transition: border-color 0.15s, box-shadow 0.15s;
+      -webkit-appearance: none; appearance: none;
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2.25rem;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none; border-color: var(--charcoal); box-shadow: 0 0 0 3px rgba(38,38,38,0.08);
+    }
+    textarea { resize: vertical; min-height: 90px; }
+
+    .radio-group { display: flex; gap: 0.625rem; flex-wrap: wrap; margin-top: 0.125rem; }
+    .radio-label {
+      display: flex; align-items: center; gap: 0.4375rem; cursor: pointer; font-size: 0.875rem;
+      font-weight: 500; color: var(--text); padding: 0.4375rem 0.75rem;
+      border: 1.5px solid var(--border); border-radius: 8px; background: var(--white);
+      transition: border-color 0.15s, background 0.15s; user-select: none;
+    }
+    .radio-label:has(input:checked) { border-color: var(--charcoal); background: rgba(38,38,38,0.04); }
+    .radio-label input[type="radio"] { width: auto; padding: 0; margin: 0; border: none; box-shadow: none; accent-color: var(--charcoal); }
+
+    .checkbox-group { display: flex; flex-direction: column; gap: 0.375rem; margin-top: 0.125rem; }
+    .checkbox-label {
+      display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem;
+      font-weight: 500; color: var(--text); padding: 0.375rem 0;
+    }
+    .checkbox-label input[type="checkbox"] { width: auto; padding: 0; border: none; box-shadow: none; accent-color: var(--charcoal); flex-shrink: 0; }
+
+    .form-actions {
+      display: flex; gap: 0.625rem; justify-content: flex-end;
+      margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border);
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.4375rem; padding: 0.5625rem 1.125rem;
+      border-radius: 10px; font-size: 0.875rem; font-weight: 600;
+      font-family: 'DM Sans', system-ui, sans-serif; cursor: pointer; border: none;
+      transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-primary { background: var(--charcoal); color: var(--white); }
+    .btn-primary:hover { background: #3a3a3a; }
+    .btn-ghost { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); }
+    .btn-ghost:hover { background: var(--light-gray); color: var(--text); }
+
+    /* ── Schema view (Tool JSON tab) ────────────────────────────────────── */
+    .form-tab-bar {
+      display: flex; width: fit-content;
+      background: var(--light-gray); border: 1px solid var(--border); border-radius: 8px;
+      overflow: hidden; margin-bottom: 1rem; padding: 2px; gap: 2px;
+    }
+    .form-tab-btn {
+      padding: 0.28rem 0.75rem; font-size: 0.78rem; font-weight: 600;
+      font-family: 'DM Sans', system-ui, sans-serif; background: transparent; border: none;
+      border-radius: 6px; cursor: pointer; color: var(--text-muted); transition: background 0.15s, color 0.15s;
+    }
+    .form-tab-btn.active { background: var(--white); color: var(--charcoal); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .form-tab-btn:hover:not(.active) { color: var(--text); }
+    .form-schema-view { display: none; }
+    .form-schema-view.visible { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; }
+    @media (max-width: 600px) { .form-schema-view.visible { grid-template-columns: 1fr; } }
+    .schema-pane-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 0.375rem; }
+    .schema-pane pre {
+      margin: 0; padding: 0.625rem 0.75rem; background: var(--light-gray); border: 1px solid var(--border);
+      border-radius: 8px; font-size: 0.66rem; font-family: 'SF Mono','Fira Code',monospace; color: var(--text);
+      overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-word; line-height: 1.6;
+    }
+    .schema-not-ready { font-size: 0.8rem; color: var(--text-muted); padding: 0.5rem 0; }
+
+    /* ── Panel column ───────────────────────────────────────────────────── */
+    .panel-sticky { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 0.875rem; }
+    .panel-card { background: var(--charcoal); border-radius: var(--radius); padding: 1.125rem 1.25rem; color: var(--text-light); }
+    .panel-card-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted-light); margin-bottom: 0.875rem; display: flex; align-items: center; gap: 0.5rem; }
+    .count-badge { background: rgba(229,254,150,0.18); color: var(--lime); border: 1px solid rgba(229,254,150,0.25); font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 20px; font-variant-numeric: tabular-nums; }
+
+    .tool-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .tool-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; padding: 0.625rem 0.875rem; animation: slideIn 0.25s ease; }
+    .tool-card-name { font-size: 0.78rem; font-weight: 600; font-family: 'SF Mono','Fira Code',monospace; color: var(--lime); letter-spacing: 0.01em; }
+    .tool-card-meta { margin-top: 0.25rem; display: flex; align-items: center; gap: 0.5rem; }
+    .tool-card-fields { font-size: 0.7rem; color: var(--text-muted-light); }
+    .tool-card-desc { font-size: 0.72rem; color: var(--text-muted-light); margin-top: 0.25rem; line-height: 1.45; }
+    .tool-card-actions { margin-top: 0.375rem; display: flex; gap: 0.375rem; flex-wrap: wrap; }
+    .schema-toggle-btn {
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 5px;
+      color: var(--text-muted-light); font-size: 0.65rem; font-family: 'DM Sans',system-ui,sans-serif;
+      cursor: pointer; padding: 2px 8px; transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .schema-toggle-btn:hover { border-color: rgba(229,254,150,0.35); color: var(--lime); background: rgba(229,254,150,0.07); }
+    .copy-mcp-btn {
+      background: rgba(229,254,150,0.08); border: 1px solid rgba(229,254,150,0.18); border-radius: 5px;
+      color: var(--lime); font-size: 0.65rem; font-family: 'DM Sans',system-ui,sans-serif;
+      cursor: pointer; padding: 2px 8px; transition: background 0.15s;
+    }
+    .copy-mcp-btn:hover { background: rgba(229,254,150,0.15); }
+    .tool-schema-panel { display: none; margin-top: 0.5rem; }
+    .tool-schema-panel.open { display: block; }
+    .tool-schema-panel pre {
+      margin: 0; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px;
+      padding: 0.5rem 0.625rem; font-size: 0.62rem; font-family: 'SF Mono','Fira Code',monospace; color: #d1d5db;
+      overflow: auto; max-height: 180px; white-space: pre-wrap; word-break: break-word; line-height: 1.55;
+    }
+
+    .empty-state { font-size: 0.78rem; color: var(--text-muted-light); font-style: italic; text-align: center; padding: 0.5rem 0; }
+
+    /* ── Event log ──────────────────────────────────────────────────────── */
+    .event-log { max-height: 180px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
+    .event-log::-webkit-scrollbar { width: 4px; }
+    .event-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    .log-entry { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 0.5rem; padding: 0.3125rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.72rem; animation: slideIn 0.2s ease; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-time { color: var(--text-muted-light); font-variant-numeric: tabular-nums; font-size: 0.68rem; flex-shrink: 0; }
+    .log-event { font-weight: 600; font-family: 'SF Mono','Fira Code',monospace; font-size: 0.68rem; white-space: nowrap; }
+    .log-tool { color: var(--text-muted-light); font-family: 'SF Mono','Fira Code',monospace; font-size: 0.65rem; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-registered .log-event { color: #c8f000; }
+    .log-activated .log-event { color: #ffffff; }
+    .clear-btn { margin-left: auto; background: none; border: none; color: var(--text-muted-light); font-size: 0.68rem; font-family: 'DM Sans',system-ui,sans-serif; cursor: pointer; padding: 1px 6px; border-radius: 4px; transition: color 0.15s, background 0.15s; }
+    .clear-btn:hover { color: var(--text-light); background: rgba(255,255,255,0.08); }
+
+    /* ── Inference notice ───────────────────────────────────────────────── */
+    .inference-notice {
+      background: rgba(229,254,150,0.08); border: 1px solid rgba(229,254,150,0.18); border-radius: 8px;
+      padding: 0.75rem 0.875rem; font-size: 0.72rem; color: var(--lime); line-height: 1.55;
+      margin-bottom: 0.875rem;
+    }
+    .inference-notice strong { color: #e5fe96; }
+
+    /* ── Footer ─────────────────────────────────────────────────────────── */
+    .page-footer { border-top: 1px solid var(--border); padding: 1.5rem; text-align: center; font-size: 0.8rem; color: var(--text-muted); }
+    .page-footer a { color: var(--dark-green); font-weight: 500; }
+    .page-footer a:hover { text-decoration: underline; }
+
+    /* ── Animations ─────────────────────────────────────────────────────── */
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+
+  <!-- Block auto-init + install proxy before IIFE loads -->
+  <script>
+    window.__AUTO_WEBMCP_NO_AUTOINIT = true;
+    window.__executeHandlers = {};
+    window.__registeredToolMeta = {};
+
+    var _isSupported = typeof navigator !== 'undefined' && !!navigator.modelContext;
+    window.__awmcp_real_supported = _isSupported;
+    var _real = navigator.modelContext;
+
+    var _proxyObj = {
+      registerTool: function(tool) {
+        window.__executeHandlers[tool.name] = tool.execute;
+        window.__registeredToolMeta[tool.name] = {
+          description: tool.description,
+          fieldCount: Object.keys((tool.inputSchema && tool.inputSchema.properties) || {}).length,
+          inputSchema: tool.inputSchema || null
+        };
+        if (typeof window.__onToolRegistered === 'function') window.__onToolRegistered(tool.name);
+        if (_isSupported && _real) {
+          try { return _real.registerTool(tool).catch(function(e) { console.warn('[auto-webmcp]', e); }); }
+          catch(e) { console.warn('[auto-webmcp]', e); return Promise.resolve(); }
+        }
+        return Promise.resolve();
+      },
+      unregisterTool: function(name) {
+        delete window.__executeHandlers[name];
+        delete window.__registeredToolMeta[name];
+        if (typeof window.__onToolUnregistered === 'function') window.__onToolUnregistered(name);
+        if (_isSupported && _real) {
+          try { return _real.unregisterTool(name).catch(function(e) { console.warn('[auto-webmcp]', e); }); }
+          catch(e) { console.warn('[auto-webmcp]', e); return Promise.resolve(); }
+        }
+        return Promise.resolve();
+      }
+    };
+
+    try {
+      Object.defineProperty(navigator, 'modelContext', { get: function() { return _proxyObj; }, configurable: true });
+    } catch(e) {
+      navigator.modelContext = _proxyObj;
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar" aria-label="Site navigation">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <span>⚡</span>
+        <span>auto-webmcp</span>
+        <span class="version">v0.2.1</span>
+        <span class="crumb" aria-hidden="true">/</span>
+        <span class="crumb">real-world-forms</span>
+      </a>
+      <nav class="navbar-links">
+        <a href="/">Home</a>
+        <a href="demo.html">Demo</a>
+        <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </nav>
+
+  <!-- Intro -->
+  <div class="page-intro">
+    <h1>Real-World Forms</h1>
+    <p>Five realistic forms tested with <strong>pure inference</strong> — no <code style="font-size:0.85em;background:rgba(101,130,0,0.1);padding:1px 5px;border-radius:4px;color:var(--dark-green)">toolname</code> attributes. The library infers tool names, descriptions, and schemas entirely from HTML structure and field semantics.</p>
+    <span class="inference-badge">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+      All tool names &amp; schemas inferred — vanilla HTML only
+    </span>
+  </div>
+
+  <!-- Main layout -->
+  <main class="page-layout">
+
+    <!-- Left: Forms -->
+    <div class="forms-col">
+
+      <!-- Form 1: User Login -->
+      <div class="form-card" id="section-login">
+        <div class="form-card-header">
+          <div>
+            <h2 class="form-card-title">User Login</h2>
+            <p class="form-card-desc">Email + password — password field must be excluded from schema</p>
+          </div>
+          <span class="inference-tag">inferred</span>
+        </div>
+        <div class="form-tab-bar" id="tab-bar-login">
+          <button class="form-tab-btn active" onclick="showFormTab('login','form')">Form</button>
+          <button class="form-tab-btn" onclick="showFormTab('login','schema')">Tool JSON</button>
+        </div>
+        <div class="form-inner" id="form-inner-login">
+          <form id="login-form"
+                action="#"
+                data-tab-form="login"
+                onsubmit="event.preventDefault(); handleFormSubmit(this,'Logged in!')">
+            <div class="form-group">
+              <label for="login-email">Email Address</label>
+              <input type="email" id="login-email" name="email" placeholder="you@example.com" autocomplete="email" required>
+            </div>
+            <div class="form-group">
+              <label for="login-password">Password</label>
+              <input type="password" id="login-password" name="password" placeholder="Your password" autocomplete="current-password" required>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="remember_me"> Remember me for 30 days
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="reset" class="btn btn-ghost">Clear</button>
+              <button type="submit" class="btn btn-primary">Sign In</button>
+            </div>
+          </form>
+        </div>
+        <div class="form-schema-view" id="schema-view-login"></div>
+        <p id="tool-tag-login" style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">Inferred tool name: <em>detecting...</em></p>
+      </div>
+
+      <!-- Form 2: E-commerce Checkout -->
+      <div class="form-card" id="section-checkout">
+        <div class="form-card-header">
+          <div>
+            <h2 class="form-card-title">E-commerce Checkout</h2>
+            <p class="form-card-desc">Mix of text, select, checkbox, number, and hidden fields</p>
+          </div>
+          <span class="inference-tag">inferred</span>
+        </div>
+        <div class="form-tab-bar" id="tab-bar-checkout">
+          <button class="form-tab-btn active" onclick="showFormTab('checkout','form')">Form</button>
+          <button class="form-tab-btn" onclick="showFormTab('checkout','schema')">Tool JSON</button>
+        </div>
+        <div class="form-inner" id="form-inner-checkout">
+          <form id="checkout-form"
+                action="#"
+                data-tab-form="checkout"
+                onsubmit="event.preventDefault(); handleFormSubmit(this,'Order placed!')">
+            <input type="hidden" name="cart_id" value="cart_abc123">
+            <input type="hidden" name="currency" value="USD">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="first-name">First Name</label>
+                <input type="text" id="first-name" name="first_name" placeholder="Jane" required>
+              </div>
+              <div class="form-group">
+                <label for="last-name">Last Name</label>
+                <input type="text" id="last-name" name="last_name" placeholder="Doe" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="shipping-address">Shipping Address</label>
+              <input type="text" id="shipping-address" name="shipping_address" placeholder="123 Main St, Apt 4B" required>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="city">City</label>
+                <input type="text" id="city" name="city" placeholder="New York" required>
+              </div>
+              <div class="form-group">
+                <label for="zip">ZIP Code</label>
+                <input type="text" id="zip" name="zip_code" placeholder="10001" required>
+              </div>
+            </div>
+            <div class="form-grid" style="margin-top:0.875rem">
+              <div class="form-group">
+                <label for="country">Country</label>
+                <select id="country" name="country">
+                  <option value="">Select country</option>
+                  <option value="US">United States</option>
+                  <option value="GB">United Kingdom</option>
+                  <option value="CA">Canada</option>
+                  <option value="AU">Australia</option>
+                  <option value="DE">Germany</option>
+                  <option value="FR">France</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="qty">Quantity</label>
+                <input type="number" id="qty" name="quantity" min="1" max="99" placeholder="1">
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:0.25rem">
+              <label class="checkbox-label">
+                <input type="checkbox" name="gift_wrap"> Add gift wrapping ($3.99)
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="reset" class="btn btn-ghost">Reset</button>
+              <button type="submit" class="btn btn-primary">Place Order</button>
+            </div>
+          </form>
+        </div>
+        <div class="form-schema-view" id="schema-view-checkout"></div>
+        <p id="tool-tag-checkout" style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">Inferred tool name: <em>detecting...</em></p>
+      </div>
+
+      <!-- Form 3: Job Application -->
+      <div class="form-card" id="section-job">
+        <div class="form-card-header">
+          <div>
+            <h2 class="form-card-title">Job Application</h2>
+            <p class="form-card-desc">Long textarea, multiple selects, radio groups, file input (excluded from schema)</p>
+          </div>
+          <span class="inference-tag">inferred</span>
+        </div>
+        <div class="form-tab-bar" id="tab-bar-job">
+          <button class="form-tab-btn active" onclick="showFormTab('job','form')">Form</button>
+          <button class="form-tab-btn" onclick="showFormTab('job','schema')">Tool JSON</button>
+        </div>
+        <div class="form-inner" id="form-inner-job">
+          <form id="job-form"
+                action="#"
+                data-tab-form="job"
+                onsubmit="event.preventDefault(); handleFormSubmit(this,'Application submitted!')">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="applicant-name">Full Name</label>
+                <input type="text" id="applicant-name" name="full_name" placeholder="Your full name" required>
+              </div>
+              <div class="form-group">
+                <label for="applicant-email">Email</label>
+                <input type="email" id="applicant-email" name="email" placeholder="you@example.com" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="applicant-phone">Phone Number</label>
+              <input type="tel" id="applicant-phone" name="phone" placeholder="+1 (555) 000-0000">
+            </div>
+            <div class="form-grid" style="margin-top:0">
+              <div class="form-group">
+                <label for="position">Position</label>
+                <select id="position" name="position" required>
+                  <option value="">Select role</option>
+                  <option value="frontend">Frontend Engineer</option>
+                  <option value="backend">Backend Engineer</option>
+                  <option value="fullstack">Full-Stack Engineer</option>
+                  <option value="devops">DevOps / SRE</option>
+                  <option value="design">Product Designer</option>
+                  <option value="pm">Product Manager</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="experience">Years of Experience</label>
+                <select id="experience" name="years_experience">
+                  <option value="">Select range</option>
+                  <option value="0-1">0–1 years</option>
+                  <option value="2-4">2–4 years</option>
+                  <option value="5-9">5–9 years</option>
+                  <option value="10+">10+ years</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <span class="field-label">Work Authorization</span>
+              <div class="radio-group">
+                <label class="radio-label"><input type="radio" name="work_auth" value="citizen"> <span>Citizen</span></label>
+                <label class="radio-label"><input type="radio" name="work_auth" value="permanent_resident"> <span>Perm. Resident</span></label>
+                <label class="radio-label"><input type="radio" name="work_auth" value="visa"> <span>Visa Required</span></label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="cover-letter">Cover Letter</label>
+              <textarea id="cover-letter" name="cover_letter" rows="5" placeholder="Tell us why you'd be a great fit..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="resume-upload">Resume (PDF)</label>
+              <input type="file" id="resume-upload" name="resume" accept=".pdf,.doc,.docx">
+            </div>
+            <div class="form-actions">
+              <button type="reset" class="btn btn-ghost">Reset</button>
+              <button type="submit" class="btn btn-primary">Submit Application</button>
+            </div>
+          </form>
+        </div>
+        <div class="form-schema-view" id="schema-view-job"></div>
+        <p id="tool-tag-job" style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">Inferred tool name: <em>detecting...</em></p>
+      </div>
+
+      <!-- Form 4: Hotel Room Search -->
+      <div class="form-card" id="section-hotel">
+        <div class="form-card-header">
+          <div>
+            <h2 class="form-card-title">Hotel Room Search</h2>
+            <p class="form-card-desc">Date pickers, number inputs, select — classic travel search form</p>
+          </div>
+          <span class="inference-tag">inferred</span>
+        </div>
+        <div class="form-tab-bar" id="tab-bar-hotel">
+          <button class="form-tab-btn active" onclick="showFormTab('hotel','form')">Form</button>
+          <button class="form-tab-btn" onclick="showFormTab('hotel','schema')">Tool JSON</button>
+        </div>
+        <div class="form-inner" id="form-inner-hotel">
+          <form id="hotel-form"
+                action="#"
+                data-tab-form="hotel"
+                onsubmit="event.preventDefault(); handleFormSubmit(this,'Searching rooms...')">
+            <div class="form-group">
+              <label for="hotel-destination">Destination / City</label>
+              <input type="text" id="hotel-destination" name="destination" placeholder="e.g. Paris, France" required>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="checkin">Check-in Date</label>
+                <input type="date" id="checkin" name="check_in" required>
+              </div>
+              <div class="form-group">
+                <label for="checkout">Check-out Date</label>
+                <input type="date" id="checkout" name="check_out" required>
+              </div>
+              <div class="form-group">
+                <label for="guests">Guests</label>
+                <input type="number" id="guests" name="guests" min="1" max="10" placeholder="2">
+              </div>
+              <div class="form-group">
+                <label for="rooms">Rooms</label>
+                <input type="number" id="rooms" name="rooms" min="1" max="5" placeholder="1">
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:0.875rem">
+              <label for="room-type">Room Type</label>
+              <select id="room-type" name="room_type">
+                <option value="">Any type</option>
+                <option value="standard">Standard</option>
+                <option value="deluxe">Deluxe</option>
+                <option value="suite">Suite</option>
+                <option value="family">Family Room</option>
+                <option value="accessible">Accessible Room</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <span class="field-label">Board Type</span>
+              <div class="radio-group">
+                <label class="radio-label"><input type="radio" name="board" value="room_only"> <span>Room Only</span></label>
+                <label class="radio-label"><input type="radio" name="board" value="breakfast"> <span>Breakfast Incl.</span></label>
+                <label class="radio-label"><input type="radio" name="board" value="half_board"> <span>Half Board</span></label>
+                <label class="radio-label"><input type="radio" name="board" value="full_board"> <span>Full Board</span></label>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="reset" class="btn btn-ghost">Reset</button>
+              <button type="submit" class="btn btn-primary">Search Rooms</button>
+            </div>
+          </form>
+        </div>
+        <div class="form-schema-view" id="schema-view-hotel"></div>
+        <p id="tool-tag-hotel" style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">Inferred tool name: <em>detecting...</em></p>
+      </div>
+
+      <!-- Form 5: Event Registration -->
+      <div class="form-card" id="section-event">
+        <div class="form-card-header">
+          <div>
+            <h2 class="form-card-title">Event Registration</h2>
+            <p class="form-card-desc">Multiple checkboxes (interests), select, required fields mix</p>
+          </div>
+          <span class="inference-tag">inferred</span>
+        </div>
+        <div class="form-tab-bar" id="tab-bar-event">
+          <button class="form-tab-btn active" onclick="showFormTab('event','form')">Form</button>
+          <button class="form-tab-btn" onclick="showFormTab('event','schema')">Tool JSON</button>
+        </div>
+        <div class="form-inner" id="form-inner-event">
+          <form id="event-form"
+                action="#"
+                data-tab-form="event"
+                onsubmit="event.preventDefault(); handleFormSubmit(this,'Registered!')">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="evt-name">Full Name</label>
+                <input type="text" id="evt-name" name="full_name" placeholder="Your name" required>
+              </div>
+              <div class="form-group">
+                <label for="evt-email">Email</label>
+                <input type="email" id="evt-email" name="email" placeholder="you@example.com" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="evt-company">Company / Organization</label>
+              <input type="text" id="evt-company" name="company" placeholder="Optional">
+            </div>
+            <div class="form-group">
+              <label for="evt-ticket">Ticket Type</label>
+              <select id="evt-ticket" name="ticket_type" required>
+                <option value="">Select ticket</option>
+                <option value="general">General Admission — Free</option>
+                <option value="vip">VIP — $149</option>
+                <option value="workshop">Workshop + Conference — $299</option>
+                <option value="virtual">Virtual Attendance — Free</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <span class="field-label">Session Interests (select all that apply)</span>
+              <div class="checkbox-group" style="margin-top:0.25rem">
+                <label class="checkbox-label"><input type="checkbox" name="interest_ai" value="ai"> AI &amp; Machine Learning</label>
+                <label class="checkbox-label"><input type="checkbox" name="interest_web" value="web"> Web Development</label>
+                <label class="checkbox-label"><input type="checkbox" name="interest_security" value="security"> Security &amp; Privacy</label>
+                <label class="checkbox-label"><input type="checkbox" name="interest_cloud" value="cloud"> Cloud &amp; Infrastructure</label>
+                <label class="checkbox-label"><input type="checkbox" name="interest_design" value="design"> Design &amp; UX</label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="dietary">Dietary Requirements</label>
+              <select id="dietary" name="dietary_requirements">
+                <option value="">No restrictions</option>
+                <option value="vegetarian">Vegetarian</option>
+                <option value="vegan">Vegan</option>
+                <option value="gluten_free">Gluten Free</option>
+                <option value="halal">Halal</option>
+                <option value="kosher">Kosher</option>
+              </select>
+            </div>
+            <div class="form-actions">
+              <button type="reset" class="btn btn-ghost">Reset</button>
+              <button type="submit" class="btn btn-primary">Register Now</button>
+            </div>
+          </form>
+        </div>
+        <div class="form-schema-view" id="schema-view-event"></div>
+        <p id="tool-tag-event" style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">Inferred tool name: <em>detecting...</em></p>
+      </div>
+
+    </div><!-- /forms-col -->
+
+    <!-- Right: Panel -->
+    <div class="panel-col">
+      <div class="panel-sticky">
+
+        <!-- Inference notice -->
+        <div class="panel-card">
+          <div class="panel-card-label">About This Page</div>
+          <div class="inference-notice">
+            <strong>Pure inference mode.</strong> None of these forms use <code style="font-family:monospace;font-size:0.7rem;background:rgba(229,254,150,0.15);padding:1px 4px;border-radius:3px">toolname</code> or <code style="font-family:monospace;font-size:0.7rem;background:rgba(229,254,150,0.15);padding:1px 4px;border-radius:3px">tooldescription</code> attributes. Tool names and schemas are inferred entirely from the form's <code style="font-family:monospace;font-size:0.7rem;background:rgba(229,254,150,0.15);padding:1px 4px;border-radius:3px">id</code>, field names, and HTML structure.
+          </div>
+          <p style="font-size:0.72rem;color:var(--text-muted-light);line-height:1.5">Password and file inputs are automatically excluded from all schemas. Toggle "Tool JSON" on any form to see what was inferred.</p>
+        </div>
+
+        <!-- Registered Tools -->
+        <div class="panel-card">
+          <div class="panel-card-label">
+            Registered Tools
+            <span id="tool-count" class="count-badge">0</span>
+          </div>
+          <div id="tool-list" class="tool-list">
+            <p class="empty-state">Forms register here as they load...</p>
+          </div>
+        </div>
+
+        <!-- Event Log -->
+        <div class="panel-card">
+          <div class="panel-card-label">
+            Event Log
+            <button class="clear-btn" onclick="clearLog()" title="Clear log">Clear</button>
+          </div>
+          <div id="event-log" class="event-log">
+            <p class="empty-state">Events appear here in real time...</p>
+          </div>
+        </div>
+
+      </div><!-- /panel-sticky -->
+    </div><!-- /panel-col -->
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="page-footer">
+    <a href="demo.html">← Back to Demo</a> &mdash;
+    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
+    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
+    A <a href="https://gyde.ai" target="_blank" rel="noopener">Gyde</a> initiative
+  </footer>
+
+  <!-- IIFE -->
+  <script src="https://unpkg.com/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js"></script>
+
+  <!-- UI logic -->
+  <script>
+    var _toolCards = {};
+
+    // Map form data-tab-form values to tool names (filled on registration)
+    var _formTabMap = {};
+
+    window.__onToolRegistered = function(name) {
+      addToolCard(name);
+      addLogEntry('registered', name);
+      // Update the inferred tool name tag for each form
+      var forms = document.querySelectorAll('[data-tab-form]');
+      forms.forEach(function(form) {
+        // Match form id to tool name by looking at meta
+        var tabKey = form.dataset.tabForm;
+        if (_formTabMap[tabKey] === name || !_formTabMap[tabKey]) {
+          // Try to associate by checking if this is a fresh registration
+          // We'll match by looking at which form likely registered this tool
+        }
+      });
+      updateToolTagForName(name);
+    };
+
+    window.__onToolUnregistered = function(name) {
+      removeToolCard(name);
+      addLogEntry('unregistered', name);
+    };
+
+    // Initialize
+    AutoWebMCP.autoWebMCP({ autoSubmit: false, debug: true });
+
+    // Record tool→form mapping by scanning forms after registration
+    function updateToolTagForName(toolName) {
+      // Find all tool-tag paragraphs and update any that say "detecting..."
+      // We use a heuristic: the form whose id contains a word from the tool name
+      var tags = {
+        login: 'tool-tag-login',
+        checkout: 'tool-tag-checkout',
+        job: 'tool-tag-job',
+        hotel: 'tool-tag-hotel',
+        event: 'tool-tag-event'
+      };
+      // Find which form key this tool name likely came from
+      Object.keys(tags).forEach(function(key) {
+        var el = document.getElementById(tags[key]);
+        if (!el) return;
+        var formEl = document.getElementById(key + '-form');
+        if (!formEl) return;
+        // The tool is associated with this form if __registeredToolMeta has it
+        // and this form's id prefix matches a word in the tool name
+        // Simple heuristic: tool name contains the form key
+        if (toolName.indexOf(key) !== -1 || (el.textContent.indexOf('detecting') !== -1 && !_formTabMap[key])) {
+          // Check if this form was registered (look at the execute handler)
+          // Actually - we know the form was registered - check if this tool name is plausible
+        }
+      });
+
+      // Better approach: scan all forms and find which one likely produced this tool
+      // by checking the execute handler can run on that form
+      var allForms = document.querySelectorAll('form[data-tab-form]');
+      allForms.forEach(function(form) {
+        var tabKey = form.dataset.tabForm;
+        if (_formTabMap[tabKey]) return; // already mapped
+        // Try: if the form id contains part of the tool name
+        var fid = form.id.replace('-form', '');
+        if (toolName.indexOf(fid) !== -1 || fid.indexOf(toolName.replace(/_/g,'-')) !== -1) {
+          _formTabMap[tabKey] = toolName;
+          var tagEl = document.getElementById('tool-tag-' + tabKey);
+          if (tagEl) tagEl.innerHTML = 'Inferred tool name: <strong style="color:var(--dark-green);font-family:monospace;font-size:0.8em">' + escHtml(toolName) + '</strong>';
+        }
+      });
+    }
+
+    // Tool cards
+    function addToolCard(name) {
+      var list  = document.getElementById('tool-list');
+      var empty = list.querySelector('.empty-state');
+      if (empty) empty.remove();
+      if (_toolCards[name]) return;
+
+      var meta = window.__registeredToolMeta[name] || {};
+      var card = document.createElement('div');
+      card.className = 'tool-card';
+      card.dataset.tool = name;
+      card.innerHTML = [
+        '<div class="tool-card-name">' + escHtml(name) + '</div>',
+        '<div class="tool-card-meta">',
+          '<span class="tool-card-fields">' + (meta.fieldCount || 0) + ' fields</span>',
+        '</div>',
+        meta.description
+          ? '<div class="tool-card-desc">' + escHtml(meta.description) + '</div>'
+          : '',
+        '<div class="tool-card-actions">',
+          '<button class="schema-toggle-btn" data-tool="' + escHtml(name) + '" onclick="toggleSchema(this)">View Schema</button>',
+          '<button class="copy-mcp-btn" data-tool="' + escHtml(name) + '" onclick="copyMcpCall(this)">&#128203; Copy MCP call</button>',
+        '</div>',
+        '<div class="tool-schema-panel"><pre></pre></div>'
+      ].join('');
+
+      list.appendChild(card);
+      _toolCards[name] = card;
+      document.getElementById('tool-count').textContent = Object.keys(_toolCards).length;
+    }
+
+    function removeToolCard(name) {
+      var card = _toolCards[name];
+      if (!card) return;
+      card.remove();
+      delete _toolCards[name];
+      document.getElementById('tool-count').textContent = Object.keys(_toolCards).length;
+    }
+
+    // Schema toggle (panel)
+    function toggleSchema(btn) {
+      var name  = btn.dataset.tool;
+      var card  = btn.closest('.tool-card');
+      var panel = card.querySelector('.tool-schema-panel');
+      var isOpen = panel.classList.contains('open');
+      if (!isOpen) {
+        var meta    = window.__registeredToolMeta[name] || {};
+        var toolDef = { name: name, description: meta.description, inputSchema: meta.inputSchema };
+        panel.querySelector('pre').textContent = JSON.stringify(toolDef, null, 2);
+        panel.classList.add('open');
+        btn.textContent = 'Hide Schema';
+      } else {
+        panel.classList.remove('open');
+        btn.textContent = 'View Schema';
+      }
+    }
+
+    function copyMcpCall(btn) {
+      var name  = btn.dataset.tool;
+      var meta  = window.__registeredToolMeta[name] || {};
+      var props = (meta.inputSchema && meta.inputSchema.properties) || {};
+      var sampleInput = {};
+      Object.keys(props).forEach(function(k) {
+        var p = props[k];
+        if (p.enum && p.enum.length) sampleInput[k] = p.enum[0];
+        else if (p.type === 'string')  sampleInput[k] = 'example';
+        else if (p.type === 'number' || p.type === 'integer') sampleInput[k] = 1;
+        else if (p.type === 'boolean') sampleInput[k] = true;
+        else sampleInput[k] = null;
+      });
+      var mcpCall = { type: 'tool_use', name: name, input: sampleInput };
+      navigator.clipboard.writeText(JSON.stringify(mcpCall, null, 2)).then(function() {
+        var orig = btn.textContent;
+        btn.textContent = '\u2713 Copied!';
+        setTimeout(function() { btn.textContent = orig; }, 1500);
+      }).catch(function() {
+        btn.textContent = '\u2717 Failed';
+        setTimeout(function() { btn.textContent = '\uD83D\uDCCB Copy MCP call'; }, 1500);
+      });
+    }
+
+    // Form tab bar
+    function showFormTab(tabKey, tab) {
+      var inner = document.getElementById('form-inner-' + tabKey);
+      var view  = document.getElementById('schema-view-' + tabKey);
+      var bar   = document.getElementById('tab-bar-' + tabKey);
+      if (!inner || !view || !bar) return;
+      var btns = bar.querySelectorAll('.form-tab-btn');
+      if (tab === 'form') {
+        inner.style.display = '';
+        view.classList.remove('visible');
+        btns[0].classList.add('active');
+        btns[1].classList.remove('active');
+      } else {
+        inner.style.display = 'none';
+        view.classList.add('visible');
+        btns[0].classList.remove('active');
+        btns[1].classList.add('active');
+        populateFormSchemaView(tabKey);
+      }
+    }
+
+    function populateFormSchemaView(tabKey) {
+      var view = document.getElementById('schema-view-' + tabKey);
+      if (!view || view.dataset.populated) return;
+      // Find the tool name associated with this tab key
+      var toolName = _formTabMap[tabKey];
+      if (!toolName) {
+        // Fallback: find by searching registered tools
+        var inner = document.getElementById('form-inner-' + tabKey);
+        var form  = inner ? inner.querySelector('form') : null;
+        // Try to find by matching form id
+        if (form) {
+          var fid = form.id.replace('-form','');
+          Object.keys(window.__registeredToolMeta).forEach(function(n) {
+            if (n.indexOf(fid) !== -1) toolName = n;
+          });
+        }
+      }
+      if (!toolName) {
+        view.innerHTML = '<p class="schema-not-ready">Tool not registered yet — check the panel for registered names.</p>';
+        return;
+      }
+      var meta = window.__registeredToolMeta[toolName];
+      if (!meta) {
+        view.innerHTML = '<p class="schema-not-ready">Tool "' + escHtml(toolName) + '" not found in registry.</p>';
+        return;
+      }
+      var inner = document.getElementById('form-inner-' + tabKey);
+      var form  = inner ? inner.querySelector('form') : null;
+      var htmlSnippet = form ? getHtmlSnippet(form) : '(form not found)';
+      var toolDef = { name: toolName, description: meta.description, inputSchema: meta.inputSchema };
+      view.innerHTML = [
+        '<div class="schema-pane">',
+          '<div class="schema-pane-label">HTML Form</div>',
+          '<pre>' + escHtml(htmlSnippet) + '</pre>',
+        '</div>',
+        '<div class="schema-pane">',
+          '<div class="schema-pane-label">Generated Tool JSON</div>',
+          '<pre>' + escHtml(JSON.stringify(toolDef, null, 2)) + '</pre>',
+        '</div>'
+      ].join('');
+      view.dataset.populated = '1';
+    }
+
+    function getHtmlSnippet(form) {
+      var lines = [];
+      var openTag = '<form';
+      ['action','id','name'].forEach(function(a) {
+        var v = form.getAttribute(a);
+        if (v) openTag += '\n  ' + a + '="' + v + '"';
+      });
+      openTag += '>';
+      lines.push(openTag);
+      var fields = Array.from(form.querySelectorAll(
+        'input:not([type=hidden]):not([type=submit]):not([type=reset]):not([type=button]),' +
+        'select, textarea'
+      ));
+      fields.slice(0, 7).forEach(function(el) {
+        var tag  = el.tagName.toLowerCase();
+        var line = '  <' + tag;
+        if (el.name) line += ' name="' + el.name + '"';
+        if (el.type && el.type !== 'text' && el.tagName === 'INPUT') line += ' type="' + el.type + '"';
+        if (el.id)   line += ' id="' + el.id + '"';
+        line += '>';
+        lines.push(line);
+      });
+      if (fields.length > 7) lines.push('  ... (' + (fields.length - 7) + ' more fields)');
+      lines.push('</form>');
+      return lines.join('\n');
+    }
+
+    // Event log
+    var MAX_LOG = 20;
+    var LOG_CLASS = { 'registered': 'log-registered', 'unregistered': 'log-registered', 'toolactivated': 'log-activated' };
+
+    function addLogEntry(type, toolName) {
+      var log   = document.getElementById('event-log');
+      var empty = log.querySelector('.empty-state');
+      if (empty) empty.remove();
+      while (log.children.length >= MAX_LOG) { log.removeChild(log.lastElementChild); }
+      var now  = new Date();
+      var time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      var entry = document.createElement('div');
+      entry.className = 'log-entry ' + (LOG_CLASS[type] || '');
+      entry.innerHTML = [
+        '<span class="log-time">' + time + '</span>',
+        '<span class="log-event">' + escHtml(type) + '</span>',
+        '<span class="log-tool">' + escHtml(toolName) + '</span>'
+      ].join('');
+      log.insertBefore(entry, log.firstChild);
+    }
+
+    function clearLog() {
+      document.getElementById('event-log').innerHTML = '<p class="empty-state">Events appear here in real time...</p>';
+    }
+
+    function handleFormSubmit(form, msg) {
+      var btn = form.querySelector('[type=submit]');
+      if (!btn) return;
+      var orig = btn.textContent;
+      btn.textContent = msg;
+      btn.style.background = 'var(--dark-green)';
+      setTimeout(function() { btn.textContent = orig; btn.style.background = ''; }, 2000);
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
+
+</body>
+</html>
