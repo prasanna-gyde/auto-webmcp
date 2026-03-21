@@ -216,6 +216,17 @@
       padding: 1px 5px; border-radius: 4px; color: var(--dark-green);
     }
 
+    /* ── Footer ─────────────────────────────────────────────────────────── */
+    .page-footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .page-footer a { color: var(--dark-green); font-weight: 500; }
+    .page-footer a:hover { text-decoration: underline; }
+
     @media (max-width: 640px) {
       .page-intro h1 { font-size: 1.4rem; }
       .url-table th:nth-child(3),
@@ -400,6 +411,14 @@
     </div>
 
   </div><!-- /page-content -->
+
+  <footer class="page-footer">
+    <a href="demo">Demo</a> &mdash;
+    <a href="more-examples">More Examples</a> &mdash;
+    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
+    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
+    A <a href="https://gyde.ai" target="_blank" rel="noopener">Gyde</a> initiative
+  </footer>
 
   <script>
     // ── The console snippet ──────────────────────────────────────────────────
