@@ -227,6 +227,70 @@
     .copy-btn:hover { color: var(--text); border-color: var(--text-muted); }
     .copy-btn.copied { color: #00C851; border-color: #00C851; }
 
+    /* ─── Badges strip ─── */
+    .badges-strip {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1.25rem;
+      flex-wrap: wrap;
+    }
+    .badges-strip a { display: inline-flex; }
+    .badges-strip a:hover { text-decoration: none; }
+
+    /* ─── Platforms strip ─── */
+    .platforms-strip {
+      padding: 1.75rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+    }
+    .platforms-inner { max-width: 1100px; margin: 0 auto; }
+    .platforms-label {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 1rem;
+    }
+    .platforms-logos {
+      display: inline-flex; align-items: center;
+      justify-content: center; gap: 2.5rem;
+      flex-wrap: wrap; text-decoration: none;
+    }
+    .platforms-logos:hover { text-decoration: none; }
+    .platforms-logos img {
+      opacity: 0.45;
+      filter: grayscale(1) brightness(2);
+      transition: opacity 0.2s;
+    }
+    .platforms-logos:hover img { opacity: 0.7; }
+    .platforms-more {
+      font-size: 0.8rem; color: var(--text-muted);
+      font-weight: 500; white-space: nowrap; transition: color 0.15s;
+    }
+    .platforms-logos:hover .platforms-more { color: var(--accent); }
+
+    /* ─── FAQ ─── */
+    .faq-section { background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .faq-list {
+      display: flex; flex-direction: column; gap: 0;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; max-width: 760px;
+    }
+    .faq-item { border-bottom: 1px solid var(--border); background: var(--bg); }
+    .faq-item:last-child { border-bottom: none; }
+    .faq-q {
+      font-size: 0.95rem; font-weight: 600; color: var(--text);
+      padding: 1rem 1.25rem; cursor: pointer; list-style: none;
+      display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+      transition: background 0.15s;
+    }
+    .faq-q::-webkit-details-marker { display: none; }
+    .faq-q::after { content: '+'; color: var(--accent); font-size: 1.1rem; font-weight: 400; flex-shrink: 0; }
+    .faq-item[open] .faq-q { background: rgba(0,200,81,0.05); }
+    .faq-item[open] .faq-q::after { content: '−'; }
+    .faq-a { padding: 0 1.25rem 1rem; font-size: 0.9rem; color: var(--text-muted); line-height: 1.7; }
+    .faq-a a { color: var(--accent); }
+    .faq-a code { color: var(--accent); background: rgba(0,200,81,0.1); padding: 1px 5px; border-radius: 3px; font-size: 0.875em; }
+
     /* ─── Hero CTAs ─── */
     .hero-ctas {
       display: flex;
@@ -504,7 +568,7 @@
     </a>
     <h1>Drop in one script tag.<br>Every <code>&lt;form&gt;</code> is instantly callable by AI agents.</h1>
     <p class="hero-sub">
-      auto-webmcp uses the WebMCP imperative API (<code>navigator.modelContext.registerTool()</code>) to auto-register every form on your page — inferred from your existing HTML. Zero manual coding. Gracefully degrades when WebMCP is unavailable.
+      Add one script tag to any page — ServiceNow, HubSpot, Zendesk, React apps, plain HTML — and every form on that page becomes invocable by an AI agent. No modifications to your existing forms, no backend changes, no build pipeline. Invisible to regular users until an agent is present.
     </p>
 
     <!-- Install tabs -->
@@ -532,7 +596,8 @@
     </div>
 
     <div class="hero-ctas">
-      <a class="btn btn-primary" href="/demo">
+      <a class="btn btn-primary" href="/try-it">Try It Now &rarr;</a>
+      <a class="btn btn-secondary" href="/demo">
         Live Demo &rarr;
       </a>
       <a class="btn btn-secondary" href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">
@@ -544,7 +609,29 @@
         View on npm
       </a>
     </div>
+    <div class="badges-strip">
+      <a href="https://github.com/prasanna-gyde/auto-webmcp/stargazers" target="_blank" rel="noopener">
+        <img src="https://img.shields.io/github/stars/prasanna-gyde/auto-webmcp?style=flat&logo=github&labelColor=161b22&color=30363d&label=stars" alt="GitHub stars" height="20">
+      </a>
+      <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">
+        <img src="https://img.shields.io/npm/v/auto-webmcp?style=flat&logo=npm&labelColor=161b22&color=30363d" alt="npm version" height="20">
+      </a>
+      <img src="https://img.shields.io/badge/license-MIT-30363d?style=flat&labelColor=161b22" alt="MIT License" height="20">
+    </div>
   </div>
+
+  <!-- ═══ Platforms strip ═══ -->
+  <section class="platforms-strip">
+    <div class="platforms-inner">
+      <p class="platforms-label">Works with any web platform</p>
+      <a class="platforms-logos" href="/platforms">
+        <img src="https://www.vectorlogo.zone/logos/servicenow/servicenow-ar21.svg" alt="ServiceNow" height="28">
+        <img src="https://www.vectorlogo.zone/logos/hubspot/hubspot-ar21.svg" alt="HubSpot" height="28">
+        <img src="https://www.vectorlogo.zone/logos/zendesk/zendesk-ar21.svg" alt="Zendesk" height="28">
+        <span class="platforms-more">+ any HTML site &rarr;</span>
+      </a>
+    </div>
+  </section>
 
   <!-- ═══ How it works ═══ -->
   <section class="how-section">
@@ -702,6 +789,52 @@ autoWebMCP({
     </div>
   </section>
 
+  <!-- ═══ FAQ ═══ -->
+  <section class="faq-section">
+    <div class="section-inner">
+      <div class="section-label">FAQ</div>
+      <h2 class="section-title">Common questions</h2>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary class="faq-q">Does this require a special Chrome flag?</summary>
+          <div class="faq-a">
+            Yes, for now. WebMCP is in Early Preview and requires enabling <code>chrome://flags/#enable-webmcp-testing</code> in Chrome 146+. For regular users without the flag, auto-webmcp silently does nothing — your page is completely unaffected. Once Chrome ships WebMCP to stable, it will activate automatically for all users.
+          </div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Is auto-webmcp free?</summary>
+          <div class="faq-a">
+            Yes, completely. It's MIT licensed, requires no API key, and runs entirely in the browser. Nothing is sent to any server. There are no usage limits, no sign-up, and no cost.
+          </div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Do I need to modify my existing forms?</summary>
+          <div class="faq-a">
+            No. auto-webmcp reads your forms as-is and infers names, descriptions, and schemas from your existing HTML — labels, placeholders, input types, and <code>required</code> attributes. Optionally, add <code>data-webmcp-name</code> and <code>data-webmcp-description</code> attributes to any form to sharpen the descriptions visible to agents.
+          </div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Does it work with React, Vue, Angular?</summary>
+          <div class="faq-a">
+            Yes. auto-webmcp uses a <code>MutationObserver</code> to watch for forms that are dynamically added to the DOM. Forms rendered by any frontend framework — React, Vue, Angular, Svelte — are picked up automatically after they mount.
+          </div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Will AI agents see passwords or sensitive data?</summary>
+          <div class="faq-a">
+            No. <code>password</code>, <code>file</code>, and <code>hidden</code> inputs are never included in the tool schema exposed to agents. You can also add <code>data-no-webmcp</code> to any form to exclude it entirely from agent access.
+          </div>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q">Can I use it on ServiceNow, HubSpot, or Zendesk?</summary>
+          <div class="faq-a">
+            Yes. See the <a href="/platforms">platform install guides</a> for step-by-step instructions on adding auto-webmcp to ServiceNow, HubSpot, and Zendesk — including where to paste the script tag in each platform's admin UI.
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══ Links ═══ -->
   <section class="links-section">
     <div class="section-inner">
@@ -740,7 +873,7 @@ autoWebMCP({
       &nbsp;·&nbsp;
       <a href="https://github.com/prasanna-gyde/auto-webmcp/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
       &nbsp;·&nbsp;
-      v0.1.2
+      v0.2.1
     </p>
   </footer>
 
