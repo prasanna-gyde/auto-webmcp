@@ -731,13 +731,27 @@
           description: tool.description,
           fieldCount: Object.keys((tool.inputSchema && tool.inputSchema.properties) || {}).length
         };
-        if (_isSupported && _real) return _real.registerTool(tool);
+        if (typeof window.__onToolRegistered === 'function') {
+          window.__onToolRegistered(tool.name);
+        }
+        if (_isSupported && _real) {
+          return _real.registerTool(tool).catch(function(e) {
+            console.warn('[auto-webmcp demo] Chrome WebMCP registerTool failed:', e);
+          });
+        }
         return Promise.resolve();
       },
       unregisterTool: function(name) {
         delete window.__executeHandlers[name];
         delete window.__registeredToolMeta[name];
-        if (_isSupported && _real) return _real.unregisterTool(name);
+        if (typeof window.__onToolUnregistered === 'function') {
+          window.__onToolUnregistered(name);
+        }
+        if (_isSupported && _real) {
+          return _real.unregisterTool(name).catch(function(e) {
+            console.warn('[auto-webmcp demo] Chrome WebMCP unregisterTool failed:', e);
+          });
+        }
         return Promise.resolve();
       }
     };
@@ -1028,15 +1042,26 @@
 
   <!-- ─── Script B: UI logic + manual init ──────────────────────────────── -->
   <script>
-    // ── 1. Initialize auto-webmcp ──────────────────────────────────────────
+    // ── 1. Initialize state + proxy hooks (BEFORE autoWebMCP call) ────────
+    var _toolCards = {};
+
+    window.__onToolRegistered = function(name) {
+      addToolCard(name);
+      addLogEntry('registered', name);
+      if (name === 'subscribe_newsletter') {
+        var btn = document.getElementById('newsletter-btn');
+        var tag = document.getElementById('newsletter-btn-tag');
+        if (btn) btn.disabled = false;
+        if (tag) tag.remove();
+      }
+    };
+    window.__onToolUnregistered = function(name) {
+      removeToolCard(name);
+      addLogEntry('unregistered', name);
+    };
+
     // IIFE globalName is 'AutoWebMCP', so the function lives at AutoWebMCP.autoWebMCP
-    AutoWebMCP.autoWebMCP({ autoSubmit: true }).then(function() {
-      // Sync UI from __executeHandlers after init completes.
-      // Fallback in case form:registered events fired before listeners were attached.
-      Object.keys(window.__executeHandlers || {}).forEach(function(name) {
-        if (!_toolCards[name]) addToolCard(name);
-      });
-    });
+    AutoWebMCP.autoWebMCP({ autoSubmit: true });
 
     // ── 2. Update status badge ─────────────────────────────────────────────
     (function updateStatus() {
@@ -1057,22 +1082,8 @@
     })();
 
     // ── 3. Event listeners ─────────────────────────────────────────────────
-    window.addEventListener('form:registered', function(e) {
-      addToolCard(e.detail.toolName);
-      addLogEntry('registered', e.detail.toolName);
-      if (e.detail.toolName === 'subscribe_newsletter') {
-        var btn = document.getElementById('newsletter-btn');
-        var tag = document.getElementById('newsletter-btn-tag');
-        btn.disabled = false;
-        if (tag) tag.remove();
-      }
-    });
-
-    window.addEventListener('form:unregistered', function(e) {
-      removeToolCard(e.detail.toolName);
-      addLogEntry('unregistered', e.detail.toolName);
-    });
-
+    // Note: tool registration UI is handled via __onToolRegistered proxy hook (synchronous).
+    // These listeners are kept for toolactivated/toolcancel events only.
     window.addEventListener('toolactivated', function(e) {
       addLogEntry('toolactivated', e.detail.toolName);
     });
@@ -1082,7 +1093,6 @@
     });
 
     // ── 4. Tool cards ──────────────────────────────────────────────────────
-    var _toolCards = {};
 
     function addToolCard(name) {
       var list  = document.getElementById('tool-list');
@@ -1250,20 +1260,7 @@
 
       // Update data-tool-section so the simulator can find it
       document.getElementById('dynamic-section').dataset.toolSection = 'subscribe_newsletter';
-
-      // Poll __executeHandlers until the library registers the form, then enable the button.
-      // (More reliable than form:registered event alone.)
-      var _pollTimer = setInterval(function() {
-        if (window.__executeHandlers && window.__executeHandlers['subscribe_newsletter']) {
-          clearInterval(_pollTimer);
-          if (!_toolCards['subscribe_newsletter']) addToolCard('subscribe_newsletter');
-          var btn = document.getElementById('newsletter-btn');
-          var tag = document.getElementById('newsletter-btn-tag');
-          if (btn) btn.disabled = false;
-          if (tag) tag.remove();
-        }
-      }, 50);
-      setTimeout(function() { clearInterval(_pollTimer); }, 5000);
+      // Registration + button enable are handled automatically via __onToolRegistered proxy hook.
     }
 
     // ── 8. Form submit flash ───────────────────────────────────────────────
