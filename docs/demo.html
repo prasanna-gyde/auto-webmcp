@@ -735,9 +735,14 @@
           window.__onToolRegistered(tool.name);
         }
         if (_isSupported && _real) {
-          return _real.registerTool(tool).catch(function(e) {
-            console.warn('[auto-webmcp demo] Chrome WebMCP registerTool failed:', e);
-          });
+          try {
+            return _real.registerTool(tool).catch(function(e) {
+              console.warn('[auto-webmcp demo] Chrome WebMCP registerTool failed:', e);
+            });
+          } catch(e) {
+            console.warn('[auto-webmcp demo] Chrome WebMCP registerTool failed (sync):', e);
+            return Promise.resolve();
+          }
         }
         return Promise.resolve();
       },
@@ -748,9 +753,14 @@
           window.__onToolUnregistered(name);
         }
         if (_isSupported && _real) {
-          return _real.unregisterTool(name).catch(function(e) {
-            console.warn('[auto-webmcp demo] Chrome WebMCP unregisterTool failed:', e);
-          });
+          try {
+            return _real.unregisterTool(name).catch(function(e) {
+              console.warn('[auto-webmcp demo] Chrome WebMCP unregisterTool failed:', e);
+            });
+          } catch(e) {
+            console.warn('[auto-webmcp demo] Chrome WebMCP unregisterTool failed (sync):', e);
+            return Promise.resolve();
+          }
         }
         return Promise.resolve();
       }
