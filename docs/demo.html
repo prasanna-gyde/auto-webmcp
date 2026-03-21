@@ -1030,7 +1030,13 @@
   <script>
     // ── 1. Initialize auto-webmcp ──────────────────────────────────────────
     // IIFE globalName is 'AutoWebMCP', so the function lives at AutoWebMCP.autoWebMCP
-    AutoWebMCP.autoWebMCP({ autoSubmit: true });
+    AutoWebMCP.autoWebMCP({ autoSubmit: true }).then(function() {
+      // Sync UI from __executeHandlers after init completes.
+      // Fallback in case form:registered events fired before listeners were attached.
+      Object.keys(window.__executeHandlers || {}).forEach(function(name) {
+        if (!_toolCards[name]) addToolCard(name);
+      });
+    });
 
     // ── 2. Update status badge ─────────────────────────────────────────────
     (function updateStatus() {
@@ -1217,11 +1223,10 @@
             '<h3 style="font-size:0.95rem;font-weight:700;color:var(--charcoal)">Newsletter Signup</h3>',
             '<span style="font-size:0.72rem;font-weight:600;font-family:monospace;background:var(--charcoal);color:var(--lime);padding:3px 9px;border-radius:6px">subscribe_newsletter</span>',
           '</div>',
-          '<form id="newsletter-form"',
-                'toolname="subscribe_newsletter"',
-                'tooldescription="Subscribe an email address to the newsletter with a chosen plan tier"',
-                'action="#"',
-                'onsubmit="event.preventDefault(); handleFormSubmit(this, \'Subscribed!\')">',
+          '<form id="newsletter-form" toolname="subscribe_newsletter"',
+                ' tooldescription="Subscribe an email address to the newsletter with a chosen plan tier"',
+                ' action="#"',
+                ' onsubmit="event.preventDefault(); handleFormSubmit(this, \'Subscribed!\')">',
             '<div class="form-group">',
               '<label for="nl-email">Email Address</label>',
               '<input type="email" id="nl-email" name="email" placeholder="demo@autowebmcp.dev" autocomplete="email">',
@@ -1245,6 +1250,20 @@
 
       // Update data-tool-section so the simulator can find it
       document.getElementById('dynamic-section').dataset.toolSection = 'subscribe_newsletter';
+
+      // Poll __executeHandlers until the library registers the form, then enable the button.
+      // (More reliable than form:registered event alone.)
+      var _pollTimer = setInterval(function() {
+        if (window.__executeHandlers && window.__executeHandlers['subscribe_newsletter']) {
+          clearInterval(_pollTimer);
+          if (!_toolCards['subscribe_newsletter']) addToolCard('subscribe_newsletter');
+          var btn = document.getElementById('newsletter-btn');
+          var tag = document.getElementById('newsletter-btn-tag');
+          if (btn) btn.disabled = false;
+          if (tag) tag.remove();
+        }
+      }, 50);
+      setTimeout(function() { clearInterval(_pollTimer); }, 5000);
     }
 
     // ── 8. Form submit flash ───────────────────────────────────────────────
