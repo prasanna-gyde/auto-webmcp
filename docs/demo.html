@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Demo — auto-webmcp</title>
+  <meta name="description" content="See auto-webmcp in action. Three live forms registered as WebMCP tools — flight search, contact support, and a dynamically injected newsletter form.">
+  <meta property="og:title" content="Live Demo — auto-webmcp">
+  <meta property="og:description" content="Three real forms, registered as WebMCP tools. Use the Agent Simulator to invoke them with real parameters.">
+  <meta property="og:url" content="https://autowebmcp.dev/demo">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --charcoal:          #262626;
+      --white:             #ffffff;
+      --lime:              #e5fe96;
+      --dark-green:        #698200;
+      --olive-bg:          #f5f5f2;
+      --light-gray:        #f8f9fa;
+      --border:            #e5e7eb;
+      --text:              #262626;
+      --text-muted:        #6b7280;
+      --text-light:        #ffffff;
+      --text-muted-light:  rgba(255,255,255,0.55);
+      --radius:            12px;
+      --shadow-card:       0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-hover:      0 4px 16px rgba(0,0,0,0.1);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      background: var(--olive-bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+      min-height: 100vh;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Navbar ─────────────────────────────────────────────────────────── */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(245, 245, 242, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+    }
+    .navbar-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .navbar-brand {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--charcoal);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .navbar-brand .version {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-weight: 400;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1px 8px;
+    }
+    .navbar-brand .demo-crumb {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+    .navbar-links {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .navbar-links a {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 0.375rem 0.625rem;
+      border-radius: 6px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .navbar-links a:hover { color: var(--charcoal); background: rgba(38,38,38,0.06); }
+
+    /* ── Demo header ─────────────────────────────────────────────────────── */
+    .demo-intro {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 1.5rem;
+    }
+    .demo-intro h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+    }
+    .demo-intro p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      max-width: 560px;
+    }
+    .demo-intro .how-it-works {
+      margin-top: 0.875rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      font-size: 0.8rem;
+      color: var(--dark-green);
+      font-weight: 500;
+      background: rgba(229,254,150,0.3);
+      border: 1px solid rgba(101,130,0,0.2);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    /* ── Main layout ─────────────────────────────────────────────────────── */
+    .demo-layout {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 1.5rem 4rem;
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .demo-layout { grid-template-columns: 1fr; }
+      .panel-col { order: -1; }
+      .panel-sticky { position: static; }
+    }
+
+    /* ── Forms column ────────────────────────────────────────────────────── */
+    .forms-col { display: flex; flex-direction: column; gap: 1.25rem; }
+
+    .form-section { position: relative; }
+
+    /* Overlay during agent fill */
+    .form-section.is-filling::after {
+      content: 'Agent filling...';
+      position: absolute;
+      inset: 0;
+      background: rgba(38, 38, 38, 0.62);
+      backdrop-filter: blur(2px);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--lime);
+      font-weight: 600;
+      font-size: 0.95rem;
+      letter-spacing: 0.06em;
+      z-index: 10;
+    }
+
+    .form-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-card);
+      padding: 1.5rem;
+      transition: box-shadow 0.2s;
+    }
+    .form-card:hover { box-shadow: var(--shadow-hover); }
+
+    .form-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .form-card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--charcoal);
+      line-height: 1.3;
+    }
+    .form-card-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+    .tool-name-tag {
+      flex-shrink: 0;
+      font-size: 0.72rem;
+      font-weight: 600;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: var(--charcoal);
+      color: var(--lime);
+      padding: 3px 9px;
+      border-radius: 6px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .tool-name-tag.dynamic-badge {
+      background: rgba(229,254,150,0.2);
+      color: var(--dark-green);
+      border: 1px solid rgba(101,130,0,0.25);
+    }
+
+    /* ── Form fields ─────────────────────────────────────────────────────── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.875rem 1rem;
+    }
+    @media (max-width: 500px) { .form-grid { grid-template-columns: 1fr; } }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      margin-bottom: 0.875rem;
+    }
+    .form-grid .form-group { margin-bottom: 0; }
+
+    label, .field-label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--charcoal);
+      display: block;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="date"],
+    input[type="number"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 0.5625rem 0.8125rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      color: var(--text);
+      background: var(--white);
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      padding-right: 2.25rem;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--charcoal);
+      box-shadow: 0 0 0 3px rgba(38,38,38,0.08);
+    }
+    textarea { resize: vertical; min-height: 90px; }
+
+    /* Radio group */
+    .radio-group {
+      display: flex;
+      gap: 0.625rem;
+      flex-wrap: wrap;
+      margin-top: 0.125rem;
+    }
+    .radio-label {
+      display: flex;
+      align-items: center;
+      gap: 0.4375rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      padding: 0.4375rem 0.75rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      background: var(--white);
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .radio-label:has(input:checked) {
+      border-color: var(--charcoal);
+      background: rgba(38,38,38,0.04);
+    }
+    .radio-label input[type="radio"] {
+      width: auto;
+      padding: 0;
+      margin: 0;
+      border: none;
+      box-shadow: none;
+      accent-color: var(--charcoal);
+    }
+
+    /* Form actions */
+    .form-actions {
+      display: flex;
+      gap: 0.625rem;
+      justify-content: flex-end;
+      margin-top: 1.25rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4375rem;
+      padding: 0.5625rem 1.125rem;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+
+    .btn-primary {
+      background: var(--charcoal);
+      color: var(--white);
+    }
+    .btn-primary:hover { background: #3a3a3a; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1.5px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--light-gray); color: var(--text); }
+
+    .btn-dark {
+      background: var(--charcoal);
+      color: var(--white);
+    }
+    .btn-dark:hover { background: #3a3a3a; }
+
+    /* ── Dynamic form placeholder ────────────────────────────────────────── */
+    .dynamic-prompt {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      transition: opacity 0.3s;
+    }
+    .dynamic-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(229,254,150,0.25);
+      border: 2px dashed rgba(101,130,0,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: 300;
+      color: var(--dark-green);
+      margin: 0 auto 1rem;
+    }
+    .dynamic-prompt p {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      max-width: 320px;
+      margin: 0 auto 1.25rem;
+      line-height: 1.6;
+    }
+
+    /* ── Field-fill animation ─────────────────────────────────────────────── */
+    @keyframes field-glow {
+      0%   { box-shadow: none; }
+      35%  { box-shadow: 0 0 0 3px rgba(229,254,150,0.55); border-color: var(--dark-green); background: rgba(229,254,150,0.1); }
+      100% { box-shadow: none; }
+    }
+    .agent-fill-glow {
+      animation: field-glow 0.9s ease forwards;
+    }
+
+    /* ── Panel column ────────────────────────────────────────────────────── */
+    .panel-sticky {
+      position: sticky;
+      top: 72px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.875rem;
+    }
+
+    .panel-card {
+      background: var(--charcoal);
+      border-radius: var(--radius);
+      padding: 1.125rem 1.25rem;
+      color: var(--text-light);
+    }
+
+    .panel-card-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted-light);
+      margin-bottom: 0.875rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* ── Status card ─────────────────────────────────────────────────────── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.3125rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.625rem;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-active {
+      background: rgba(229,254,150,0.18);
+      color: var(--lime);
+      border: 1px solid rgba(229,254,150,0.3);
+    }
+    .status-active .status-dot { background: var(--lime); }
+    .status-inactive {
+      background: rgba(239,68,68,0.12);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+    .status-inactive .status-dot { background: #f87171; }
+    .status-checking {
+      background: rgba(255,255,255,0.06);
+      color: var(--text-muted-light);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .status-checking .status-dot { background: rgba(255,255,255,0.3); }
+    .status-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted-light);
+      line-height: 1.5;
+      margin-top: 0.25rem;
+    }
+    .status-hint code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.7rem;
+      background: rgba(255,255,255,0.08);
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: var(--lime);
+    }
+
+    /* ── Tool list ───────────────────────────────────────────────────────── */
+    .tool-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+    .count-badge {
+      background: rgba(229,254,150,0.18);
+      color: var(--lime);
+      border: 1px solid rgba(229,254,150,0.25);
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 20px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tool-card {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 8px;
+      padding: 0.625rem 0.875rem;
+      animation: slideIn 0.25s ease;
+    }
+    .tool-card-name {
+      font-size: 0.78rem;
+      font-weight: 600;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--lime);
+      letter-spacing: 0.01em;
+    }
+    .tool-card-meta {
+      margin-top: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .tool-card-fields {
+      font-size: 0.7rem;
+      color: var(--text-muted-light);
+    }
+    .tool-card-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted-light);
+      margin-top: 0.25rem;
+      line-height: 1.45;
+    }
+
+    .empty-state {
+      font-size: 0.78rem;
+      color: var(--text-muted-light);
+      font-style: italic;
+      text-align: center;
+      padding: 0.5rem 0;
+    }
+
+    /* ── Event log ───────────────────────────────────────────────────────── */
+    .event-log {
+      max-height: 180px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.1) transparent;
+    }
+    .event-log::-webkit-scrollbar { width: 4px; }
+    .event-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+    .log-entry {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: baseline;
+      gap: 0.5rem;
+      padding: 0.3125rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 0.72rem;
+      animation: slideIn 0.2s ease;
+    }
+    .log-entry:last-child { border-bottom: none; }
+
+    .log-time {
+      color: var(--text-muted-light);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.68rem;
+      flex-shrink: 0;
+    }
+    .log-event {
+      font-weight: 600;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      white-space: nowrap;
+    }
+    .log-tool {
+      color: var(--text-muted-light);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.65rem;
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .log-registered .log-event { color: #c8f000; }
+    .log-activated  .log-event  { color: #ffffff; }
+    .log-cancelled  .log-event  { color: #fbbf24; }
+
+    .clear-btn {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: var(--text-muted-light);
+      font-size: 0.68rem;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      cursor: pointer;
+      padding: 1px 6px;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .clear-btn:hover { color: var(--text-light); background: rgba(255,255,255,0.08); }
+
+    /* ── Simulator ───────────────────────────────────────────────────────── */
+    .simulator-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted-light);
+      margin-bottom: 0.875rem;
+      line-height: 1.5;
+    }
+    .simulator-buttons { display: flex; flex-direction: column; gap: 0.5rem; }
+
+    .sim-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      padding: 0.5625rem 0.875rem;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 9px;
+      color: var(--text-light);
+      font-size: 0.82rem;
+      font-weight: 500;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.12s, border-color 0.15s;
+      text-align: left;
+    }
+    .sim-btn:hover:not(:disabled) {
+      background: rgba(229,254,150,0.1);
+      border-color: rgba(229,254,150,0.3);
+      transform: translateY(-1px);
+    }
+    .sim-btn:active:not(:disabled) { transform: translateY(0); }
+    .sim-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .sim-btn svg { flex-shrink: 0; opacity: 0.7; }
+    .btn-tag {
+      margin-left: auto;
+      font-size: 0.65rem;
+      color: var(--text-muted-light);
+      font-style: italic;
+      white-space: nowrap;
+    }
+
+    /* ── Toast ───────────────────────────────────────────────────────────── */
+    .result-toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      width: 380px;
+      max-width: calc(100vw - 3rem);
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06);
+      z-index: 200;
+      overflow: hidden;
+    }
+    .result-toast.hidden { display: none; }
+    .result-toast.toast-in { animation: toastIn 0.28s ease forwards; }
+    .result-toast.toast-out { animation: toastOut 0.22s ease forwards; }
+
+    .toast-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.625rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .toast-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--charcoal);
+      letter-spacing: 0.02em;
+    }
+    .toast-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.125rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 2px;
+      transition: color 0.15s;
+    }
+    .toast-close:hover { color: var(--charcoal); }
+    .result-toast pre {
+      margin: 0;
+      padding: 0.875rem 1rem;
+      max-height: 240px;
+      overflow-y: auto;
+      font-size: 0.72rem;
+      background: var(--light-gray) !important;
+    }
+    .result-toast code { font-family: 'SF Mono', 'Fira Code', monospace; background: transparent !important; }
+
+    /* ── Animations ──────────────────────────────────────────────────────── */
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateY(0); }
+      to   { opacity: 0; transform: translateY(8px); }
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    .demo-footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .demo-footer a { color: var(--dark-green); font-weight: 500; }
+    .demo-footer a:hover { text-decoration: underline; }
+  </style>
+
+  <!-- ─── Script A: Block auto-init + install proxy before IIFE loads ──── -->
+  <script>
+    window.__AUTO_WEBMCP_NO_AUTOINIT = true;
+    window.__executeHandlers = {};
+    window.__registeredToolMeta = {};
+
+    // Detect real Chrome WebMCP API BEFORE we proxy it
+    var _isSupported = typeof navigator !== 'undefined' && !!navigator.modelContext;
+    window.__awmcp_real_supported = _isSupported;
+    var _real = navigator.modelContext; // undefined if flag is off
+
+    var _proxyObj = {
+      registerTool: function(tool) {
+        window.__executeHandlers[tool.name] = tool.execute;
+        window.__registeredToolMeta[tool.name] = {
+          description: tool.description,
+          fieldCount: Object.keys((tool.inputSchema && tool.inputSchema.properties) || {}).length
+        };
+        if (_isSupported && _real) return _real.registerTool(tool);
+        return Promise.resolve();
+      },
+      unregisterTool: function(name) {
+        delete window.__executeHandlers[name];
+        delete window.__registeredToolMeta[name];
+        if (_isSupported && _real) return _real.unregisterTool(name);
+        return Promise.resolve();
+      }
+    };
+
+    try {
+      Object.defineProperty(navigator, 'modelContext', {
+        get: function() { return _proxyObj; },
+        configurable: true
+      });
+    } catch(e) {
+      navigator.modelContext = _proxyObj;
+    }
+  </script>
+</head>
+<body>
+
+  <!-- ── Navbar ──────────────────────────────────────────────────────────── -->
+  <nav class="navbar" aria-label="Site navigation">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <span>⚡</span>
+        <span>auto-webmcp</span>
+        <span class="version">v0.2.0</span>
+        <span class="demo-crumb" aria-hidden="true">/</span>
+        <span class="demo-crumb">demo</span>
+      </a>
+      <nav class="navbar-links">
+        <a href="/">Home</a>
+        <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">npm</a>
+        <a href="https://gyde.ai" target="_blank" rel="noopener">gyde.ai</a>
+      </nav>
+    </div>
+  </nav>
+
+  <!-- ── Demo intro ───────────────────────────────────────────────────────── -->
+  <div class="demo-intro">
+    <h1>Live Demo</h1>
+    <p>Three real HTML forms, registered as WebMCP tools with a single script tag. Use the Agent Simulator to invoke them exactly as an AI agent would.</p>
+    <span class="how-it-works">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>
+      Powered by auto-webmcp — one &lt;script&gt; tag, zero manual coding
+    </span>
+  </div>
+
+  <!-- ── Main layout ─────────────────────────────────────────────────────── -->
+  <main class="demo-layout">
+
+    <!-- ── Left: Forms ──────────────────────────────────────────────────── -->
+    <div class="forms-col">
+
+      <!-- Form 1: Flight Search -->
+      <section class="form-section" data-tool-section="search_flights">
+        <div class="form-card">
+          <div class="form-card-header">
+            <div>
+              <h2 class="form-card-title">Flight Search</h2>
+              <p class="form-card-desc">Search for available flights between airports</p>
+            </div>
+            <span class="tool-name-tag">search_flights</span>
+          </div>
+          <form id="flight-form"
+                toolname="search_flights"
+                tooldescription="Search for available flights between two airports on a given date with specified passengers and cabin class"
+                action="#"
+                onsubmit="event.preventDefault(); handleFormSubmit(this, 'Flight search submitted')">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="origin">Origin Airport</label>
+                <input type="text" id="origin" name="origin" placeholder="e.g. New York (JFK)" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label for="destination">Destination Airport</label>
+                <input type="text" id="destination" name="destination" placeholder="e.g. London (LHR)" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label for="depart_date">Departure Date</label>
+                <input type="date" id="depart_date" name="depart_date">
+              </div>
+              <div class="form-group">
+                <label for="passengers">Passengers</label>
+                <input type="number" id="passengers" name="passengers" min="1" max="9" placeholder="1">
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:0.875rem">
+              <label for="cabin_class">Cabin Class</label>
+              <select id="cabin_class" name="cabin_class">
+                <option value="">Select cabin class</option>
+                <option value="economy">Economy</option>
+                <option value="premium_economy">Premium Economy</option>
+                <option value="business">Business</option>
+                <option value="first">First Class</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <span class="field-label">Trip Type</span>
+              <div class="radio-group">
+                <label class="radio-label">
+                  <input type="radio" name="trip_type" value="roundtrip">
+                  <span>Roundtrip</span>
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="trip_type" value="oneway">
+                  <span>One Way</span>
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="trip_type" value="multicity">
+                  <span>Multi-City</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="reset" class="btn btn-ghost">Reset</button>
+              <button type="submit" class="btn btn-primary">Search Flights</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Form 2: Contact Support -->
+      <section class="form-section" data-tool-section="contact_support">
+        <div class="form-card">
+          <div class="form-card-header">
+            <div>
+              <h2 class="form-card-title">Contact Support</h2>
+              <p class="form-card-desc">Submit a support ticket to the team</p>
+            </div>
+            <span class="tool-name-tag">contact_support</span>
+          </div>
+          <form id="support-form"
+                toolname="contact_support"
+                tooldescription="Submit a support ticket with a subject, priority level, and detailed message"
+                action="#"
+                onsubmit="event.preventDefault(); handleFormSubmit(this, 'Support ticket submitted')">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="support-name">Your Name</label>
+                <input type="text" id="support-name" name="name" placeholder="Alex Johnson" autocomplete="name">
+              </div>
+              <div class="form-group">
+                <label for="support-email">Email Address</label>
+                <input type="email" id="support-email" name="email" placeholder="alex@example.com" autocomplete="email">
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:0.875rem">
+              <label for="subject">Subject</label>
+              <select id="subject" name="subject">
+                <option value="">Select a subject</option>
+                <option value="billing">Billing &amp; Payments</option>
+                <option value="technical">Technical Issue</option>
+                <option value="account">Account Access</option>
+                <option value="general">General Inquiry</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <span class="field-label">Priority</span>
+              <div class="radio-group">
+                <label class="radio-label">
+                  <input type="radio" name="priority" value="low">
+                  <span>Low</span>
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="priority" value="normal">
+                  <span>Normal</span>
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="priority" value="high">
+                  <span>High</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="message">Message</label>
+              <textarea id="message" name="message" rows="4" placeholder="Describe your issue in detail..."></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="reset" class="btn btn-ghost">Reset</button>
+              <button type="submit" class="btn btn-primary">Send Ticket</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Form 3: Dynamic form (MutationObserver demo) -->
+      <section class="form-section" id="dynamic-section" data-tool-section="dynamic">
+        <div class="form-card">
+          <div class="form-card-header">
+            <div>
+              <h2 class="form-card-title">MutationObserver Demo</h2>
+              <p class="form-card-desc">Dynamically injected forms register automatically</p>
+            </div>
+            <span class="tool-name-tag dynamic-badge">Dynamic</span>
+          </div>
+          <div class="dynamic-prompt" id="dynamic-prompt">
+            <div class="dynamic-icon" aria-hidden="true">+</div>
+            <p>Click to inject a newsletter signup form into the DOM. Watch it appear as a registered tool in the panel instantly — powered by <code style="font-size:0.8em;background:rgba(101,130,0,0.1);padding:1px 4px;border-radius:3px;color:var(--dark-green)">MutationObserver</code>.</p>
+            <button class="btn btn-dark" id="inject-btn" onclick="injectNewsletterForm()">Add Newsletter Form</button>
+          </div>
+          <div id="newsletter-container"></div>
+        </div>
+      </section>
+
+    </div><!-- /forms-col -->
+
+    <!-- ── Right: Panel ──────────────────────────────────────────────────── -->
+    <div class="panel-col">
+      <div class="panel-sticky">
+
+        <!-- Card 1: WebMCP Status -->
+        <div class="panel-card">
+          <div class="panel-card-label">WebMCP Status</div>
+          <div id="status-badge" class="status-badge status-checking">
+            <span class="status-dot"></span>
+            <span id="status-text">Checking...</span>
+          </div>
+          <p id="status-hint" class="status-hint"></p>
+        </div>
+
+        <!-- Card 2: Registered Tools -->
+        <div class="panel-card">
+          <div class="panel-card-label">
+            Registered Tools
+            <span id="tool-count" class="count-badge">0</span>
+          </div>
+          <div id="tool-list" class="tool-list">
+            <p class="empty-state">Forms register here as they load...</p>
+          </div>
+        </div>
+
+        <!-- Card 3: Event Log -->
+        <div class="panel-card">
+          <div class="panel-card-label">
+            Event Log
+            <button class="clear-btn" onclick="clearLog()" title="Clear log">Clear</button>
+          </div>
+          <div id="event-log" class="event-log">
+            <p class="empty-state">Events appear here in real time...</p>
+          </div>
+        </div>
+
+        <!-- Card 4: Agent Simulator -->
+        <div class="panel-card">
+          <div class="panel-card-label">Agent Simulator</div>
+          <p class="simulator-hint">Invoke tools exactly as an AI agent would — fills fields and auto-submits the form.</p>
+          <div class="simulator-buttons">
+            <button class="sim-btn" onclick="runSimulator('search_flights', {origin:'New York (JFK)',destination:'London (LHR)',depart_date:'2026-04-15',passengers:2,cabin_class:'business',trip_type:'roundtrip'})">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+              Search NYC → London
+            </button>
+            <button class="sim-btn" onclick="runSimulator('contact_support', {name:'Alex Johnson',email:'alex@example.com',subject:'billing',priority:'high',message:'I was charged twice for my subscription this month. Please help resolve this as soon as possible.'})">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              Send Support Ticket
+            </button>
+            <button class="sim-btn" id="newsletter-btn" disabled onclick="runSimulator('subscribe_newsletter', {email:'demo@autowebmcp.dev',plan:'pro'})">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>
+              Subscribe Pro Plan
+              <span class="btn-tag" id="newsletter-btn-tag">add form first</span>
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /panel-sticky -->
+    </div><!-- /panel-col -->
+
+  </main>
+
+  <!-- ── Result toast ─────────────────────────────────────────────────────── -->
+  <div id="result-toast" class="result-toast hidden" role="status" aria-live="polite">
+    <div class="toast-header">
+      <span class="toast-title">Execute Result</span>
+      <button class="toast-close" onclick="hideToast()" aria-label="Close">&times;</button>
+    </div>
+    <pre><code id="toast-code" class="language-json"></code></pre>
+  </div>
+
+  <!-- ── Footer ──────────────────────────────────────────────────────────── -->
+  <footer class="demo-footer">
+    Built with <a href="https://www.npmjs.com/package/auto-webmcp" target="_blank" rel="noopener">auto-webmcp</a> &mdash;
+    open source on <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> &mdash;
+    by <a href="https://gyde.ai" target="_blank" rel="noopener">gyde.ai</a>
+  </footer>
+
+  <!-- highlight.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+  <!-- ─── IIFE: loads but does NOT auto-init (blocked by __AUTO_WEBMCP_NO_AUTOINIT) ── -->
+  <script src="https://unpkg.com/auto-webmcp@0.2.0/dist/auto-webmcp.iife.js"></script>
+
+  <!-- ─── Script B: UI logic + manual init ──────────────────────────────── -->
+  <script>
+    // ── 1. Initialize auto-webmcp ──────────────────────────────────────────
+    // IIFE globalName is 'AutoWebMCP', so the function lives at AutoWebMCP.autoWebMCP
+    AutoWebMCP.autoWebMCP({ autoSubmit: true });
+
+    // ── 2. Update status badge ─────────────────────────────────────────────
+    (function updateStatus() {
+      var supported = window.__awmcp_real_supported;
+      var badge = document.getElementById('status-badge');
+      var text  = document.getElementById('status-text');
+      var hint  = document.getElementById('status-hint');
+
+      if (supported) {
+        badge.className = 'status-badge status-active';
+        text.textContent = 'ACTIVE';
+        hint.textContent = 'Chrome 146+ WebMCP flag is enabled. Registered tools are visible to AI agents and the Model Context Tool Inspector extension.';
+      } else {
+        badge.className = 'status-badge status-inactive';
+        text.textContent = 'INACTIVE';
+        hint.innerHTML = 'Enable at <code>chrome://flags/#enable-webmcp-testing</code> in Chrome 146+. The Agent Simulator below works regardless.';
+      }
+    })();
+
+    // ── 3. Event listeners ─────────────────────────────────────────────────
+    window.addEventListener('form:registered', function(e) {
+      addToolCard(e.detail.toolName);
+      addLogEntry('registered', e.detail.toolName);
+      if (e.detail.toolName === 'subscribe_newsletter') {
+        var btn = document.getElementById('newsletter-btn');
+        var tag = document.getElementById('newsletter-btn-tag');
+        btn.disabled = false;
+        if (tag) tag.remove();
+      }
+    });
+
+    window.addEventListener('form:unregistered', function(e) {
+      removeToolCard(e.detail.toolName);
+      addLogEntry('unregistered', e.detail.toolName);
+    });
+
+    window.addEventListener('toolactivated', function(e) {
+      addLogEntry('toolactivated', e.detail.toolName);
+    });
+
+    window.addEventListener('toolcancel', function(e) {
+      addLogEntry('toolcancel', e.detail.toolName);
+    });
+
+    // ── 4. Tool cards ──────────────────────────────────────────────────────
+    var _toolCards = {};
+
+    function addToolCard(name) {
+      var list  = document.getElementById('tool-list');
+      var empty = list.querySelector('.empty-state');
+      if (empty) empty.remove();
+      if (_toolCards[name]) return;
+
+      var meta  = window.__registeredToolMeta[name] || {};
+      var card  = document.createElement('div');
+      card.className   = 'tool-card';
+      card.dataset.tool = name;
+      card.innerHTML = [
+        '<div class="tool-card-name">' + escHtml(name) + '</div>',
+        '<div class="tool-card-meta">',
+          '<span class="tool-card-fields">' + (meta.fieldCount || 0) + ' fields</span>',
+        '</div>',
+        meta.description
+          ? '<div class="tool-card-desc">' + escHtml(meta.description) + '</div>'
+          : ''
+      ].join('');
+
+      list.appendChild(card);
+      _toolCards[name] = card;
+      document.getElementById('tool-count').textContent = Object.keys(_toolCards).length;
+    }
+
+    function removeToolCard(name) {
+      var card = _toolCards[name];
+      if (!card) return;
+      card.remove();
+      delete _toolCards[name];
+      document.getElementById('tool-count').textContent = Object.keys(_toolCards).length;
+    }
+
+    // ── 5. Event log ───────────────────────────────────────────────────────
+    var MAX_LOG = 20;
+
+    var LOG_CLASS = {
+      'registered':    'log-registered',
+      'unregistered':  'log-registered',
+      'toolactivated': 'log-activated',
+      'toolcancel':    'log-cancelled'
+    };
+
+    function addLogEntry(type, toolName) {
+      var log   = document.getElementById('event-log');
+      var empty = log.querySelector('.empty-state');
+      if (empty) empty.remove();
+
+      while (log.children.length >= MAX_LOG) {
+        log.removeChild(log.lastElementChild);
+      }
+
+      var now  = new Date();
+      var time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      var entry = document.createElement('div');
+      entry.className = 'log-entry ' + (LOG_CLASS[type] || '');
+      entry.innerHTML = [
+        '<span class="log-time">' + time + '</span>',
+        '<span class="log-event">' + escHtml(type) + '</span>',
+        '<span class="log-tool">' + escHtml(toolName) + '</span>'
+      ].join('');
+
+      log.insertBefore(entry, log.firstChild);
+    }
+
+    function clearLog() {
+      document.getElementById('event-log').innerHTML = '<p class="empty-state">Events appear here in real time...</p>';
+    }
+
+    // ── 6. Agent Simulator ─────────────────────────────────────────────────
+    function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+    async function runSimulator(toolName, params) {
+      var handler = window.__executeHandlers[toolName];
+      if (!handler) {
+        showErrorToast('Tool "' + toolName + '" not registered yet. Add the form first.');
+        return;
+      }
+
+      var section = document.querySelector('[data-tool-section="' + CSS.escape(toolName) + '"]');
+
+      // Scroll to form
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        await sleep(350);
+      }
+
+      // Add overlay
+      if (section) section.classList.add('is-filling');
+
+      // Collect animatable inputs
+      var inputs = section
+        ? Array.from(section.querySelectorAll(
+            'input:not([type=hidden]):not([type=submit]):not([type=reset]):not([type=button]),' +
+            'textarea, select'
+          ))
+        : [];
+
+      // Stagger glow 120ms apart
+      inputs.forEach(function(el, i) {
+        setTimeout(function() {
+          el.classList.add('agent-fill-glow');
+          setTimeout(function() { el.classList.remove('agent-fill-glow'); }, 950);
+        }, i * 120);
+      });
+
+      try {
+        var result = await handler(params);
+
+        // Wait for animations to finish
+        var waitMs = inputs.length * 120 + 950;
+        await sleep(waitMs);
+
+        if (section) section.classList.remove('is-filling');
+        showToast(result);
+      } catch (err) {
+        if (section) section.classList.remove('is-filling');
+        console.error('[auto-webmcp demo] execute error:', err);
+        showErrorToast(String(err));
+      }
+    }
+
+    // ── 7. Dynamic form injection ──────────────────────────────────────────
+    function injectNewsletterForm() {
+      var injectBtn = document.getElementById('inject-btn');
+      injectBtn.disabled = true;
+      injectBtn.textContent = 'Form Added';
+
+      var prompt = document.getElementById('dynamic-prompt');
+      if (prompt) prompt.style.opacity = '0.35';
+
+      var container = document.getElementById('newsletter-container');
+      container.innerHTML = [
+        '<div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border)">',
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">',
+            '<h3 style="font-size:0.95rem;font-weight:700;color:var(--charcoal)">Newsletter Signup</h3>',
+            '<span style="font-size:0.72rem;font-weight:600;font-family:monospace;background:var(--charcoal);color:var(--lime);padding:3px 9px;border-radius:6px">subscribe_newsletter</span>',
+          '</div>',
+          '<form id="newsletter-form"',
+                'toolname="subscribe_newsletter"',
+                'tooldescription="Subscribe an email address to the newsletter with a chosen plan tier"',
+                'action="#"',
+                'onsubmit="event.preventDefault(); handleFormSubmit(this, \'Subscribed!\')">',
+            '<div class="form-group">',
+              '<label for="nl-email">Email Address</label>',
+              '<input type="email" id="nl-email" name="email" placeholder="demo@autowebmcp.dev" autocomplete="email">',
+            '</div>',
+            '<div class="form-group">',
+              '<label for="nl-plan">Plan</label>',
+              '<select id="nl-plan" name="plan">',
+                '<option value="">Select plan</option>',
+                '<option value="free">Free</option>',
+                '<option value="pro">Pro &mdash; $9/mo</option>',
+                '<option value="enterprise">Enterprise</option>',
+              '</select>',
+            '</div>',
+            '<div class="form-actions">',
+              '<button type="reset" class="btn btn-ghost">Reset</button>',
+              '<button type="submit" class="btn btn-primary">Subscribe</button>',
+            '</div>',
+          '</form>',
+        '</div>'
+      ].join('');
+
+      // Update data-tool-section so the simulator can find it
+      document.getElementById('dynamic-section').dataset.toolSection = 'subscribe_newsletter';
+    }
+
+    // ── 8. Form submit flash ───────────────────────────────────────────────
+    function handleFormSubmit(form, msg) {
+      // Visual feedback only for human-initiated submissions
+      // (agent invocations use the toast)
+      var btn = form.querySelector('[type=submit]');
+      if (!btn) return;
+      var orig = btn.textContent;
+      btn.textContent = msg;
+      btn.style.background = 'var(--dark-green)';
+      setTimeout(function() {
+        btn.textContent = orig;
+        btn.style.background = '';
+      }, 2000);
+    }
+
+    // ── 9. Toast ───────────────────────────────────────────────────────────
+    var _toastTimer = null;
+
+    function showToast(result) {
+      var toast = document.getElementById('result-toast');
+      var code  = document.getElementById('toast-code');
+
+      var json;
+      try {
+        var parsed = (typeof result === 'string') ? JSON.parse(result) : result;
+        json = JSON.stringify(parsed, null, 2);
+      } catch(_) {
+        json = String(result);
+      }
+
+      code.className = 'language-json';
+      code.removeAttribute('data-highlighted');
+      code.textContent = json;
+      hljs.highlightElement(code);
+
+      toast.classList.remove('hidden', 'toast-out');
+      toast.classList.add('toast-in');
+
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(hideToast, 9000);
+    }
+
+    function showErrorToast(msg) {
+      var toast = document.getElementById('result-toast');
+      var code  = document.getElementById('toast-code');
+      code.className = '';
+      code.textContent = 'Error: ' + msg;
+      toast.classList.remove('hidden', 'toast-out');
+      toast.classList.add('toast-in');
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(hideToast, 5000);
+    }
+
+    function hideToast() {
+      var toast = document.getElementById('result-toast');
+      toast.classList.remove('toast-in');
+      toast.classList.add('toast-out');
+      setTimeout(function() {
+        toast.classList.add('hidden');
+        toast.classList.remove('toast-out');
+      }, 250);
+    }
+
+    // ── 10. Helpers ────────────────────────────────────────────────────────
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
+
+</body>
+</html>
