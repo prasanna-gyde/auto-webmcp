@@ -2,6 +2,8 @@
 
 **Automatically make any HTML form WebMCP-ready — zero explicit coding required.**
 
+[Read the article on dev.to](https://dev.to/prasannagyde/every-web-form-should-be-callable-by-ai-agents-and-yours-can-be-today-228) &nbsp;·&nbsp; [Live demo](https://autowebmcp.dev/demo) &nbsp;·&nbsp; [Platform guides](https://autowebmcp.dev/platforms)
+
 Drop in one script tag (or one `import`) and every `<form>` on your page is
 instantly registered as a structured tool that in-browser AI agents can
 discover and use via Chrome's
