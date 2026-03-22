@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Article: Every web form should be callable by AI agents</title>
+  <style>
+    body {
+      font-family: 'Georgia', serif;
+      max-width: 760px;
+      margin: 60px auto;
+      padding: 0 2rem;
+      font-size: 18px;
+      line-height: 1.75;
+      color: #1a1a1a;
+      background: #fff;
+    }
+    h1 { font-size: 2rem; line-height: 1.25; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.35rem; margin-top: 2.5rem; margin-bottom: 0.75rem; border-bottom: 2px solid #e5fe96; padding-bottom: 0.25rem; }
+    p { margin: 1rem 0; }
+    code {
+      font-family: 'Courier New', monospace;
+      background: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.88em;
+    }
+    pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 1.25rem 1.5rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      margin: 1.5rem 0;
+    }
+    pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+    ul, ol { padding-left: 1.5rem; margin: 1rem 0; }
+    li { margin: 0.4rem 0; }
+    table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
+    th { background: #f5f5f2; text-align: left; padding: 0.6rem 1rem; border: 1px solid #ddd; font-weight: 700; }
+    td { padding: 0.6rem 1rem; border: 1px solid #ddd; vertical-align: top; }
+    a { color: #698200; }
+    strong { font-weight: 700; }
+    em { font-style: italic; }
+    .meta { color: #888; font-size: 0.85rem; margin-bottom: 2rem; font-family: sans-serif; }
+    hr { border: none; border-top: 1px solid #e5e7eb; margin: 2.5rem 0; }
+    .cta { font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<h1>Every web form should be callable by AI agents (and yours can be today)</h1>
+<p class="meta">Tags: webmcp &nbsp;|&nbsp; javascript &nbsp;|&nbsp; ai &nbsp;|&nbsp; opensource</p>
+
+<p>AI agents are getting good at using computers. They can browse the web, click buttons, read emails, write code. But when it comes to filling out web forms, they still do it the hard way: CSS selectors, fragile XPath queries, DOM scraping that breaks every time a designer tweaks a class name.</p>
+
+<p>Chrome is about to change that.</p>
+
+<h2>WebMCP: structured tool registration, built into the browser</h2>
+
+<p>Chrome 146 shipped an Early Preview of <strong>WebMCP</strong>, a browser-native API that lets websites register their interactive elements as structured tools. Think of it as MCP (Model Context Protocol) for desktop AI, but built directly into the browser itself.</p>
+
+<p>When a page registers a tool via WebMCP, an AI agent can see:</p>
+<ul>
+  <li><strong>What the tool is called</strong> (e.g. <code>submit_flight_search</code>)</li>
+  <li><strong>What it does</strong> (e.g. "Search for available flights between two cities")</li>
+  <li><strong>What inputs it expects</strong>: a full JSON Schema with field types, constraints, and descriptions</li>
+</ul>
+
+<p>No more guessing from HTML. No more brittle selectors. The agent just calls the tool.</p>
+
+<h2>The problem: adopting WebMCP manually is tedious</h2>
+
+<p>Here is what it takes to register a single form manually:</p>
+
+<pre><code>navigator.modelContext.registerTool({
+  name: 'search_flights',
+  description: 'Search for available flights between two airports on a given date.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      origin: { type: 'string', description: 'IATA code of departure airport' },
+      destination: { type: 'string', description: 'IATA code of arrival airport' },
+      departure_date: { type: 'string', format: 'date', description: 'Departure date (YYYY-MM-DD)' },
+      passengers: { type: 'integer', minimum: 1, maximum: 9 },
+      cabin_class: { type: 'string', enum: ['economy', 'business', 'first'] }
+    },
+    required: ['origin', 'destination', 'departure_date']
+  },
+  execute: async (params) => {
+    // fill the form, submit, return result
+  }
+});</code></pre>
+
+<p>That's for <em>one</em> form. A typical site has dozens.</p>
+
+<p>Then you have to maintain it every time a field changes. And write it for every platform your users are on: WordPress, Shopify, HubSpot, Zendesk, ServiceNow...</p>
+
+<h2>The solution: one script tag</h2>
+
+<p><strong><a href="https://autowebmcp.dev">auto-webmcp</a></strong> is an open-source library that does all of this automatically.</p>
+
+<p>Drop one script tag into your page:</p>
+
+<pre><code>&lt;script
+  src="https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js"
+  async&gt;
+&lt;/script&gt;</code></pre>
+
+<p>That's it. Every <code>&lt;form&gt;</code> on the page is automatically:</p>
+<ol>
+  <li><strong>Scanned</strong>: MutationObserver catches forms added by JavaScript too</li>
+  <li><strong>Analyzed</strong>: name inferred from submit button, heading, or form ID; description from legend or aria-label</li>
+  <li><strong>Schema-generated</strong>: HTML input types mapped to JSON Schema with constraints, enums, and field titles</li>
+  <li><strong>Registered</strong>: via <code>navigator.modelContext.registerTool()</code> with full spec compliance</li>
+</ol>
+
+<p>No manual JSON schema writing. No annotations required. No backend changes.</p>
+
+<h2>It reads your existing HTML intelligently</h2>
+
+<p>auto-webmcp infers everything it needs from your existing markup:</p>
+
+<table>
+  <thead>
+    <tr><th>What it needs</th><th>Where it looks</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Tool name</td><td><code>toolname</code> attr, then submit button text, then nearest heading, then form <code>id</code></td></tr>
+    <tr><td>Description</td><td><code>tooldescription</code> attr, then <code>&lt;legend&gt;</code> text, then <code>aria-label</code></td></tr>
+    <tr><td>Field type</td><td><code>&lt;input type&gt;</code>, <code>&lt;select&gt;</code>, <code>&lt;textarea&gt;</code> mapped to JSON Schema</td></tr>
+    <tr><td>Field title</td><td><code>&lt;label&gt;</code> text, then humanized field name</td></tr>
+    <tr><td>Options</td><td><code>&lt;option&gt;</code> elements collected as <code>enum</code> + <code>oneOf</code> with display labels</td></tr>
+  </tbody>
+</table>
+
+<p>If you want to override anything, you can add native spec attributes directly to the form:</p>
+
+<pre><code>&lt;form
+  toolname="submit_flight_search"
+  tooldescription="Search for available flights. Requires origin, destination, and date."
+  toolautosubmit="true"
+&gt;
+  ...
+&lt;/form&gt;</code></pre>
+
+<p>Or use <code>data-webmcp-*</code> attributes, which are useful for platforms where you cannot touch the form element directly.</p>
+
+<h2>Safe to ship on any site today</h2>
+
+<p>auto-webmcp is built around <strong>progressive enhancement</strong>:</p>
+<ul>
+  <li>No <code>navigator.modelContext</code>? The script loads and does nothing, silently</li>
+  <li>Password, hidden, and file inputs are never exposed to agents</li>
+  <li>No data leaves the browser: completely client-side, MIT licensed, no API key required</li>
+  <li>Works with React, Vue, Angular, and any framework (MutationObserver handles dynamic forms)</li>
+</ul>
+
+<p>You can drop it into production today and regular users will not notice anything. Only WebMCP-capable agents will see the registered tools.</p>
+
+<h2>Works on every platform</h2>
+
+<p>Because it is just a script tag, it works anywhere custom JavaScript is allowed:</p>
+<ul>
+  <li><strong>WordPress</strong>: install the <a href="https://autowebmcp.dev/platforms/wordpress">auto-webmcp plugin</a> or add one line to <code>functions.php</code></li>
+  <li><strong>Shopify</strong>: paste into <code>theme.liquid</code> before <code>&lt;/body&gt;</code></li>
+  <li><strong>Wix</strong>: Settings, Custom Code, Body end</li>
+  <li><strong>HubSpot</strong>: Footer HTML tracking code</li>
+  <li><strong>Zendesk</strong>: Zendesk Apps Framework</li>
+  <li><strong>ServiceNow</strong>: UI Scripts</li>
+</ul>
+
+<p><a href="https://autowebmcp.dev/platforms">Full platform guides</a></p>
+
+<h2>Try it now</h2>
+
+<ol>
+  <li>Open Chrome 146+ and enable <code>chrome://flags/#enable-webmcp-testing</code></li>
+  <li>Install the Model Context Tool Inspector extension from the Chrome Web Store</li>
+  <li>Visit <a href="https://autowebmcp.dev/demo">autowebmcp.dev/demo</a> and watch the registered tools appear in the inspector panel in real time</li>
+</ol>
+
+<p>The agentic web is arriving. WebMCP is the infrastructure layer. auto-webmcp is the one-line on-ramp.</p>
+
+<p class="cta"><a href="https://autowebmcp.dev">autowebmcp.dev</a> &nbsp;·&nbsp; <a href="https://github.com/prasanna-gyde/auto-webmcp">GitHub</a> &nbsp;·&nbsp; MIT &nbsp;·&nbsp; open source</p>
+
+</body>
+</html>
