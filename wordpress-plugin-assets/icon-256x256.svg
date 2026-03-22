@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Background -->
+  <rect width="256" height="256" rx="32" fill="#1a1a2e"/>
+
+  <!-- Lightning bolt - centred, lime green -->
+  <path d="M148 28 L88 136 H128 L108 228 L176 108 H136 Z"
+        fill="#e5fe96"/>
+
+  <!-- Subtle glow behind bolt -->
+  <path d="M148 28 L88 136 H128 L108 228 L176 108 H136 Z"
+        fill="none" stroke="#e5fe96" stroke-width="2" opacity="0.3"/>
+</svg>
