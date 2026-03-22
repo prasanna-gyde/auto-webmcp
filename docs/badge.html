@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI-Agent Ready | auto-webmcp</title>
+  <meta name="description" content="This site is AI-agent ready — its forms can be called by AI agents via Chrome WebMCP. Learn what that means and how to make your own site AI-agent ready in 60 seconds.">
+  <meta property="og:title" content="What does AI-agent ready mean?">
+  <meta property="og:description" content="This site's forms are callable by AI agents via Chrome WebMCP. Learn how to make your own site AI-agent ready in 60 seconds with auto-webmcp.">
+  <meta property="og:url" content="https://autowebmcp.dev/badge">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300C851'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --charcoal:   #262626;
+      --white:      #ffffff;
+      --lime:       #e5fe96;
+      --dark-green: #698200;
+      --olive-bg:   #f5f5f2;
+      --light-gray: #f8f9fa;
+      --border:     #e5e7eb;
+      --text:       #262626;
+      --text-muted: #6b7280;
+      --radius:     12px;
+      --shadow:     0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--olive-bg); color: var(--text);
+      line-height: 1.6; font-size: 16px; min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    .navbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(245,245,242,0.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border); padding: 0 1.5rem;
+    }
+    .navbar-inner {
+      max-width: 760px; margin: 0 auto; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .navbar-brand { font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; }
+    .navbar-brand .version { font-size: 0.72rem; color: var(--text-muted); background: var(--white); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; }
+    .navbar-links { display: flex; gap: 0.25rem; }
+    .navbar-links a { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; padding: 0.375rem 0.625rem; border-radius: 6px; transition: color 0.15s, background 0.15s; }
+    .navbar-links a:hover { color: var(--charcoal); background: rgba(38,38,38,0.06); }
+
+    .page { max-width: 760px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+
+    /* Hero */
+    .hero { text-align: center; margin-bottom: 3.5rem; }
+    .badge-preview {
+      display: inline-flex; align-items: center; gap: 0; margin-bottom: 2rem;
+      border-radius: 4px; overflow: hidden; font-family: 'DM Sans', sans-serif;
+      font-size: 0.78rem; font-weight: 600; letter-spacing: 0.01em;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .badge-left { background: var(--charcoal); color: var(--white); padding: 5px 10px; }
+    .badge-right { background: var(--dark-green); color: var(--white); padding: 5px 10px; }
+    .hero h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.75rem; }
+    .hero h1 em { font-style: normal; color: var(--dark-green); }
+    .hero p { font-size: 1rem; color: var(--text-muted); max-width: 540px; margin: 0 auto 1.5rem; line-height: 1.65; }
+    .hero-cta {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: var(--charcoal); color: var(--white);
+      font-size: 0.88rem; font-weight: 600; padding: 0.625rem 1.25rem;
+      border-radius: 8px; transition: opacity 0.15s;
+    }
+    .hero-cta:hover { opacity: 0.88; }
+
+    /* What section */
+    .section { margin-bottom: 3rem; }
+    .section h2 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1rem; }
+    .section p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.65; margin-bottom: 0.75rem; }
+    .section p:last-child { margin-bottom: 0; }
+
+    /* Steps */
+    .steps-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+    .step { display: flex; align-items: flex-start; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
+    .step:last-child { border-bottom: none; padding-bottom: 0; }
+    .step:first-child { padding-top: 0; }
+    .step-num {
+      width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+      background: var(--lime); color: var(--dark-green);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 700; margin-top: 1px;
+    }
+    .step-body { font-size: 0.9rem; line-height: 1.55; }
+    .step-body strong { font-weight: 600; }
+    code.inline {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.82em;
+      background: rgba(101,130,0,0.1); padding: 1px 5px; border-radius: 4px;
+      color: var(--dark-green);
+    }
+
+    /* Embed section */
+    .embed-card {
+      background: #16213e; border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18); overflow: hidden;
+    }
+    .embed-tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .embed-tab {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+      color: rgba(255,255,255,0.4); padding: 0.5rem 1rem; cursor: pointer;
+      border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+      background: none; border-top: none; border-left: none; border-right: none;
+    }
+    .embed-tab.active { color: #e5fe96; border-bottom-color: #e5fe96; }
+    .embed-toolbar {
+      display: flex; align-items: center; justify-content: flex-end;
+      padding: 0.5rem 1rem; background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .copy-btn {
+      font-family: 'DM Sans', sans-serif; font-size: 0.75rem; font-weight: 600;
+      padding: 3px 12px; border-radius: 6px; cursor: pointer;
+      background: rgba(229,254,150,0.12); border: 1px solid rgba(229,254,150,0.25); color: #e5fe96;
+      transition: background 0.15s;
+    }
+    .copy-btn:hover { background: rgba(229,254,150,0.2); }
+    .copy-btn.copied { background: rgba(134,239,172,0.15); border-color: rgba(134,239,172,0.3); color: #86efac; }
+    .embed-pre {
+      margin: 0; padding: 1.25rem; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; line-height: 1.7; color: #c9d1d9; overflow-x: auto; white-space: pre;
+    }
+    .embed-panel { display: none; }
+    .embed-panel.active { display: block; }
+
+    /* Divider */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+
+    /* Footer */
+    .page-footer { border-top: 1px solid var(--border); padding: 1.5rem; text-align: center; font-size: 0.8rem; color: var(--text-muted); }
+    .page-footer a { color: var(--dark-green); font-weight: 500; }
+    .page-footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#698200" style="vertical-align:-2px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        auto-webmcp
+        <span class="version">v0.2.1</span>
+      </a>
+      <nav class="navbar-links">
+        <a href="/">Home</a>
+        <a href="/demo">Demo</a>
+        <a href="/platforms">Platforms</a>
+        <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </nav>
+
+  <div class="page">
+
+    <div class="hero">
+      <div class="badge-preview">
+        <span class="badge-left">AI-agent</span>
+        <span class="badge-right">ready</span>
+      </div>
+      <h1>This site is <em>AI-agent ready</em></h1>
+      <p>
+        Its forms can be discovered and called by AI agents natively in the browser —
+        via Chrome's WebMCP standard. No scraping, no brittle selectors, no workarounds.
+      </p>
+      <a href="/" class="hero-cta">
+        Make your site AI-agent ready →
+      </a>
+    </div>
+
+    <div class="section">
+      <h2>What does "AI-agent ready" mean?</h2>
+      <p>
+        Chrome's <strong>WebMCP</strong> is a new browser-native API that lets AI agents discover and
+        interact with web page tools — just like how MCP (Model Context Protocol) works for desktop
+        AI apps, but built directly into the browser.
+      </p>
+      <p>
+        When a site is AI-agent ready, every form on it is registered as a structured tool: the agent
+        knows what inputs are required, what types they are, and what the form does — without having
+        to guess from HTML or use fragile CSS selectors.
+      </p>
+      <p>
+        This means an AI agent can <strong>fill a flight search, submit a support ticket, or complete
+        a checkout</strong> on behalf of a user — reliably, correctly, and with full awareness of what
+        it's doing.
+      </p>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section">
+      <h2>Make your site AI-agent ready in 60 seconds</h2>
+      <div class="steps-card">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            Add one script tag to your page — before <code class="inline">&lt;/body&gt;</code> or via
+            your platform's custom code section. No signup, no API key, no configuration required.
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            auto-webmcp automatically scans every <code class="inline">&lt;form&gt;</code>, infers
+            its name and description from the DOM, and registers it as an AI tool. Nothing to annotate manually.
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            Regular visitors see no difference. The script is completely invisible until a WebMCP-capable
+            AI agent is present. Safe to ship on any site, any platform.
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            Display the <strong>AI-agent ready</strong> badge in your README or site footer so others
+            know your site is on the agentic web.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section">
+      <h2>Add the badge to your site or repo</h2>
+      <p style="margin-bottom:1.25rem;">Copy the embed code for your preferred format.</p>
+
+      <div class="embed-card">
+        <div class="embed-tabs">
+          <button class="embed-tab active" onclick="switchTab(this, 'md')">Markdown</button>
+          <button class="embed-tab" onclick="switchTab(this, 'html')">HTML</button>
+          <button class="embed-tab" onclick="switchTab(this, 'rst')">RST</button>
+        </div>
+
+        <div id="panel-md" class="embed-panel active">
+          <div class="embed-toolbar">
+            <button class="copy-btn" onclick="copyCode(this, 'code-md')">Copy</button>
+          </div>
+          <pre class="embed-pre" id="code-md">[![AI-agent ready](https://autowebmcp.dev/badge.svg)](https://autowebmcp.dev)</pre>
+        </div>
+
+        <div id="panel-html" class="embed-panel">
+          <div class="embed-toolbar">
+            <button class="copy-btn" onclick="copyCode(this, 'code-html')">Copy</button>
+          </div>
+          <pre class="embed-pre" id="code-html">&lt;a href="https://autowebmcp.dev" target="_blank" rel="noopener"&gt;
+  &lt;img src="https://autowebmcp.dev/badge.svg" alt="AI-agent ready"&gt;
+&lt;/a&gt;</pre>
+        </div>
+
+        <div id="panel-rst" class="embed-panel">
+          <div class="embed-toolbar">
+            <button class="copy-btn" onclick="copyCode(this, 'code-rst')">Copy</button>
+          </div>
+          <pre class="embed-pre" id="code-rst">.. image:: https://autowebmcp.dev/badge.svg
+   :target: https://autowebmcp.dev
+   :alt: AI-agent ready</pre>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section">
+      <h2>Works on every platform</h2>
+      <p>
+        auto-webmcp works on any page that allows custom JavaScript — including WordPress, Shopify,
+        Wix, HubSpot, Zendesk, ServiceNow, and plain HTML sites.
+        <a href="/platforms" style="color:var(--dark-green);font-weight:500;">View platform guides →</a>
+      </p>
+    </div>
+
+  </div>
+
+  <footer class="page-footer">
+    <a href="/">Home</a> ·
+    <a href="/platforms">Platforms</a> ·
+    <a href="/demo">Demo</a> ·
+    <a href="https://github.com/prasanna-gyde/auto-webmcp" target="_blank" rel="noopener">GitHub</a> ·
+    A <a href="https://gyde.ai" target="_blank" rel="noopener" title="Gyde.ai — Specific Intelligence Systems for Real Businesses">Gyde.ai</a> initiative
+  </footer>
+
+  <script>
+    function copyCode(btn, id) {
+      var text = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      }).catch(function () { window.prompt('Copy:', text); });
+    }
+
+    function switchTab(btn, id) {
+      document.querySelectorAll('.embed-tab').forEach(function (t) { t.classList.remove('active'); });
+      document.querySelectorAll('.embed-panel').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById('panel-' + id).classList.add('active');
+    }
+  </script>
+
+</body>
+</html>
