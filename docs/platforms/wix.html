@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HubSpot Install Guide | auto-webmcp</title>
-  <meta name="description" content="Install auto-webmcp on HubSpot in under 5 minutes via the Custom HTML tracking code. Every lead capture form, contact form, and ticket form becomes callable by Breeze AI agents.">
-  <meta property="og:title" content="HubSpot + auto-webmcp: Every form callable by Breeze AI agents">
-  <meta property="og:description" content="Paste one script tag into HubSpot's tracking code. Every form on your portal becomes AI-callable instantly. No coding required.">
-  <meta property="og:url" content="https://autowebmcp.dev/platforms/hubspot">
+  <title>Wix Install Guide | auto-webmcp</title>
+  <meta name="description" content="Install auto-webmcp on Wix in under 10 minutes via Custom Code or Velo. Every Wix Form, contact form, and registration form becomes callable by AI agents.">
+  <meta property="og:title" content="Wix + auto-webmcp: Every form callable by AI agents">
+  <meta property="og:description" content="Use Wix Custom Code or Velo to inject auto-webmcp. Every Wix Form on your site becomes AI-callable instantly — no manual coding needed.">
+  <meta property="og:url" content="https://autowebmcp.dev/platforms/wix">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300C851'><path d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/></svg>">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -173,7 +173,7 @@
         <span>auto-webmcp</span>
         <span class="version">v0.2.1</span>
         <span class="crumb" aria-hidden="true">/</span>
-        <span class="crumb">platforms / hubspot</span>
+        <span class="crumb">platforms / wix</span>
       </a>
       <nav class="navbar-links">
         <a href="/">Home</a>
@@ -189,98 +189,106 @@
     <div class="breadcrumb">
       <a href="/platforms">Platforms</a>
       <span>›</span>
-      <span>HubSpot</span>
+      <span>Wix</span>
     </div>
 
     <div class="guide-hero">
-      <h1><img src="https://www.vectorlogo.zone/logos/hubspot/hubspot-icon.svg" alt="HubSpot"> HubSpot</h1>
+      <h1>
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+          <rect width="24" height="24" rx="4" fill="#0C6EFC"/>
+          <text x="3" y="17" font-family="Arial Black,sans-serif" font-weight="900" font-size="11" fill="#ffffff">WIX</text>
+        </svg>
+        Wix
+      </h1>
       <p>
-        Make every lead capture form, contact form, ticket creation form, and feedback survey on your
-        HubSpot portal callable by Breeze AI agents, without touching a single form. Paste one script
-        tag into the custom HTML tracking code section and you're done.
+        Make every Wix Form, contact form, member login, and registration form on your Wix site
+        callable by AI agents. Use Wix's built-in Custom Code feature — no Velo or developer mode
+        required — and paste one script tag that covers your entire site.
       </p>
       <div class="hero-badges">
-        <span class="hbadge hbadge-green"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00C851" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg> Works with Breeze AI agents</span>
-        <span class="hbadge hbadge-gray">⏱ ~5 min to deploy</span>
-        <span class="hbadge hbadge-gray"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> All pages, all portals</span>
+        <span class="hbadge hbadge-green"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00C851" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg> Works with Wix Forms</span>
+        <span class="hbadge hbadge-gray">⏱ ~10 min to deploy</span>
+        <span class="hbadge hbadge-gray">No Velo required for basic setup</span>
       </div>
     </div>
 
-    <!-- ── Step 1: Tracking Code ───────────────────────────────────────────── -->
+    <!-- ── Step 1: Custom Code (no-code) ─────────────────────────────────── -->
     <div class="section">
       <div class="section-heading">
         <span class="section-num">1</span>
-        Add the script via HubSpot tracking code
+        Add via Wix Custom Code (no Velo needed)
       </div>
+
+      <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">
+        Wix has a built-in Custom Code panel that lets you inject scripts sitewide without enabling
+        developer mode. This is the fastest method.
+      </p>
 
       <ul class="steps">
         <li>
           <span class="step-num">1</span>
-          <div>In your HubSpot portal, go to <strong>Settings</strong> (gear icon, top right).</div>
+          <div>In the Wix Editor, click <strong>Settings</strong> (gear icon) in the left sidebar, or go to your <strong>Wix Dashboard &rsaquo; Settings</strong>.</div>
         </li>
         <li>
           <span class="step-num">2</span>
-          <div>In the left sidebar, navigate to <strong>Website &rsaquo; Pages</strong>, then click the
-            <strong>Tracking &amp; Analytics</strong> tab (or search "Custom HTML" in the settings search bar).</div>
+          <div>Scroll down to <strong>Advanced</strong> and click <strong>Custom Code</strong>.</div>
         </li>
         <li>
           <span class="step-num">3</span>
-          <div>In the <strong>Additional code snippets</strong> section, choose
-            <strong>Footer HTML: all pages</strong> and paste the snippet below.</div>
+          <div>Click <strong>+ Add Custom Code</strong>. Paste the snippet below.</div>
         </li>
         <li>
           <span class="step-num">4</span>
-          <div>Click <strong>Save</strong>. The script will load on every published HubSpot page.</div>
+          <div>Set <strong>Add Code to Pages</strong> to <strong>All Pages</strong>, and <strong>Place Code in</strong> to <strong>Body — End</strong>.</div>
         </li>
         <li>
           <span class="step-num">5</span>
-          <div>Open any page with a form and check the browser console. You should see
-            <code class="inline">[auto-webmcp] registered N tools</code>.</div>
+          <div>Click <strong>Apply</strong> and <strong>Publish</strong> your site. Open any page with a Wix Form and check the browser console for <code class="inline">[auto-webmcp] registered N tools</code>.</div>
         </li>
       </ul>
 
       <div style="margin-top:1rem;">
         <div class="snippet-wrapper">
           <div class="snippet-toolbar">
-            <span class="snippet-label">HubSpot: Footer HTML snippet</span>
-            <button class="copy-btn" onclick="copyCode(this, 'code-hs')">Copy</button>
+            <span class="snippet-label">Wix Custom Code snippet</span>
+            <button class="copy-btn" onclick="copyCode(this, 'code-wix')">Copy</button>
           </div>
-          <pre class="snippet-pre" id="code-hs">&lt;script src="https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js" async&gt;&lt;/script&gt;</pre>
+          <pre class="snippet-pre" id="code-wix">&lt;script src="https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js" async&gt;&lt;/script&gt;</pre>
         </div>
-        <div class="snippet-note">That's it. One line. auto-webmcp auto-initialises on load and registers every &lt;form&gt; on the page.</div>
+        <div class="snippet-note">One tag. auto-webmcp auto-initialises on load and registers every &lt;form&gt; on the page.</div>
       </div>
     </div>
 
-    <!-- ── Step 2: CMS Pages ──────────────────────────────────────────────── -->
+    <!-- ── Step 2: Velo ──────────────────────────────────────────────────── -->
     <div class="section">
       <div class="section-heading">
         <span class="section-num">2</span>
-        Alternative: per-page via CMS module
+        Alternative: inject via Velo (developer mode)
       </div>
 
       <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">
-        If you prefer per-page control, you can add the script tag through HubSpot's drag-and-drop
-        page editor using a <strong>Custom HTML module</strong>.
+        If you already use Velo (Wix's developer platform), you can add the script tag dynamically
+        from your <code class="inline">public/pages/masterPage.js</code> file so it loads on every page.
       </p>
 
-      <ul class="steps">
-        <li>
-          <span class="step-num">1</span>
-          <div>Open the page in the HubSpot page editor.</div>
-        </li>
-        <li>
-          <span class="step-num">2</span>
-          <div>Drag a <strong>Custom HTML</strong> module anywhere on the page (it renders no visible content).</div>
-        </li>
-        <li>
-          <span class="step-num">3</span>
-          <div>Paste the same <code class="inline">&lt;script&gt;</code> tag above into the module's HTML field.</div>
-        </li>
-        <li>
-          <span class="step-num">4</span>
-          <div>Publish the page.</div>
-        </li>
-      </ul>
+      <div class="snippet-wrapper">
+        <div class="snippet-toolbar">
+          <span class="snippet-label">public/pages/masterPage.js (Velo)</span>
+          <button class="copy-btn" onclick="copyCode(this, 'code-wix-velo')">Copy</button>
+        </div>
+        <pre class="snippet-pre" id="code-wix-velo">$w.onReady(function () {
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.1/dist/auto-webmcp.iife.js';
+  s.async = true;
+  document.body.appendChild(s);
+});</pre>
+      </div>
+
+      <div class="note-box" style="margin-top:1rem;">
+        <strong>Prefer Custom Code over Velo for this.</strong> The Custom Code panel (Step 1) is
+        simpler and does not require enabling dev mode. Use Velo only if you are already using it
+        for other site customisations.
+      </div>
     </div>
 
     <!-- ── What gets registered ──────────────────────────────────────────── -->
@@ -291,51 +299,23 @@
       </div>
 
       <div class="info-card">
-        <h3>HubSpot form types that become AI-callable out of the box</h3>
+        <h3>Wix form types that become AI-callable out of the box</h3>
         <ul>
-          <li><strong>Lead capture forms</strong>: name, email, company, phone, lead source</li>
-          <li><strong>Contact forms</strong>: enquiry type, message, preferred contact method</li>
-          <li><strong>Ticket creation</strong>: subject, description, priority, category</li>
-          <li><strong>Feedback surveys</strong>: NPS, CSAT, open text responses</li>
-          <li><strong>Meeting / demo request forms</strong>: date, team, agenda</li>
-          <li><strong>Newsletter signup</strong>: email, subscription preferences</li>
+          <li><strong>Wix Forms</strong>: any form built with the Wix Forms app (contact, lead gen, registration, RSVP, quiz)</li>
+          <li><strong>Member login &amp; registration</strong>: email, password fields</li>
+          <li><strong>Wix Bookings</strong>: service selection, date/time pickers, customer details</li>
+          <li><strong>Wix eCommerce</strong>: checkout and address forms</li>
+          <li><strong>Newsletter subscribe</strong>: email capture widgets</li>
+          <li><strong>Custom HTML forms</strong>: any <code class="inline">&lt;form&gt;</code> element added via Wix's HTML embed widget</li>
         </ul>
       </div>
 
       <div class="note-box" style="margin-top:1rem;">
-        <strong>HubSpot Forms JS (forms.js) compatibility:</strong> HubSpot embeds forms via an
-        iframe by default. If you use HubSpot's native embed code, make sure the form is rendered
-        directly in the page DOM (not inside an iframe) by selecting <strong>Inline</strong> rendering
-        in the form settings. auto-webmcp cannot cross iframe boundaries.
-      </div>
-    </div>
-
-    <!-- ── Optional: enrich forms ────────────────────────────────────────── -->
-    <div class="section">
-      <div class="section-heading">
-        <span class="section-num">4</span>
-        Optional: enrich with spec attributes
-      </div>
-
-      <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">
-        For HubSpot CMS templates, add these attributes directly to the
-        <code class="inline">&lt;form&gt;</code> element in your HubLang template file to give
-        Breeze AI agents a precise description of what each form does.
-      </p>
-
-      <div class="snippet-wrapper">
-        <div class="snippet-toolbar">
-          <span class="snippet-label">HubLang template: form attributes</span>
-          <button class="copy-btn" onclick="copyCode(this, 'code-hs-attrs')">Copy</button>
-        </div>
-        <pre class="snippet-pre" id="code-hs-attrs">&lt;form
-  id="demo-request-form"
-  toolname="request_product_demo"
-  tooldescription="Schedule a product demo. Requires name, email, company size, and preferred time slot."
-  toolautosubmit="true"
-&gt;
-  ...
-&lt;/form&gt;</pre>
+        <strong>Wix Forms rendering:</strong> Wix Forms renders form fields directly in the page DOM,
+        so auto-webmcp can reach them without any extra configuration. However, some Wix form fields
+        use custom components with shadow DOM — if a field is not captured, try adding a
+        <code class="inline">toolparamdescription</code> attribute to your form's underlying HTML via
+        the Wix HTML embed widget.
       </div>
     </div>
 
@@ -347,9 +327,9 @@
           <div class="label">Test it</div>
           <div class="title">Try auto-webmcp in your browser console →</div>
         </a>
-        <a href="/platforms/zendesk" class="next-card">
+        <a href="/platforms/wordpress" class="next-card">
           <div class="label">Another platform</div>
-          <div class="title">Zendesk install guide →</div>
+          <div class="title">WordPress install guide →</div>
         </a>
       </div>
     </div>
