@@ -1,5 +1,5 @@
 === AI-Agent Ready Forms (auto-webmcp) ===
-Contributors: prasannagyde
+Contributors: getprasannav
 Tags: ai, forms, webmcp, ai-agent, automation, woocommerce, contact-form
 Requires at least: 6.0
 Tested up to: 6.7
@@ -14,7 +14,7 @@ Make every form on your WordPress site callable by AI agents. Drop-in, zero conf
 
 **AI agents are coming for the web. This plugin makes your site ready in 60 seconds.**
 
-auto-webmcp automatically makes every HTML form on your WordPress site callable by AI agents via [Chrome WebMCP](https://developer.chrome.com/docs/extensions/webmcp) — the new browser-native standard for AI agent tool registration.
+auto-webmcp automatically makes every HTML form on your WordPress site callable by AI agents via [Chrome WebMCP](https://developer.chrome.com/docs/extensions/webmcp), the new browser-native standard for AI agent tool registration.
 
 No manual JSON schema writing. No form modifications. No backend changes. Just activate the plugin and every `<form>` on your site is instantly registered as a structured AI tool.
 
@@ -67,7 +67,7 @@ auto-webmcp is MIT licensed with no API keys, no usage tracking, no server calls
 
 = Does this require any special browser? =
 
-Chrome 146 or later with the WebMCP testing flag enabled at `chrome://flags/#enable-webmcp-testing`. On other browsers the script loads but silently does nothing — no errors, no impact on regular visitors.
+Chrome 146 or later with the WebMCP testing flag enabled at `chrome://flags/#enable-webmcp-testing`. On other browsers the script loads but silently does nothing: no errors, no impact on regular visitors.
 
 = Will this break my forms? =
 
@@ -89,12 +89,6 @@ Never. Password, hidden, and file inputs are excluded by design and will never a
 
 Yes. Add `data-no-webmcp` to any `<form>` element to exclude it:
 `<form data-no-webmcp>...</form>`
-
-== Screenshots ==
-
-1. Settings page — simple enable/disable toggle
-2. Chrome DevTools showing registered tools via the Model Context Tool Inspector extension
-3. WooCommerce checkout form registered as an AI tool with full field schema
 
 == Changelog ==
 

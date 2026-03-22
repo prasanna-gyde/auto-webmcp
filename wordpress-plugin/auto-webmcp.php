@@ -79,8 +79,8 @@ function auto_webmcp_settings_page() {
     <div class="wrap">
         <h1>AI-Agent Ready Forms</h1>
         <p>
-            Powered by <a href="https://autowebmcp.dev" target="_blank" rel="noopener">auto-webmcp</a> —
-            makes every HTML form on your site callable by AI agents via
+            Powered by <a href="https://autowebmcp.dev" target="_blank" rel="noopener">auto-webmcp</a>.
+            Makes every HTML form on your site callable by AI agents via
             <a href="https://developer.chrome.com/docs/extensions/webmcp" target="_blank" rel="noopener">Chrome WebMCP</a>.
         </p>
         <form method="post" action="options.php">
