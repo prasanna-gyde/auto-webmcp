@@ -1,8 +1,8 @@
-=== AI-Agent Ready Forms (auto-webmcp) ===
+=== auto-webmcp ===
 Contributors: getprasannav
 Tags: ai, forms, webmcp, ai-agent, automation, woocommerce, contact-form
 Requires at least: 6.0
-Tested up to: 6.7
+Tested up to: 6.9
 Stable tag: 0.2.1
 Requires PHP: 7.4
 License: MIT

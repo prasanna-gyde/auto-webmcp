@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: AI-Agent Ready Forms (auto-webmcp)
+ * Plugin Name: auto-webmcp
  * Plugin URI:  https://autowebmcp.dev
  * Description: Make every form on your WordPress site callable by AI agents via Chrome WebMCP. Drop-in, zero configuration, works with WooCommerce, Contact Form 7, WPForms, and all standard HTML forms.
  * Version:     0.2.1
