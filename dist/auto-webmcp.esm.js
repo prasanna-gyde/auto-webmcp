@@ -607,7 +607,7 @@ function attachSubmitInterceptor(form, toolName) {
     const { resolve } = pending;
     pendingExecutions.delete(form);
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
-    const text = JSON.stringify(formData);
+    const text = `Form submitted. Fields: ${JSON.stringify(formData)}`;
     const result = { content: [{ type: "text", text }] };
     if (e.agentInvoked && typeof e.respondWith === "function") {
       e.preventDefault();
@@ -620,13 +620,18 @@ function attachSubmitInterceptor(form, toolName) {
   });
 }
 function setReactValue(el, v) {
+  el.focus();
+  el.select?.();
+  if (document.execCommand("insertText", false, v)) {
+    return;
+  }
   const setter = el instanceof HTMLTextAreaElement ? _textareaValueSetter : _inputValueSetter;
   if (setter) {
     setter.call(el, v);
   } else {
     el.value = v;
   }
-  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: v }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 function setReactChecked(el, checked) {
@@ -661,7 +666,16 @@ function fillFormFields(form, params) {
     }
     const ariaEl = fieldEls?.get(key);
     if (ariaEl) {
-      fillAriaField(ariaEl, value);
+      if (ariaEl instanceof HTMLInputElement) {
+        fillInput(ariaEl, form, key, value);
+      } else if (ariaEl instanceof HTMLTextAreaElement) {
+        setReactValue(ariaEl, String(value ?? ""));
+      } else if (ariaEl instanceof HTMLSelectElement) {
+        ariaEl.value = String(value ?? "");
+        ariaEl.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        fillAriaField(ariaEl, value);
+      }
     }
   }
 }

@@ -110,7 +110,7 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
     pendingExecutions.delete(form);
 
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
-    const text = JSON.stringify(formData);
+    const text = `Form submitted. Fields: ${JSON.stringify(formData)}`;
     const result: ExecuteResult = { content: [{ type: 'text', text }] };
 
     if (e.agentInvoked && typeof e.respondWith === 'function') {
@@ -132,13 +132,25 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
 // ---------------------------------------------------------------------------
 
 function setReactValue(el: HTMLInputElement | HTMLTextAreaElement, v: string): void {
+  el.focus();
+  // Select all existing text so the insert replaces it
+  el.select?.();
+
+  // execCommand('insertText') simulates real typing — triggers native browser
+  // input events that every framework (React, Catalyst, Stimulus, Vue, etc.)
+  // listens to. Most reliable cross-framework approach.
+  if (document.execCommand('insertText', false, v)) {
+    return;
+  }
+
+  // Fallback: native prototype setter (bypasses React controlled-input cache)
   const setter = el instanceof HTMLTextAreaElement ? _textareaValueSetter : _inputValueSetter;
   if (setter) {
     setter.call(el, v);
   } else {
     el.value = v;
   }
-  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: v }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
@@ -184,10 +196,21 @@ function fillFormFields(form: HTMLFormElement, params: Record<string, unknown>):
       continue;
     }
 
-    // Fall back to ARIA-role or id-keyed element from the field map
+    // Fall back to id-keyed or ARIA-role element from the field map.
+    // The element may be a native input stored by id (e.g. inside a shadow DOM
+    // that querySelector can't pierce), so check the type before filling.
     const ariaEl = fieldEls?.get(key);
     if (ariaEl) {
-      fillAriaField(ariaEl, value);
+      if (ariaEl instanceof HTMLInputElement) {
+        fillInput(ariaEl, form, key, value);
+      } else if (ariaEl instanceof HTMLTextAreaElement) {
+        setReactValue(ariaEl, String(value ?? ''));
+      } else if (ariaEl instanceof HTMLSelectElement) {
+        ariaEl.value = String(value ?? '');
+        ariaEl.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        fillAriaField(ariaEl, value);
+      }
     }
   }
 }

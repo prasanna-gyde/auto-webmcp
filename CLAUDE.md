@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Writing Style
+Never use em-dashes (---, &mdash;, or the — character) anywhere in content, copy, or code comments. Use a comma, colon, or rewrite the sentence instead.
+
 ## Git Commits
 Never add "Co-Authored-By: Claude" or any Co-Authored-By line referencing Claude/Sonnet (or any Anthropic model) to commit messages.
 
