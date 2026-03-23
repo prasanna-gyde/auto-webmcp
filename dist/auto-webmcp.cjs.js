@@ -110,6 +110,16 @@ function resolveConfig(userConfig) {
 }
 
 // src/schema.ts
+var ARIA_ROLES_TO_SCAN = [
+  "textbox",
+  "combobox",
+  "checkbox",
+  "radio",
+  "switch",
+  "spinbutton",
+  "searchbox",
+  "slider"
+];
 function inputTypeToSchema(input) {
   if (input instanceof HTMLInputElement) {
     return mapInputElement(input);
@@ -205,6 +215,49 @@ function collectRadioOneOf(form, name) {
     return { const: r.value, title: title || r.value };
   });
 }
+function ariaRoleToSchema(el, role) {
+  switch (role) {
+    case "checkbox":
+    case "switch":
+      return { type: "boolean" };
+    case "spinbutton":
+    case "slider": {
+      const prop = { type: "number" };
+      const min = el.getAttribute("aria-valuemin");
+      const max = el.getAttribute("aria-valuemax");
+      if (min !== null)
+        prop.minimum = parseFloat(min);
+      if (max !== null)
+        prop.maximum = parseFloat(max);
+      return prop;
+    }
+    case "combobox": {
+      const ownedId = el.getAttribute("aria-owns") ?? el.getAttribute("aria-controls");
+      if (ownedId) {
+        const listbox = document.getElementById(ownedId);
+        if (listbox) {
+          const options = Array.from(listbox.querySelectorAll('[role="option"]')).filter(
+            (o) => o.getAttribute("aria-disabled") !== "true"
+          );
+          if (options.length > 0) {
+            const enumValues = options.map((o) => (o.getAttribute("data-value") ?? o.textContent ?? "").trim()).filter(Boolean);
+            const oneOf = options.map((o) => ({
+              const: (o.getAttribute("data-value") ?? o.textContent ?? "").trim(),
+              title: (o.textContent ?? "").trim()
+            }));
+            return { type: "string", enum: enumValues, oneOf };
+          }
+        }
+      }
+      return { type: "string" };
+    }
+    case "textbox":
+    case "searchbox":
+    case "radio":
+    default:
+      return { type: "string" };
+  }
+}
 function getRadioLabelText(radio) {
   const parent = radio.closest("label");
   if (parent) {
@@ -230,8 +283,8 @@ var formIndex = 0;
 function analyzeForm(form, override) {
   const name = override?.name ?? inferToolName(form);
   const description = override?.description ?? inferToolDescription(form);
-  const inputSchema = buildSchema(form);
-  return { name, description, inputSchema };
+  const { schema: inputSchema, fieldElements } = buildSchema(form);
+  return { name, description, inputSchema, fieldElements };
 }
 function inferToolName(form) {
   const nativeName = form.getAttribute("toolname");
@@ -331,6 +384,7 @@ function inferToolDescription(form) {
 function buildSchema(form) {
   const properties = {};
   const required = [];
+  const fieldElements = /* @__PURE__ */ new Map();
   const processedRadioGroups = /* @__PURE__ */ new Set();
   const controls = Array.from(
     form.querySelectorAll(
@@ -339,12 +393,13 @@ function buildSchema(form) {
   );
   for (const control of controls) {
     const name = control.name;
-    if (!name)
+    const fieldKey = name || resolveNativeControlFallbackKey(control);
+    if (!fieldKey)
       continue;
     if (control instanceof HTMLInputElement && control.type === "radio") {
-      if (processedRadioGroups.has(name))
+      if (processedRadioGroups.has(fieldKey))
         continue;
-      processedRadioGroups.add(name);
+      processedRadioGroups.add(fieldKey);
     }
     const schemaProp = inputTypeToSchema(control);
     if (!schemaProp)
@@ -354,17 +409,123 @@ function buildSchema(form) {
     if (desc)
       schemaProp.description = desc;
     if (control instanceof HTMLInputElement && control.type === "radio") {
-      schemaProp.enum = collectRadioEnum(form, name);
-      const radioOneOf = collectRadioOneOf(form, name);
+      schemaProp.enum = collectRadioEnum(form, fieldKey);
+      const radioOneOf = collectRadioOneOf(form, fieldKey);
       if (radioOneOf.length > 0)
         schemaProp.oneOf = radioOneOf;
     }
-    properties[name] = schemaProp;
+    properties[fieldKey] = schemaProp;
+    if (!name) {
+      fieldElements.set(fieldKey, control);
+    }
     if (control.required) {
-      required.push(name);
+      required.push(fieldKey);
     }
   }
-  return { type: "object", properties, required };
+  const ariaControls = collectAriaControls(form);
+  const processedAriaRadioGroups = /* @__PURE__ */ new Set();
+  for (const { el, role, key } of ariaControls) {
+    if (properties[key])
+      continue;
+    if (role === "radio") {
+      if (processedAriaRadioGroups.has(key))
+        continue;
+      processedAriaRadioGroups.add(key);
+    }
+    const schemaProp = ariaRoleToSchema(el, role);
+    schemaProp.title = inferAriaFieldTitle(el);
+    const desc = inferAriaFieldDescription(el);
+    if (desc)
+      schemaProp.description = desc;
+    properties[key] = schemaProp;
+    fieldElements.set(key, el);
+    if (el.getAttribute("aria-required") === "true") {
+      required.push(key);
+    }
+  }
+  return { schema: { type: "object", properties, required }, fieldElements };
+}
+function resolveNativeControlFallbackKey(control) {
+  const el = control;
+  if (el.dataset["webmcpName"])
+    return sanitizeName(el.dataset["webmcpName"]);
+  if (control.id)
+    return sanitizeName(control.id);
+  const label = control.getAttribute("aria-label");
+  if (label)
+    return sanitizeName(label);
+  return null;
+}
+function collectAriaControls(form) {
+  const selector = ARIA_ROLES_TO_SCAN.map((r) => `[role="${r}"]`).join(", ");
+  const results = [];
+  for (const el of Array.from(form.querySelectorAll(selector))) {
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)
+      continue;
+    if (el.getAttribute("aria-hidden") === "true" || el.hidden)
+      continue;
+    const role = el.getAttribute("role");
+    const key = resolveAriaFieldKey(el);
+    if (!key)
+      continue;
+    results.push({ el, role, key });
+  }
+  return results;
+}
+function resolveAriaFieldKey(el) {
+  const htmlEl = el;
+  if (htmlEl.dataset?.["webmcpName"])
+    return sanitizeName(htmlEl.dataset["webmcpName"]);
+  if (el.id)
+    return sanitizeName(el.id);
+  const label = el.getAttribute("aria-label");
+  if (label)
+    return sanitizeName(label);
+  const labelledById = el.getAttribute("aria-labelledby");
+  if (labelledById) {
+    const text = document.getElementById(labelledById)?.textContent?.trim();
+    if (text)
+      return sanitizeName(text);
+  }
+  return null;
+}
+function inferAriaFieldTitle(el) {
+  const htmlEl = el;
+  if (htmlEl.dataset?.["webmcpTitle"])
+    return htmlEl.dataset["webmcpTitle"];
+  const label = el.getAttribute("aria-label");
+  if (label)
+    return label.trim();
+  const labelledById = el.getAttribute("aria-labelledby");
+  if (labelledById) {
+    const text = document.getElementById(labelledById)?.textContent?.trim();
+    if (text)
+      return text;
+  }
+  if (el.id)
+    return humanizeName(el.id);
+  return "";
+}
+function inferAriaFieldDescription(el) {
+  const nativeParamDesc = el.getAttribute("toolparamdescription");
+  if (nativeParamDesc)
+    return nativeParamDesc.trim();
+  const htmlEl = el;
+  if (htmlEl.dataset?.["webmcpDescription"])
+    return htmlEl.dataset["webmcpDescription"];
+  const ariaDesc = el.getAttribute("aria-description");
+  if (ariaDesc)
+    return ariaDesc;
+  const describedById = el.getAttribute("aria-describedby");
+  if (describedById) {
+    const text = document.getElementById(describedById)?.textContent?.trim();
+    if (text)
+      return text;
+  }
+  const placeholder = el.getAttribute("placeholder") ?? el.dataset?.["placeholder"];
+  if (placeholder)
+    return placeholder.trim();
+  return "";
 }
 function inferFieldTitle(control) {
   if ("dataset" in control && control.dataset["webmcpTitle"]) {
@@ -433,7 +594,15 @@ init_registry();
 
 // src/interceptor.ts
 var pendingExecutions = /* @__PURE__ */ new WeakMap();
-function buildExecuteHandler(form, config, toolName) {
+var lastParams = /* @__PURE__ */ new WeakMap();
+var formFieldElements = /* @__PURE__ */ new WeakMap();
+var _inputValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+var _textareaValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+var _checkedSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked")?.set;
+function buildExecuteHandler(form, config, toolName, metadata) {
+  if (metadata?.fieldElements) {
+    formFieldElements.set(form, metadata.fieldElements);
+  }
   attachSubmitInterceptor(form, toolName);
   return async (params) => {
     fillFormFields(form, params);
@@ -456,7 +625,7 @@ function attachSubmitInterceptor(form, toolName) {
       return;
     const { resolve } = pending;
     pendingExecutions.delete(form);
-    const formData = serializeFormData(form);
+    const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
     const text = JSON.stringify(formData);
     const result = { content: [{ type: "text", text }] };
     if (e.agentInvoked && typeof e.respondWith === "function") {
@@ -469,52 +638,98 @@ function attachSubmitInterceptor(form, toolName) {
     window.dispatchEvent(new CustomEvent("toolcancel", { detail: { toolName } }));
   });
 }
+function setReactValue(el, v) {
+  const setter = el instanceof HTMLTextAreaElement ? _textareaValueSetter : _inputValueSetter;
+  if (setter) {
+    setter.call(el, v);
+  } else {
+    el.value = v;
+  }
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+function setReactChecked(el, checked) {
+  if (_checkedSetter) {
+    _checkedSetter.call(el, checked);
+  } else {
+    el.checked = checked;
+  }
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+function findNativeField(form, key) {
+  const esc = CSS.escape(key);
+  return form.querySelector(`[name="${esc}"]`) ?? form.querySelector(
+    `input#${esc}, textarea#${esc}, select#${esc}`
+  );
+}
 function fillFormFields(form, params) {
-  for (const [name, value] of Object.entries(params)) {
-    const escapedName = CSS.escape(name);
-    const input = form.querySelector(
-      `[name="${escapedName}"]`
-    );
-    if (!input)
+  lastParams.set(form, params);
+  const fieldEls = formFieldElements.get(form);
+  for (const [key, value] of Object.entries(params)) {
+    const input = findNativeField(form, key);
+    if (input) {
+      if (input instanceof HTMLInputElement) {
+        fillInput(input, form, key, value);
+      } else if (input instanceof HTMLTextAreaElement) {
+        setReactValue(input, String(value ?? ""));
+      } else if (input instanceof HTMLSelectElement) {
+        input.value = String(value ?? "");
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
       continue;
-    if (input instanceof HTMLInputElement) {
-      fillInput(input, form, name, value);
-    } else if (input instanceof HTMLTextAreaElement) {
-      input.value = String(value ?? "");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    } else if (input instanceof HTMLSelectElement) {
-      input.value = String(value ?? "");
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    const ariaEl = fieldEls?.get(key);
+    if (ariaEl) {
+      fillAriaField(ariaEl, value);
     }
   }
 }
-function fillInput(input, form, name, value) {
+function fillInput(input, form, key, value) {
   const type = input.type.toLowerCase();
   if (type === "checkbox") {
-    input.checked = Boolean(value);
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    setReactChecked(input, Boolean(value));
     return;
   }
   if (type === "radio") {
-    const escapedName = CSS.escape(name);
+    const esc = CSS.escape(key);
     const radios = form.querySelectorAll(
-      `input[type="radio"][name="${escapedName}"]`
+      `input[type="radio"][name="${esc}"]`
     );
     for (const radio of radios) {
       if (radio.value === String(value)) {
-        radio.checked = true;
+        if (_checkedSetter) {
+          _checkedSetter.call(radio, true);
+        } else {
+          radio.checked = true;
+        }
         radio.dispatchEvent(new Event("change", { bubbles: true }));
         break;
       }
     }
     return;
   }
-  input.value = String(value ?? "");
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
+  setReactValue(input, String(value ?? ""));
 }
-function serializeFormData(form) {
+function fillAriaField(el, value) {
+  const role = el.getAttribute("role");
+  if (role === "checkbox" || role === "switch") {
+    el.setAttribute("aria-checked", String(Boolean(value)));
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return;
+  }
+  if (role === "radio") {
+    el.setAttribute("aria-checked", "true");
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return;
+  }
+  const htmlEl = el;
+  if (htmlEl.isContentEditable) {
+    htmlEl.textContent = String(value ?? "");
+  }
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+function serializeFormData(form, params, fieldEls) {
   const result = {};
   const data = new FormData(form);
   for (const [key, val] of data.entries()) {
@@ -527,6 +742,27 @@ function serializeFormData(form) {
       }
     } else {
       result[key] = val;
+    }
+  }
+  if (params) {
+    for (const key of Object.keys(params)) {
+      if (key in result)
+        continue;
+      const el = findNativeField(form, key) ?? fieldEls?.get(key) ?? null;
+      if (!el)
+        continue;
+      if (el instanceof HTMLInputElement && el.type === "checkbox") {
+        result[key] = el.checked;
+      } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+        result[key] = el.value;
+      } else {
+        const role = el.getAttribute("role");
+        if (role === "checkbox" || role === "switch") {
+          result[key] = el.getAttribute("aria-checked") === "true";
+        } else {
+          result[key] = el.textContent?.trim() ?? "";
+        }
+      }
     }
   }
   return result;
@@ -640,8 +876,9 @@ async function registerForm(form, config) {
   if (config.debug) {
     warnToolQuality(metadata.name, metadata.description);
   }
-  const execute = buildExecuteHandler(form, config, metadata.name);
+  const execute = buildExecuteHandler(form, config, metadata.name, metadata);
   await registerFormTool(form, metadata, execute);
+  registeredForms.add(form);
   if (config.debug) {
     console.debug(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
   }
@@ -653,12 +890,43 @@ async function unregisterForm(form, config) {
   if (!name)
     return;
   await unregisterFormTool(form);
+  registeredForms.delete(form);
   if (config.debug) {
     console.debug(`[auto-webmcp] Unregistered: ${name}`);
   }
   emit("form:unregistered", form, name);
 }
 var observer = null;
+var registeredForms = /* @__PURE__ */ new WeakSet();
+var reAnalysisTimers = /* @__PURE__ */ new Map();
+var RE_ANALYSIS_DEBOUNCE_MS = 300;
+function isInterestingNode(node) {
+  const tag = node.tagName.toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select")
+    return true;
+  const role = node.getAttribute("role");
+  if (role && ARIA_ROLES_TO_SCAN.includes(role))
+    return true;
+  if (node.querySelector("input, textarea, select"))
+    return true;
+  for (const r of ARIA_ROLES_TO_SCAN) {
+    if (node.querySelector(`[role="${r}"]`))
+      return true;
+  }
+  return false;
+}
+function scheduleReAnalysis(form, config) {
+  const existing = reAnalysisTimers.get(form);
+  if (existing)
+    clearTimeout(existing);
+  reAnalysisTimers.set(
+    form,
+    setTimeout(() => {
+      reAnalysisTimers.delete(form);
+      void registerForm(form, config);
+    }, RE_ANALYSIS_DEBOUNCE_MS)
+  );
+}
 function startObserver(config) {
   if (observer)
     return;
@@ -667,8 +935,15 @@ function startObserver(config) {
       for (const node of mutation.addedNodes) {
         if (!(node instanceof Element))
           continue;
-        const forms = node instanceof HTMLFormElement ? [node] : Array.from(node.querySelectorAll("form"));
-        for (const form of forms) {
+        if (node instanceof HTMLFormElement) {
+          void registerForm(node, config);
+          continue;
+        }
+        const parentForm = node.closest("form");
+        if (parentForm instanceof HTMLFormElement && registeredForms.has(parentForm) && isInterestingNode(node)) {
+          scheduleReAnalysis(parentForm, config);
+        }
+        for (const form of Array.from(node.querySelectorAll("form"))) {
           void registerForm(form, config);
         }
       }

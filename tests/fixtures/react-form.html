@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create Repository</title>
+</head>
+<body>
+  <h1>Create a new repository</h1>
+
+  <!--
+    Simulates a React-rendered form where fields are ARIA-role elements
+    rather than native <input> elements (as seen on github.com/new).
+  -->
+  <form id="create-repository" action="/new" aria-label="Create a new GitHub repository">
+
+    <!-- Unnamed native input keyed by id (React-controlled, no name attr) -->
+    <label for="repo_name">Repository name</label>
+    <input id="repo_name" type="text" aria-label="Repository name" maxlength="100" required>
+
+    <!-- ARIA textbox (contenteditable custom component) -->
+    <div id="repo_description"
+         role="textbox"
+         aria-label="Description (optional)"
+         aria-multiline="false"
+         contenteditable="true"></div>
+
+    <!-- ARIA radio group for visibility -->
+    <fieldset>
+      <legend>Visibility</legend>
+      <div role="radio" id="visibility_public" aria-label="Public" aria-checked="true"
+           tabindex="0">Public</div>
+      <div role="radio" id="visibility_private" aria-label="Private" aria-checked="false"
+           tabindex="-1">Private</div>
+    </fieldset>
+
+    <!-- ARIA checkbox (toggle) -->
+    <div role="checkbox" id="initialize_repo" aria-label="Initialize this repository with a README"
+         aria-checked="false" tabindex="0">
+      Add a README file
+    </div>
+
+    <!-- ARIA combobox linked to a listbox for .gitignore template -->
+    <div role="combobox"
+         id="gitignore_template"
+         aria-label=".gitignore template"
+         aria-expanded="false"
+         aria-controls="gitignore-listbox">None</div>
+    <ul id="gitignore-listbox" role="listbox" hidden>
+      <li role="option" data-value="none">None</li>
+      <li role="option" data-value="node">Node</li>
+      <li role="option" data-value="python">Python</li>
+      <li role="option" data-value="java">Java</li>
+    </ul>
+
+    <button type="submit">Create repository</button>
+  </form>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

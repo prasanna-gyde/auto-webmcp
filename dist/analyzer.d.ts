@@ -7,6 +7,8 @@ export interface ToolMetadata {
     name: string;
     description: string;
     inputSchema: JsonSchema;
+    /** Key → DOM element for fields not addressable by name (id-keyed or ARIA-role controls). */
+    fieldElements?: Map<string, Element>;
 }
 /** Reset form index counter (useful in tests) */
 export declare function resetFormIndex(): void;

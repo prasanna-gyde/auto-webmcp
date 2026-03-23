@@ -7,6 +7,7 @@
  * promise with a structured response.
  */
 import { ResolvedConfig } from './config.js';
+import type { ToolMetadata } from './analyzer.js';
 declare global {
     interface SubmitEvent {
         /** True when the form was submitted by an AI agent via WebMCP */
@@ -29,5 +30,5 @@ export interface ExecuteResult {
  *  2. Fires a submit event (or auto-submits if configured)
  *  3. Resolves with structured form data once submitted
  */
-export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string): (params: Record<string, unknown>) => Promise<ExecuteResult>;
+export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string, metadata?: ToolMetadata): (params: Record<string, unknown>) => Promise<ExecuteResult>;
 //# sourceMappingURL=interceptor.d.ts.map

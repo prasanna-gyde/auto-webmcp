@@ -454,3 +454,92 @@ test.describe('Contact form', () => {
     ]);
   });
 });
+
+test.describe('ARIA-role fields (React-style form)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/react-form.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('registers exactly one tool', async ({ page }) => {
+    const tools = await getRegisteredTools(page);
+    expect(tools).toHaveLength(1);
+  });
+
+  test('tool name derived from submit button', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    expect(tools[0]?.['name']).toBe('create_repository');
+  });
+
+  test('unnamed native input keyed by id is included', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).toContain('repo_name');
+    expect((props['repo_name'] as Record<string, unknown>)?.['type']).toBe('string');
+  });
+
+  test('ARIA textbox (contenteditable) is included as string', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).toContain('repo_description');
+    expect((props['repo_description'] as Record<string, unknown>)?.['type']).toBe('string');
+  });
+
+  test('ARIA radio elements are included', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const keys = Object.keys(props);
+    // Each radio is a separate key since they have distinct ids/aria-labels
+    expect(keys).toContain('visibility_public');
+    expect(keys).toContain('visibility_private');
+  });
+
+  test('ARIA checkbox is type boolean', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).toContain('initialize_repo');
+    expect((props['initialize_repo'] as Record<string, unknown>)?.['type']).toBe('boolean');
+  });
+
+  test('ARIA combobox with linked listbox has enum values', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).toContain('gitignore_template');
+    const comboboxProp = props['gitignore_template'] as Record<string, unknown>;
+    expect(comboboxProp?.['type']).toBe('string');
+    expect(comboboxProp?.['enum']).toEqual(['none', 'node', 'python', 'java']);
+  });
+});
+
+test.describe('Lazy-rendered inputs', () => {
+  test('re-registers form when inputs are injected after 200ms', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/lazy-inputs.html');
+
+    // Wait for initial registration (form with no inputs)
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    // Wait for the 200ms setTimeout + debounce to fire and re-register
+    await page.waitForFunction(
+      () => {
+        const tools = (window as unknown as Record<string, unknown>)['__registeredTools'] as Array<Record<string, unknown>>;
+        const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
+        const props = schema?.['properties'] as Record<string, unknown>;
+        return props && Object.keys(props).length >= 2;
+      },
+      { timeout: 3000 },
+    );
+
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).toContain('username');
+    expect(Object.keys(props)).toContain('email');
+  });
+});

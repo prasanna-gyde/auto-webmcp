@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lazy Form</title>
+</head>
+<body>
+  <h1>Sign Up</h1>
+
+  <!--
+    Simulates a React-rendered form where inputs are injected into an
+    existing <form> after initial page load (e.g. via useEffect).
+  -->
+  <form id="signup-form" action="/signup">
+    <button type="submit">Sign Up</button>
+  </form>
+
+  <script>
+    // Inject inputs after a short delay, mimicking React's lifecycle rendering
+    setTimeout(function () {
+      var form = document.getElementById('signup-form');
+      var btn = form.querySelector('button');
+
+      var usernameLabel = document.createElement('label');
+      usernameLabel.setAttribute('for', 'username');
+      usernameLabel.textContent = 'Username';
+
+      var usernameInput = document.createElement('input');
+      usernameInput.id = 'username';
+      usernameInput.name = 'username';
+      usernameInput.type = 'text';
+      usernameInput.required = true;
+      usernameInput.placeholder = 'Pick a username';
+
+      var emailLabel = document.createElement('label');
+      emailLabel.setAttribute('for', 'email');
+      emailLabel.textContent = 'Email';
+
+      var emailInput = document.createElement('input');
+      emailInput.id = 'email';
+      emailInput.name = 'email';
+      emailInput.type = 'email';
+      emailInput.required = true;
+
+      form.insertBefore(emailLabel, btn);
+      form.insertBefore(emailInput, btn);
+      form.insertBefore(usernameLabel, emailLabel);
+      form.insertBefore(usernameInput, usernameLabel);
+    }, 200);
+  </script>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

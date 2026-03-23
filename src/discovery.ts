@@ -7,6 +7,7 @@ import { analyzeForm } from './analyzer.js';
 import { registerFormTool, unregisterFormTool } from './registry.js';
 import { buildExecuteHandler } from './interceptor.js';
 import { enrichMetadata } from './enhancer.js';
+import { ARIA_ROLES_TO_SCAN } from './schema.js';
 
 // ---------------------------------------------------------------------------
 // Events
@@ -68,9 +69,10 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
     warnToolQuality(metadata.name, metadata.description);
   }
 
-  const execute = buildExecuteHandler(form, config, metadata.name);
+  const execute = buildExecuteHandler(form, config, metadata.name, metadata);
 
   await registerFormTool(form, metadata, execute);
+  registeredForms.add(form);
 
   if (config.debug) {
     console.debug(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
@@ -85,6 +87,7 @@ async function unregisterForm(form: HTMLFormElement, config: ResolvedConfig): Pr
   if (!name) return;
 
   await unregisterFormTool(form);
+  registeredForms.delete(form);
 
   if (config.debug) {
     console.debug(`[auto-webmcp] Unregistered: ${name}`);
@@ -99,6 +102,38 @@ async function unregisterForm(form: HTMLFormElement, config: ResolvedConfig): Pr
 
 let observer: MutationObserver | null = null;
 
+/** Set of currently registered forms, used to detect lazy-rendered child inputs. */
+const registeredForms = new WeakSet<HTMLFormElement>();
+
+/** Debounce timers for re-analysis when inputs are added to existing forms. */
+const reAnalysisTimers = new Map<HTMLFormElement, ReturnType<typeof setTimeout>>();
+const RE_ANALYSIS_DEBOUNCE_MS = 300;
+
+/** Returns true if node is (or contains) an input-like or ARIA-role element. */
+function isInterestingNode(node: Element): boolean {
+  const tag = node.tagName.toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+  const role = node.getAttribute('role');
+  if (role && (ARIA_ROLES_TO_SCAN as readonly string[]).includes(role)) return true;
+  if (node.querySelector('input, textarea, select')) return true;
+  for (const r of ARIA_ROLES_TO_SCAN) {
+    if (node.querySelector(`[role="${r}"]`)) return true;
+  }
+  return false;
+}
+
+function scheduleReAnalysis(form: HTMLFormElement, config: ResolvedConfig): void {
+  const existing = reAnalysisTimers.get(form);
+  if (existing) clearTimeout(existing);
+  reAnalysisTimers.set(
+    form,
+    setTimeout(() => {
+      reAnalysisTimers.delete(form);
+      void registerForm(form, config);
+    }, RE_ANALYSIS_DEBOUNCE_MS),
+  );
+}
+
 function startObserver(config: ResolvedConfig): void {
   if (observer) return;
 
@@ -107,11 +142,19 @@ function startObserver(config: ResolvedConfig): void {
       for (const node of mutation.addedNodes) {
         if (!(node instanceof Element)) continue;
 
-        const forms = node instanceof HTMLFormElement
-          ? [node]
-          : Array.from(node.querySelectorAll<HTMLFormElement>('form'));
+        if (node instanceof HTMLFormElement) {
+          void registerForm(node, config);
+          continue;
+        }
 
-        for (const form of forms) {
+        // Newly added child inside an already-registered form?
+        const parentForm = node.closest('form');
+        if (parentForm instanceof HTMLFormElement && registeredForms.has(parentForm) && isInterestingNode(node)) {
+          scheduleReAnalysis(parentForm, config);
+        }
+
+        // New forms nested inside the added subtree
+        for (const form of Array.from(node.querySelectorAll<HTMLFormElement>('form'))) {
           void registerForm(form, config);
         }
       }

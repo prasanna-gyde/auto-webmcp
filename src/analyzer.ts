@@ -2,13 +2,15 @@
  * analyzer.ts — Infer tool name, description, and JSON Schema from form DOM
  */
 
-import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum, collectRadioOneOf } from './schema.js';
+import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum, collectRadioOneOf, ARIA_ROLES_TO_SCAN, AriaRole, ariaRoleToSchema } from './schema.js';
 import { FormOverride } from './config.js';
 
 export interface ToolMetadata {
   name: string;
   description: string;
   inputSchema: JsonSchema;
+  /** Key → DOM element for fields not addressable by name (id-keyed or ARIA-role controls). */
+  fieldElements?: Map<string, Element>;
 }
 
 // Track form index for fallback naming
@@ -23,9 +25,9 @@ export function resetFormIndex(): void {
 export function analyzeForm(form: HTMLFormElement, override?: FormOverride): ToolMetadata {
   const name = override?.name ?? inferToolName(form);
   const description = override?.description ?? inferToolDescription(form);
-  const inputSchema = buildSchema(form);
+  const { schema: inputSchema, fieldElements } = buildSchema(form);
 
-  return { name, description, inputSchema };
+  return { name, description, inputSchema, fieldElements };
 }
 
 // ---------------------------------------------------------------------------
@@ -160,9 +162,10 @@ function inferToolDescription(form: HTMLFormElement): string {
 // JSON Schema construction
 // ---------------------------------------------------------------------------
 
-function buildSchema(form: HTMLFormElement): JsonSchema {
+function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements: Map<string, Element> } {
   const properties: Record<string, JsonSchemaProperty> = {};
   const required: string[] = [];
+  const fieldElements = new Map<string, Element>();
 
   // Track which radio group names we've already processed
   const processedRadioGroups = new Set<string>();
@@ -174,17 +177,17 @@ function buildSchema(form: HTMLFormElement): JsonSchema {
   );
 
   for (const control of controls) {
-    // Skip unnamed controls — can't be submitted
     const name = control.name;
-    if (!name) continue;
+    const fieldKey = name || resolveNativeControlFallbackKey(control);
+    if (!fieldKey) continue;
 
     // Skip already-processed radio groups
     if (
       control instanceof HTMLInputElement &&
       control.type === 'radio'
     ) {
-      if (processedRadioGroups.has(name)) continue;
-      processedRadioGroups.add(name);
+      if (processedRadioGroups.has(fieldKey)) continue;
+      processedRadioGroups.add(fieldKey);
     }
 
     const schemaProp = inputTypeToSchema(control);
@@ -200,20 +203,134 @@ function buildSchema(form: HTMLFormElement): JsonSchema {
       control instanceof HTMLInputElement &&
       control.type === 'radio'
     ) {
-      schemaProp.enum = collectRadioEnum(form, name);
-      const radioOneOf = collectRadioOneOf(form, name);
+      schemaProp.enum = collectRadioEnum(form, fieldKey);
+      const radioOneOf = collectRadioOneOf(form, fieldKey);
       if (radioOneOf.length > 0) schemaProp.oneOf = radioOneOf;
     }
 
-    properties[name] = schemaProp;
+    properties[fieldKey] = schemaProp;
+
+    // Track id-keyed or aria-label-keyed fields for the interceptor
+    if (!name) {
+      fieldElements.set(fieldKey, control);
+    }
 
     // Mark as required if the HTML attribute says so
     if (control.required) {
-      required.push(name);
+      required.push(fieldKey);
     }
   }
 
-  return { type: 'object', properties, required };
+  // ARIA role-based controls (custom components not using native inputs)
+  const ariaControls = collectAriaControls(form);
+  const processedAriaRadioGroups = new Set<string>();
+
+  for (const { el, role, key } of ariaControls) {
+    if (properties[key]) continue; // already covered by a native control
+
+    if (role === 'radio') {
+      if (processedAriaRadioGroups.has(key)) continue;
+      processedAriaRadioGroups.add(key);
+    }
+
+    const schemaProp = ariaRoleToSchema(el, role);
+    schemaProp.title = inferAriaFieldTitle(el);
+    const desc = inferAriaFieldDescription(el);
+    if (desc) schemaProp.description = desc;
+
+    properties[key] = schemaProp;
+    fieldElements.set(key, el);
+
+    if (el.getAttribute('aria-required') === 'true') {
+      required.push(key);
+    }
+  }
+
+  return { schema: { type: 'object', properties, required }, fieldElements };
+}
+
+/** Derive a schema key for a native control that lacks a name attribute */
+function resolveNativeControlFallbackKey(
+  control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+): string | null {
+  const el = control as HTMLElement;
+  if (el.dataset['webmcpName']) return sanitizeName(el.dataset['webmcpName']!);
+  if (control.id) return sanitizeName(control.id);
+  const label = control.getAttribute('aria-label');
+  if (label) return sanitizeName(label);
+  return null;
+}
+
+/** Collect ARIA-role-based interactive elements inside a form, excluding native inputs */
+function collectAriaControls(form: HTMLFormElement): Array<{ el: Element; role: AriaRole; key: string }> {
+  const selector = ARIA_ROLES_TO_SCAN.map((r) => `[role="${r}"]`).join(', ');
+  const results: Array<{ el: Element; role: AriaRole; key: string }> = [];
+
+  for (const el of Array.from(form.querySelectorAll(selector))) {
+    // Skip native inputs — already handled above
+    if (
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement
+    ) continue;
+
+    // Skip hidden elements
+    if (el.getAttribute('aria-hidden') === 'true' || (el as HTMLElement).hidden) continue;
+
+    const role = el.getAttribute('role') as AriaRole;
+    const key = resolveAriaFieldKey(el);
+    if (!key) continue;
+
+    results.push({ el, role, key });
+  }
+
+  return results;
+}
+
+/** Derive a schema key from an ARIA element */
+function resolveAriaFieldKey(el: Element): string | null {
+  const htmlEl = el as HTMLElement;
+  if (htmlEl.dataset?.['webmcpName']) return sanitizeName(htmlEl.dataset['webmcpName']!);
+  if (el.id) return sanitizeName(el.id);
+  const label = el.getAttribute('aria-label');
+  if (label) return sanitizeName(label);
+  const labelledById = el.getAttribute('aria-labelledby');
+  if (labelledById) {
+    const text = document.getElementById(labelledById)?.textContent?.trim();
+    if (text) return sanitizeName(text);
+  }
+  return null;
+}
+
+function inferAriaFieldTitle(el: Element): string {
+  const htmlEl = el as HTMLElement;
+  if (htmlEl.dataset?.['webmcpTitle']) return htmlEl.dataset['webmcpTitle']!;
+  const label = el.getAttribute('aria-label');
+  if (label) return label.trim();
+  const labelledById = el.getAttribute('aria-labelledby');
+  if (labelledById) {
+    const text = document.getElementById(labelledById)?.textContent?.trim();
+    if (text) return text;
+  }
+  if (el.id) return humanizeName(el.id);
+  return '';
+}
+
+function inferAriaFieldDescription(el: Element): string {
+  const nativeParamDesc = el.getAttribute('toolparamdescription');
+  if (nativeParamDesc) return nativeParamDesc.trim();
+  const htmlEl = el as HTMLElement;
+  if (htmlEl.dataset?.['webmcpDescription']) return htmlEl.dataset['webmcpDescription']!;
+  const ariaDesc = el.getAttribute('aria-description');
+  if (ariaDesc) return ariaDesc;
+  const describedById = el.getAttribute('aria-describedby');
+  if (describedById) {
+    const text = document.getElementById(describedById)?.textContent?.trim();
+    if (text) return text;
+  }
+  const placeholder = el.getAttribute('placeholder') ?? (el as HTMLElement).dataset?.['placeholder'];
+  if (placeholder) return placeholder.trim();
+  return '';
 }
 
 function inferFieldTitle(

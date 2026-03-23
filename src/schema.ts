@@ -2,6 +2,13 @@
  * schema.ts — HTML input type → JSON Schema type mapping
  */
 
+export const ARIA_ROLES_TO_SCAN = [
+  'textbox', 'combobox', 'checkbox', 'radio', 'switch',
+  'spinbutton', 'searchbox', 'slider',
+] as const;
+
+export type AriaRole = typeof ARIA_ROLES_TO_SCAN[number];
+
 export interface JsonSchemaProperty {
   type: string;
   format?: string;
@@ -146,6 +153,54 @@ export function collectRadioOneOf(
     const title = getRadioLabelText(r);
     return { const: r.value, title: title || r.value };
   });
+}
+
+/** Maps an ARIA role element to a JSON Schema property */
+export function ariaRoleToSchema(el: Element, role: AriaRole): JsonSchemaProperty {
+  switch (role) {
+    case 'checkbox':
+    case 'switch':
+      return { type: 'boolean' };
+
+    case 'spinbutton':
+    case 'slider': {
+      const prop: JsonSchemaProperty = { type: 'number' };
+      const min = el.getAttribute('aria-valuemin');
+      const max = el.getAttribute('aria-valuemax');
+      if (min !== null) prop.minimum = parseFloat(min);
+      if (max !== null) prop.maximum = parseFloat(max);
+      return prop;
+    }
+
+    case 'combobox': {
+      const ownedId = el.getAttribute('aria-owns') ?? el.getAttribute('aria-controls');
+      if (ownedId) {
+        const listbox = document.getElementById(ownedId);
+        if (listbox) {
+          const options = Array.from(listbox.querySelectorAll('[role="option"]')).filter(
+            (o) => o.getAttribute('aria-disabled') !== 'true',
+          );
+          if (options.length > 0) {
+            const enumValues = options
+              .map((o) => (o.getAttribute('data-value') ?? o.textContent ?? '').trim())
+              .filter(Boolean);
+            const oneOf = options.map((o) => ({
+              const: (o.getAttribute('data-value') ?? o.textContent ?? '').trim(),
+              title: (o.textContent ?? '').trim(),
+            }));
+            return { type: 'string', enum: enumValues, oneOf };
+          }
+        }
+      }
+      return { type: 'string' };
+    }
+
+    case 'textbox':
+    case 'searchbox':
+    case 'radio':
+    default:
+      return { type: 'string' };
+  }
 }
 
 function getRadioLabelText(radio: HTMLInputElement): string {
