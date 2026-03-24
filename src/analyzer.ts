@@ -258,6 +258,18 @@ function resolveNativeControlFallbackKey(
   if (control.id) return sanitizeName(control.id);
   const label = control.getAttribute('aria-label');
   if (label) return sanitizeName(label);
+  // Fallback: placeholder text — common for minimalist forms (e.g. Ghost newsletter)
+  // that have no name/id/aria-label on their inputs.
+  if (
+    (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) &&
+    control.placeholder?.trim()
+  ) {
+    return sanitizeName(control.placeholder.trim());
+  }
+  // Final fallback: input type for typed inputs without any text identifier.
+  if (control instanceof HTMLInputElement && control.type !== 'text') {
+    return control.type;
+  }
   return null;
 }
 
@@ -350,6 +362,14 @@ function inferFieldTitle(
 
   // 4. id attribute (humanised)
   if (control.id) return humanizeName(control.id);
+
+  // 5. placeholder text (last resort for inputs with no name/id/label)
+  if (
+    (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) &&
+    control.placeholder?.trim()
+  ) {
+    return control.placeholder.trim();
+  }
 
   return '';
 }

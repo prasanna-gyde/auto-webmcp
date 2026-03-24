@@ -435,6 +435,12 @@ function resolveNativeControlFallbackKey(control) {
   const label = control.getAttribute("aria-label");
   if (label)
     return sanitizeName(label);
+  if ((control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) && control.placeholder?.trim()) {
+    return sanitizeName(control.placeholder.trim());
+  }
+  if (control instanceof HTMLInputElement && control.type !== "text") {
+    return control.type;
+  }
   return null;
 }
 function collectAriaControls(form) {
@@ -519,6 +525,9 @@ function inferFieldTitle(control) {
     return humanizeName(control.name);
   if (control.id)
     return humanizeName(control.id);
+  if ((control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) && control.placeholder?.trim()) {
+    return control.placeholder.trim();
+  }
   return "";
 }
 function inferFieldDescription(control) {
