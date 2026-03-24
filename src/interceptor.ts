@@ -45,6 +45,9 @@ const formFieldElements = new WeakMap<HTMLFormElement, Map<string, Element>>();
 /** Per-form required fields that the agent did not supply (populated before submit, consumed in interceptor) */
 const pendingWarnings = new WeakMap<HTMLFormElement, string[]>();
 
+/** Per-form fill warnings (invalid/out-of-range values detected during field filling) */
+const pendingFillWarnings = new WeakMap<HTMLFormElement, string[]>();
+
 // React-compatible native prototype setters (retrieved once at module init).
 // Using these bypasses React's controlled-input tracking so onChange fires correctly.
 const _inputValueSetter: ((v: string) => void) | undefined =
@@ -77,6 +80,7 @@ export function buildExecuteHandler(
   attachSubmitInterceptor(form, toolName);
 
   return async (params: Record<string, unknown>): Promise<ExecuteResult> => {
+    pendingFillWarnings.set(form, []);
     fillFormFields(form, params);
 
     // Dispatch toolactivated event per spec
@@ -153,9 +157,13 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
     const missing = pendingWarnings.get(form);
     pendingWarnings.delete(form);
-    const warningText = missing?.length
-      ? ` Note: required fields were not filled: ${missing.join(', ')}.`
-      : '';
+    const fillWarnings = pendingFillWarnings.get(form) ?? [];
+    pendingFillWarnings.delete(form);
+    const allWarnings = [
+      ...(missing?.length ? [`required fields were not filled: ${missing.join(', ')}`] : []),
+      ...fillWarnings,
+    ];
+    const warningText = allWarnings.length ? ` Note: ${allWarnings.join('; ')}.` : '';
     const text = `Form submitted. Fields: ${JSON.stringify(formData)}${warningText}`;
     const result: ExecuteResult = { content: [{ type: 'text', text }] };
 
@@ -309,7 +317,38 @@ function fillInput(
   const type = input.type.toLowerCase();
 
   if (type === 'checkbox') {
+    // Agent may pass an array for checkbox groups (multiple checkboxes with same name)
+    if (Array.isArray(value)) {
+      const esc = CSS.escape(key);
+      const allBoxes = form.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][name="${esc}"]`);
+      for (const box of allBoxes) {
+        setReactChecked(box, (value as unknown[]).map(String).includes(box.value));
+      }
+      return;
+    }
     setReactChecked(input, Boolean(value));
+    return;
+  }
+
+  if (type === 'number' || type === 'range') {
+    const raw = String(value ?? '');
+    const num = Number(raw);
+    if (raw === '' || isNaN(num)) {
+      pendingFillWarnings.get(form)?.push(`"${key}" expects a number, got: ${JSON.stringify(value)}`);
+      return;
+    }
+    const min = input.min !== '' ? parseFloat(input.min) : -Infinity;
+    const max = input.max !== '' ? parseFloat(input.max) : Infinity;
+    if (num < min || num > max) {
+      pendingFillWarnings.get(form)?.push(
+        `"${key}" value ${num} is outside allowed range [${input.min || '?'}, ${input.max || '?'}]`,
+      );
+      input.value = String(Math.min(Math.max(num, min), max));
+    } else {
+      input.value = String(num);
+    }
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: String(num) }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
     return;
   }
 
@@ -347,6 +386,23 @@ function fillAriaField(el: Element, value: unknown): void {
   if (role === 'radio') {
     el.setAttribute('aria-checked', 'true');
     el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return;
+  }
+
+  if (role === 'radiogroup') {
+    // Find the matching radio option inside the group and activate it
+    const radios = Array.from(el.querySelectorAll('[role="radio"]'));
+    for (const radio of radios) {
+      const val = (radio.getAttribute('data-value') ?? radio.getAttribute('aria-label') ?? radio.textContent ?? '').trim();
+      if (val === String(value)) {
+        radio.setAttribute('aria-checked', 'true');
+        radio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        for (const other of radios) {
+          if (other !== radio) other.setAttribute('aria-checked', 'false');
+        }
+        break;
+      }
+    }
     return;
   }
 

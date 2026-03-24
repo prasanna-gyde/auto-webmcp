@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Interests Form</title>
+</head>
+<body>
+  <h2>Your Interests</h2>
+  <form id="interests-form" action="/interests" method="POST">
+    <p>Select your interests:</p>
+    <label><input type="checkbox" name="interests" value="sports"> Sports</label>
+    <label><input type="checkbox" name="interests" value="music"> Music</label>
+    <label><input type="checkbox" name="interests" value="travel"> Travel</label>
+    <label><input type="checkbox" name="interests" value="tech"> Technology</label>
+
+    <p>Newsletter:</p>
+    <label><input type="checkbox" name="newsletter" value="yes"> Subscribe to newsletter</label>
+
+    <button type="submit">Save Interests</button>
+  </form>
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

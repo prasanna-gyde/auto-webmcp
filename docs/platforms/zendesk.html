@@ -171,7 +171,7 @@
       <a href="/" class="navbar-brand">
         <span><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" style="vertical-align:-2px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
         <span>auto-webmcp</span>
-        <span class="version">v0.2.8</span>
+        <span class="version">v0.2.9</span>
         <span class="crumb" aria-hidden="true">/</span>
         <span class="crumb">platforms / zendesk</span>
       </a>
@@ -277,7 +277,7 @@
     // We use postMessage to ask the parent to load the script for us.
     // Alternative: add the cdn.jsdelivr.net domain to your CSP allowlist in Admin.
     client.request({
-      url: 'https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.8/dist/auto-webmcp.iife.js',
+      url: 'https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.9/dist/auto-webmcp.iife.js',
       type: 'GET',
       dataType: 'text'
     }).then(function (scriptText) {
@@ -332,7 +332,7 @@
             <span class="snippet-label">document_head.hbs: add before &lt;/head&gt;</span>
             <button class="copy-btn" onclick="copyCode(this, 'code-zd-theme')">Copy</button>
           </div>
-          <pre class="snippet-pre" id="code-zd-theme">&lt;script src="https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.8/dist/auto-webmcp.iife.js" async&gt;&lt;/script&gt;</pre>
+          <pre class="snippet-pre" id="code-zd-theme">&lt;script src="https://cdn.jsdelivr.net/npm/auto-webmcp@0.2.9/dist/auto-webmcp.iife.js" async&gt;&lt;/script&gt;</pre>
         </div>
       </div>
     </div>

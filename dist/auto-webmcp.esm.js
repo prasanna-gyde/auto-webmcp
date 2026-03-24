@@ -221,6 +221,11 @@ function mapSelectElement(select) {
     return { type: "string" };
   return { type: "string", enum: enumValues, oneOf };
 }
+function collectCheckboxEnum(form, name) {
+  return Array.from(
+    form.querySelectorAll(`input[type="checkbox"][name="${CSS.escape(name)}"]`)
+  ).map((cb) => cb.value).filter((v) => v !== "" && v !== "on");
+}
 function collectRadioEnum(form, name) {
   const radios = Array.from(
     form.querySelectorAll(`input[type="radio"][name="${CSS.escape(name)}"]`)
@@ -407,6 +412,7 @@ function buildSchema(form) {
   const required = [];
   const fieldElements = /* @__PURE__ */ new Map();
   const processedRadioGroups = /* @__PURE__ */ new Set();
+  const processedCheckboxGroups = /* @__PURE__ */ new Set();
   const controls = Array.from(
     form.querySelectorAll(
       "input, textarea, select"
@@ -421,6 +427,11 @@ function buildSchema(form) {
       if (processedRadioGroups.has(fieldKey))
         continue;
       processedRadioGroups.add(fieldKey);
+    }
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      if (processedCheckboxGroups.has(fieldKey))
+        continue;
+      processedCheckboxGroups.add(fieldKey);
     }
     const schemaProp = inputTypeToSchema(control);
     if (!schemaProp)
@@ -437,6 +448,22 @@ function buildSchema(form) {
       if (radioOneOf.length > 0)
         schemaProp.oneOf = radioOneOf;
     }
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      const checkboxValues = collectCheckboxEnum(form, fieldKey);
+      if (checkboxValues.length > 1) {
+        const arrayProp = {
+          type: "array",
+          items: { type: "string", enum: checkboxValues },
+          title: schemaProp.title
+        };
+        if (schemaProp.description)
+          arrayProp.description = schemaProp.description;
+        properties[fieldKey] = arrayProp;
+        if (control.required)
+          required.push(fieldKey);
+        continue;
+      }
+    }
     properties[fieldKey] = schemaProp;
     if (!name) {
       fieldElements.set(fieldKey, control);
@@ -447,7 +474,7 @@ function buildSchema(form) {
   }
   const ariaControls = collectAriaControls(form);
   const processedAriaRadioGroups = /* @__PURE__ */ new Set();
-  for (const { el, role, key } of ariaControls) {
+  for (const { el, role, key, enumValues, enumOneOf } of ariaControls) {
     if (properties[key])
       continue;
     if (role === "radio") {
@@ -456,6 +483,11 @@ function buildSchema(form) {
       processedAriaRadioGroups.add(key);
     }
     const schemaProp = ariaRoleToSchema(el, role);
+    if (enumValues && enumValues.length > 0) {
+      schemaProp.enum = enumValues;
+      if (enumOneOf && enumOneOf.length > 0)
+        schemaProp.oneOf = enumOneOf;
+    }
     schemaProp.title = inferAriaFieldTitle(el);
     const desc = inferAriaFieldDescription(el);
     if (desc)
@@ -487,7 +519,7 @@ function resolveNativeControlFallbackKey(control) {
 }
 function collectAriaControls(form) {
   const selector = ARIA_ROLES_TO_SCAN.map((r) => `[role="${r}"]`).join(", ");
-  const results = [];
+  const rawResults = [];
   for (const el of Array.from(form.querySelectorAll(selector))) {
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)
       continue;
@@ -497,9 +529,38 @@ function collectAriaControls(form) {
     const key = resolveAriaFieldKey(el);
     if (!key)
       continue;
-    results.push({ el, role, key });
+    rawResults.push({ el, role, key });
   }
-  return results;
+  const radioEntries = rawResults.filter((e) => e.role === "radio");
+  const nonRadioEntries = rawResults.filter((e) => e.role !== "radio");
+  const radioGroupMap = /* @__PURE__ */ new Map();
+  const ungroupedRadios = [];
+  for (const entry of radioEntries) {
+    const group = entry.el.closest('[role="radiogroup"]');
+    if (group) {
+      if (!radioGroupMap.has(group))
+        radioGroupMap.set(group, []);
+      radioGroupMap.get(group).push(entry.el);
+    } else {
+      ungroupedRadios.push(entry);
+    }
+  }
+  const groupedEntries = [];
+  for (const [group, members] of radioGroupMap) {
+    const groupKey = resolveAriaFieldKey(group);
+    if (!groupKey)
+      continue;
+    const enumValues = members.map((el) => (el.getAttribute("data-value") ?? el.getAttribute("aria-label") ?? el.textContent ?? "").trim()).filter(Boolean);
+    const enumOneOf = members.map((el) => {
+      const val = (el.getAttribute("data-value") ?? el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
+      const title = (el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
+      return { const: val, title: title || val };
+    }).filter((e) => e.const !== "");
+    if (enumValues.length > 0) {
+      groupedEntries.push({ el: group, role: "radio", key: groupKey, enumValues, enumOneOf });
+    }
+  }
+  return [...nonRadioEntries, ...groupedEntries, ...ungroupedRadios];
 }
 function resolveAriaFieldKey(el) {
   const htmlEl = el;
@@ -695,6 +756,7 @@ function buildSchemaFromInputs(inputs) {
   const required = [];
   const fieldElements = /* @__PURE__ */ new Map();
   const processedRadioGroups = /* @__PURE__ */ new Set();
+  const processedCheckboxGroups = /* @__PURE__ */ new Set();
   for (const control of inputs) {
     const name = control.name;
     const fieldKey = name || resolveNativeControlFallbackKey(control);
@@ -705,6 +767,11 @@ function buildSchemaFromInputs(inputs) {
         continue;
       processedRadioGroups.add(fieldKey);
     }
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      if (processedCheckboxGroups.has(fieldKey))
+        continue;
+      processedCheckboxGroups.add(fieldKey);
+    }
     const schemaProp = inputTypeToSchema(control);
     if (!schemaProp)
       continue;
@@ -714,6 +781,22 @@ function buildSchemaFromInputs(inputs) {
     const desc = inferFieldDescription(control);
     if (desc)
       schemaProp.description = desc;
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      const checkboxValues = inputs.filter((i) => i instanceof HTMLInputElement && i.type === "checkbox" && i.name === fieldKey).map((cb) => cb.value).filter((v) => v !== "" && v !== "on");
+      if (checkboxValues.length > 1) {
+        const arrayProp = {
+          type: "array",
+          items: { type: "string", enum: checkboxValues },
+          title: schemaProp.title
+        };
+        if (schemaProp.description)
+          arrayProp.description = schemaProp.description;
+        properties[fieldKey] = arrayProp;
+        if (control.required)
+          required.push(fieldKey);
+        continue;
+      }
+    }
     properties[fieldKey] = schemaProp;
     if (!name)
       fieldElements.set(fieldKey, control);
@@ -731,6 +814,7 @@ var pendingExecutions = /* @__PURE__ */ new WeakMap();
 var lastParams = /* @__PURE__ */ new WeakMap();
 var formFieldElements = /* @__PURE__ */ new WeakMap();
 var pendingWarnings = /* @__PURE__ */ new WeakMap();
+var pendingFillWarnings = /* @__PURE__ */ new WeakMap();
 var _inputValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 var _textareaValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
 var _checkedSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked")?.set;
@@ -740,6 +824,7 @@ function buildExecuteHandler(form, config, toolName, metadata) {
   }
   attachSubmitInterceptor(form, toolName);
   return async (params) => {
+    pendingFillWarnings.set(form, []);
     fillFormFields(form, params);
     window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
     return new Promise((resolve, reject) => {
@@ -792,7 +877,13 @@ function attachSubmitInterceptor(form, toolName) {
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
     const missing = pendingWarnings.get(form);
     pendingWarnings.delete(form);
-    const warningText = missing?.length ? ` Note: required fields were not filled: ${missing.join(", ")}.` : "";
+    const fillWarnings = pendingFillWarnings.get(form) ?? [];
+    pendingFillWarnings.delete(form);
+    const allWarnings = [
+      ...missing?.length ? [`required fields were not filled: ${missing.join(", ")}`] : [],
+      ...fillWarnings
+    ];
+    const warningText = allWarnings.length ? ` Note: ${allWarnings.join("; ")}.` : "";
     const text = `Form submitted. Fields: ${JSON.stringify(formData)}${warningText}`;
     const result = { content: [{ type: "text", text }] };
     if (e.agentInvoked && typeof e.respondWith === "function") {
@@ -894,7 +985,36 @@ function fillFormFields(form, params) {
 function fillInput(input, form, key, value) {
   const type = input.type.toLowerCase();
   if (type === "checkbox") {
+    if (Array.isArray(value)) {
+      const esc = CSS.escape(key);
+      const allBoxes = form.querySelectorAll(`input[type="checkbox"][name="${esc}"]`);
+      for (const box of allBoxes) {
+        setReactChecked(box, value.map(String).includes(box.value));
+      }
+      return;
+    }
     setReactChecked(input, Boolean(value));
+    return;
+  }
+  if (type === "number" || type === "range") {
+    const raw = String(value ?? "");
+    const num = Number(raw);
+    if (raw === "" || isNaN(num)) {
+      pendingFillWarnings.get(form)?.push(`"${key}" expects a number, got: ${JSON.stringify(value)}`);
+      return;
+    }
+    const min = input.min !== "" ? parseFloat(input.min) : -Infinity;
+    const max = input.max !== "" ? parseFloat(input.max) : Infinity;
+    if (num < min || num > max) {
+      pendingFillWarnings.get(form)?.push(
+        `"${key}" value ${num} is outside allowed range [${input.min || "?"}, ${input.max || "?"}]`
+      );
+      input.value = String(Math.min(Math.max(num, min), max));
+    } else {
+      input.value = String(num);
+    }
+    input.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: String(num) }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
     return;
   }
   if (type === "radio") {
@@ -927,6 +1047,22 @@ function fillAriaField(el, value) {
   if (role === "radio") {
     el.setAttribute("aria-checked", "true");
     el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return;
+  }
+  if (role === "radiogroup") {
+    const radios = Array.from(el.querySelectorAll('[role="radio"]'));
+    for (const radio of radios) {
+      const val = (radio.getAttribute("data-value") ?? radio.getAttribute("aria-label") ?? radio.textContent ?? "").trim();
+      if (val === String(value)) {
+        radio.setAttribute("aria-checked", "true");
+        radio.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        for (const other of radios) {
+          if (other !== radio)
+            other.setAttribute("aria-checked", "false");
+        }
+        break;
+      }
+    }
     return;
   }
   const htmlEl = el;

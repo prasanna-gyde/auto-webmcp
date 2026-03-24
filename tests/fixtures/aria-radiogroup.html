@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Repository Settings</title>
+</head>
+<body>
+  <h2>Create Repository</h2>
+  <form id="repo-form" action="/repo/create" method="POST">
+    <label for="repo-name">Repository Name</label>
+    <input id="repo-name" name="repository_name" type="text" required>
+
+    <div role="radiogroup" aria-label="Visibility" aria-required="true">
+      <div role="radio" aria-checked="true" data-value="public" aria-label="Public">
+        Public — Anyone can see this
+      </div>
+      <div role="radio" aria-checked="false" data-value="private" aria-label="Private">
+        Private — Only you can see this
+      </div>
+    </div>
+
+    <button type="submit">Create Repository</button>
+  </form>
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

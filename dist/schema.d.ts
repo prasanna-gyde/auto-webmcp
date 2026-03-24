@@ -14,6 +14,10 @@ export interface JsonSchemaProperty {
         title: string;
         group?: string;
     }>;
+    items?: {
+        type: string;
+        enum?: string[];
+    };
     minimum?: number;
     maximum?: number;
     minLength?: number;
@@ -27,6 +31,8 @@ export interface JsonSchema {
 }
 /** Maps an HTML <input type> to a JSON Schema property base */
 export declare function inputTypeToSchema(input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): JsonSchemaProperty | null;
+/** Collect all checkbox values for a given name within a form (for checkbox groups) */
+export declare function collectCheckboxEnum(form: HTMLFormElement, name: string): string[];
 /** Collect all radio button values for a given name within a form */
 export declare function collectRadioEnum(form: HTMLFormElement, name: string): string[];
 /** Collect radio button values + label titles as oneOf entries */

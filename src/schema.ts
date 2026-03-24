@@ -16,6 +16,7 @@ export interface JsonSchemaProperty {
   title?: string;
   enum?: string[];
   oneOf?: Array<{ const: string; title: string; group?: string }>;
+  items?: { type: string; enum?: string[] };
   minimum?: number;
   maximum?: number;
   minLength?: number;
@@ -167,6 +168,15 @@ function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
 
   if (enumValues.length === 0) return { type: 'string' };
   return { type: 'string', enum: enumValues, oneOf };
+}
+
+/** Collect all checkbox values for a given name within a form (for checkbox groups) */
+export function collectCheckboxEnum(form: HTMLFormElement, name: string): string[] {
+  return Array.from(
+    form.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][name="${CSS.escape(name)}"]`),
+  )
+    .map((cb) => cb.value)
+    .filter((v) => v !== '' && v !== 'on'); // 'on' is the browser default when no value attr is set
 }
 
 /** Collect all radio button values for a given name within a form */

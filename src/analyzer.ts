@@ -2,7 +2,7 @@
  * analyzer.ts — Infer tool name, description, and JSON Schema from form DOM
  */
 
-import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum, collectRadioOneOf, ARIA_ROLES_TO_SCAN, AriaRole, ariaRoleToSchema } from './schema.js';
+import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum, collectRadioOneOf, collectCheckboxEnum, ARIA_ROLES_TO_SCAN, AriaRole, ariaRoleToSchema } from './schema.js';
 import { FormOverride } from './config.js';
 
 export interface ToolMetadata {
@@ -167,8 +167,9 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
   const required: string[] = [];
   const fieldElements = new Map<string, Element>();
 
-  // Track which radio group names we've already processed
+  // Track which radio/checkbox group names we've already processed
   const processedRadioGroups = new Set<string>();
+  const processedCheckboxGroups = new Set<string>();
 
   const controls = Array.from(
     form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
@@ -182,12 +183,15 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
     if (!fieldKey) continue;
 
     // Skip already-processed radio groups
-    if (
-      control instanceof HTMLInputElement &&
-      control.type === 'radio'
-    ) {
+    if (control instanceof HTMLInputElement && control.type === 'radio') {
       if (processedRadioGroups.has(fieldKey)) continue;
       processedRadioGroups.add(fieldKey);
+    }
+
+    // Skip already-processed checkbox groups
+    if (control instanceof HTMLInputElement && control.type === 'checkbox') {
+      if (processedCheckboxGroups.has(fieldKey)) continue;
+      processedCheckboxGroups.add(fieldKey);
     }
 
     const schemaProp = inputTypeToSchema(control);
@@ -200,13 +204,26 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
     if (desc) schemaProp.description = desc;
 
     // For radio groups, add enum and oneOf values
-    if (
-      control instanceof HTMLInputElement &&
-      control.type === 'radio'
-    ) {
+    if (control instanceof HTMLInputElement && control.type === 'radio') {
       schemaProp.enum = collectRadioEnum(form, fieldKey);
       const radioOneOf = collectRadioOneOf(form, fieldKey);
       if (radioOneOf.length > 0) schemaProp.oneOf = radioOneOf;
+    }
+
+    // For checkbox groups (multiple checkboxes with same name), upgrade to array schema
+    if (control instanceof HTMLInputElement && control.type === 'checkbox') {
+      const checkboxValues = collectCheckboxEnum(form, fieldKey);
+      if (checkboxValues.length > 1) {
+        const arrayProp: JsonSchemaProperty = {
+          type: 'array',
+          items: { type: 'string', enum: checkboxValues },
+          title: schemaProp.title,
+        };
+        if (schemaProp.description) arrayProp.description = schemaProp.description;
+        properties[fieldKey] = arrayProp;
+        if (control.required) required.push(fieldKey);
+        continue;
+      }
     }
 
     properties[fieldKey] = schemaProp;
@@ -226,7 +243,7 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
   const ariaControls = collectAriaControls(form);
   const processedAriaRadioGroups = new Set<string>();
 
-  for (const { el, role, key } of ariaControls) {
+  for (const { el, role, key, enumValues, enumOneOf } of ariaControls) {
     if (properties[key]) continue; // already covered by a native control
 
     if (role === 'radio') {
@@ -235,6 +252,13 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
     }
 
     const schemaProp = ariaRoleToSchema(el, role);
+
+    // Apply pre-computed enum for grouped ARIA radiogroups (role="radiogroup" ancestor)
+    if (enumValues && enumValues.length > 0) {
+      schemaProp.enum = enumValues;
+      if (enumOneOf && enumOneOf.length > 0) schemaProp.oneOf = enumOneOf;
+    }
+
     schemaProp.title = inferAriaFieldTitle(el);
     const desc = inferAriaFieldDescription(el);
     if (desc) schemaProp.description = desc;
@@ -274,10 +298,20 @@ function resolveNativeControlFallbackKey(
   return null;
 }
 
-/** Collect ARIA-role-based interactive elements inside a form, excluding native inputs */
-function collectAriaControls(form: HTMLFormElement): Array<{ el: Element; role: AriaRole; key: string }> {
+type AriaControlEntry = {
+  el: Element;
+  role: AriaRole;
+  key: string;
+  enumValues?: string[];
+  enumOneOf?: Array<{ const: string; title: string }>;
+};
+
+/** Collect ARIA-role-based interactive elements inside a form, excluding native inputs.
+ *  ARIA radio elements inside a role="radiogroup" ancestor are collapsed into a single
+ *  enum field keyed on the group, matching native radio group behaviour. */
+function collectAriaControls(form: HTMLFormElement): Array<AriaControlEntry> {
   const selector = ARIA_ROLES_TO_SCAN.map((r) => `[role="${r}"]`).join(', ');
-  const results: Array<{ el: Element; role: AriaRole; key: string }> = [];
+  const rawResults: Array<{ el: Element; role: AriaRole; key: string }> = [];
 
   for (const el of Array.from(form.querySelectorAll(selector))) {
     // Skip native inputs — already handled above
@@ -294,10 +328,46 @@ function collectAriaControls(form: HTMLFormElement): Array<{ el: Element; role: 
     const key = resolveAriaFieldKey(el);
     if (!key) continue;
 
-    results.push({ el, role, key });
+    rawResults.push({ el, role, key });
   }
 
-  return results;
+  // Group ARIA radios by their nearest role="radiogroup" ancestor
+  const radioEntries = rawResults.filter((e) => e.role === 'radio');
+  const nonRadioEntries: AriaControlEntry[] = rawResults.filter((e) => e.role !== 'radio');
+
+  const radioGroupMap = new Map<Element, Array<Element>>();
+  const ungroupedRadios: AriaControlEntry[] = [];
+
+  for (const entry of radioEntries) {
+    const group = entry.el.closest('[role="radiogroup"]');
+    if (group) {
+      if (!radioGroupMap.has(group)) radioGroupMap.set(group, []);
+      radioGroupMap.get(group)!.push(entry.el);
+    } else {
+      ungroupedRadios.push(entry);
+    }
+  }
+
+  const groupedEntries: AriaControlEntry[] = [];
+  for (const [group, members] of radioGroupMap) {
+    const groupKey = resolveAriaFieldKey(group);
+    if (!groupKey) continue;
+    const enumValues = members
+      .map((el) => (el.getAttribute('data-value') ?? el.getAttribute('aria-label') ?? el.textContent ?? '').trim())
+      .filter(Boolean);
+    const enumOneOf = members
+      .map((el) => {
+        const val = (el.getAttribute('data-value') ?? el.getAttribute('aria-label') ?? el.textContent ?? '').trim();
+        const title = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim();
+        return { const: val, title: title || val };
+      })
+      .filter((e) => e.const !== '');
+    if (enumValues.length > 0) {
+      groupedEntries.push({ el: group, role: 'radio', key: groupKey, enumValues, enumOneOf });
+    }
+  }
+
+  return [...nonRadioEntries, ...groupedEntries, ...ungroupedRadios];
 }
 
 /** Derive a schema key from an ARIA element */
@@ -561,6 +631,7 @@ function buildSchemaFromInputs(
   const required: string[] = [];
   const fieldElements = new Map<string, Element>();
   const processedRadioGroups = new Set<string>();
+  const processedCheckboxGroups = new Set<string>();
 
   for (const control of inputs) {
     const name = control.name;
@@ -572,6 +643,11 @@ function buildSchemaFromInputs(
       processedRadioGroups.add(fieldKey);
     }
 
+    if (control instanceof HTMLInputElement && control.type === 'checkbox') {
+      if (processedCheckboxGroups.has(fieldKey)) continue;
+      processedCheckboxGroups.add(fieldKey);
+    }
+
     const schemaProp = inputTypeToSchema(control);
     if (!schemaProp) continue; // skipped types (hidden, password, file, etc.)
     if (!isControlVisible(control)) continue; // display:none, aria-hidden, disabled fieldset
@@ -579,6 +655,25 @@ function buildSchemaFromInputs(
     schemaProp.title = inferFieldTitle(control);
     const desc = inferFieldDescription(control);
     if (desc) schemaProp.description = desc;
+
+    // For checkbox groups, derive values from the inputs array (no form context here)
+    if (control instanceof HTMLInputElement && control.type === 'checkbox') {
+      const checkboxValues = (inputs as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>)
+        .filter((i): i is HTMLInputElement => i instanceof HTMLInputElement && i.type === 'checkbox' && i.name === fieldKey)
+        .map((cb) => cb.value)
+        .filter((v) => v !== '' && v !== 'on');
+      if (checkboxValues.length > 1) {
+        const arrayProp: JsonSchemaProperty = {
+          type: 'array',
+          items: { type: 'string', enum: checkboxValues },
+          title: schemaProp.title,
+        };
+        if (schemaProp.description) arrayProp.description = schemaProp.description;
+        properties[fieldKey] = arrayProp;
+        if (control.required) required.push(fieldKey);
+        continue;
+      }
+    }
 
     properties[fieldKey] = schemaProp;
     if (!name) fieldElements.set(fieldKey, control);

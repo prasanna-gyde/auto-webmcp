@@ -681,3 +681,69 @@ test.describe('Conditional/hidden fields', () => {
     expect(Object.keys(props)).not.toContain('csrf_token');
   });
 });
+
+test.describe('Checkbox group schema', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/checkbox-group.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('multi-checkbox group produces array schema', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const interests = props?.['interests'] as Record<string, unknown>;
+    expect(interests?.['type']).toBe('array');
+    expect((interests?.['items'] as Record<string, unknown>)?.['enum']).toEqual(['sports', 'music', 'travel', 'tech']);
+  });
+
+  test('multi-checkbox group appears only once in schema', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props).filter((k) => k === 'interests').length).toBe(1);
+  });
+
+  test('single checkbox stays as boolean', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const newsletter = props?.['newsletter'] as Record<string, unknown>;
+    expect(newsletter?.['type']).toBe('boolean');
+  });
+});
+
+test.describe('ARIA radiogroup', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/aria-radiogroup.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('ARIA radiogroup produces a single enum field', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const visibility = props?.['visibility'] as Record<string, unknown>;
+    expect(visibility?.['type']).toBe('string');
+    expect(visibility?.['enum']).toEqual(['public', 'private']);
+  });
+
+  test('ARIA radiogroup oneOf has correct titles', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const oneOf = (props?.['visibility'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
+    expect(oneOf?.find((o) => o['const'] === 'public')?.['title']).toBe('Public');
+    expect(oneOf?.find((o) => o['const'] === 'private')?.['title']).toBe('Private');
+  });
+
+  test('individual radio elements do not appear as separate fields', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).not.toContain('public');
+    expect(Object.keys(props)).not.toContain('private');
+  });
+});
