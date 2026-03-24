@@ -191,7 +191,8 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
     }
 
     const schemaProp = inputTypeToSchema(control);
-    if (!schemaProp) continue; // skipped types
+    if (!schemaProp) continue; // skipped types (hidden, password, file, etc.)
+    if (!isControlVisible(control)) continue; // display:none, aria-hidden, disabled fieldset
 
     // Enrich with title and description
     schemaProp.title = inferFieldTitle(control);
@@ -442,6 +443,35 @@ function humanizeName(raw: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * Returns false if the control is currently not visible to the user:
+ * display:none, visibility:hidden, aria-hidden ancestor, or inside a disabled fieldset.
+ * Used to exclude conditional/hidden fields from the registered schema so agents
+ * are not offered fields that are not currently applicable.
+ *
+ * Note: <input type="hidden"> is excluded earlier by inputTypeToSchema returning null —
+ * this check never runs for hidden-type inputs.
+ */
+function isControlVisible(el: HTMLElement): boolean {
+  const style = window.getComputedStyle(el);
+  if (style.display === 'none') return false;
+  if (style.visibility === 'hidden') return false;
+  // offsetParent is null for display:none (already caught) AND position:fixed (which IS visible)
+  if (el.offsetParent === null && style.position !== 'fixed') return false;
+
+  // Walk up ancestors checking for aria-hidden
+  let node: Element | null = el;
+  while (node && node !== document.body) {
+    if (node.getAttribute('aria-hidden') === 'true') return false;
+    node = node.parentElement;
+  }
+
+  // Disabled fieldset hides all its controls from agents
+  if (el.closest('fieldset')?.disabled) return false;
+
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Orphan input group analysis (inputs not inside a <form> element)
 // ---------------------------------------------------------------------------
@@ -543,7 +573,8 @@ function buildSchemaFromInputs(
     }
 
     const schemaProp = inputTypeToSchema(control);
-    if (!schemaProp) continue;
+    if (!schemaProp) continue; // skipped types (hidden, password, file, etc.)
+    if (!isControlVisible(control)) continue; // display:none, aria-hidden, disabled fieldset
 
     schemaProp.title = inferFieldTitle(control);
     const desc = inferFieldDescription(control);

@@ -15,7 +15,7 @@ export interface JsonSchemaProperty {
   description?: string;
   title?: string;
   enum?: string[];
-  oneOf?: Array<{ const: string; title: string }>;
+  oneOf?: Array<{ const: string; title: string; group?: string }>;
   minimum?: number;
   maximum?: number;
   minLength?: number;
@@ -116,19 +116,56 @@ function buildStringSchema(input: HTMLInputElement): JsonSchemaProperty {
   if (input.minLength > 0) prop.minLength = input.minLength;
   if (input.maxLength > 0 && input.maxLength !== 524288) prop.maxLength = input.maxLength;
   if (input.pattern) prop.pattern = input.pattern;
+
+  // Expose <datalist> suggestions as enum/oneOf so agents know the preferred values.
+  // The field stays type:string because datalist is advisory, not restrictive.
+  const listId = input.getAttribute('list');
+  if (listId) {
+    const datalist = input.ownerDocument.getElementById(listId);
+    if (datalist instanceof HTMLDataListElement) {
+      const options = Array.from(datalist.options).filter(
+        (o) => !o.disabled && o.value.trim() !== '',
+      );
+      if (options.length > 0) {
+        prop.enum = options.map((o) => o.value.trim());
+        prop.oneOf = options.map((o) => ({
+          const: o.value.trim(),
+          title: o.textContent?.trim() || o.value.trim(),
+        }));
+      }
+    }
+  }
+
   return prop;
 }
 
 function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
-  const filtered = Array.from(select.options).filter((o) => o.value !== '' && !o.disabled);
+  const enumValues: string[] = [];
+  const oneOf: Array<{ const: string; title: string; group?: string }> = [];
 
-  if (filtered.length === 0) {
-    return { type: 'string' };
+  for (const child of Array.from(select.children)) {
+    if (child instanceof HTMLOptGroupElement) {
+      if (child.disabled) continue;
+      const groupLabel = child.label?.trim() ?? '';
+      for (const opt of Array.from(child.children)) {
+        if (!(opt instanceof HTMLOptionElement)) continue;
+        if (opt.disabled || opt.value === '') continue;
+        enumValues.push(opt.value);
+        const entry: { const: string; title: string; group?: string } = {
+          const: opt.value,
+          title: opt.text.trim() || opt.value,
+        };
+        if (groupLabel) entry.group = groupLabel;
+        oneOf.push(entry);
+      }
+    } else if (child instanceof HTMLOptionElement) {
+      if (child.disabled || child.value === '') continue;
+      enumValues.push(child.value);
+      oneOf.push({ const: child.value, title: child.text.trim() || child.value });
+    }
   }
 
-  const enumValues = filtered.map((o) => o.value);
-  const oneOf = filtered.map((o) => ({ const: o.value, title: o.text.trim() || o.value }));
-
+  if (enumValues.length === 0) return { type: 'string' };
   return { type: 'string', enum: enumValues, oneOf };
 }
 

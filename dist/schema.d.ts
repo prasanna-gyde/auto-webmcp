@@ -12,6 +12,7 @@ export interface JsonSchemaProperty {
     oneOf?: Array<{
         const: string;
         title: string;
+        group?: string;
     }>;
     minimum?: number;
     maximum?: number;

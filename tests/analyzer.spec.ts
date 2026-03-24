@@ -543,3 +543,141 @@ test.describe('Lazy-rendered inputs', () => {
     expect(Object.keys(props)).toContain('email');
   });
 });
+
+test.describe('Optgroup select', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/optgroup-select.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('enum is flat and contains only enabled options', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const country = props?.['country'] as Record<string, unknown>;
+    expect(country?.['enum']).toEqual(['us', 'ca', 'mx', 'de', 'fr', 'other']);
+  });
+
+  test('optgroup options have group field in oneOf', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const oneOf = (props?.['country'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
+    const us = oneOf?.find((o) => o['const'] === 'us');
+    const de = oneOf?.find((o) => o['const'] === 'de');
+    expect(us?.['group']).toBe('North America');
+    expect(de?.['group']).toBe('Europe');
+  });
+
+  test('direct select options have no group field', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const oneOf = (props?.['country'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
+    const other = oneOf?.find((o) => o['const'] === 'other');
+    expect(other?.['group']).toBeUndefined();
+  });
+
+  test('disabled optgroup options are excluded', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const country = props?.['country'] as Record<string, unknown>;
+    expect((country?.['enum'] as string[])?.includes('xx')).toBe(false);
+  });
+
+  test('individually disabled option is excluded', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const country = props?.['country'] as Record<string, unknown>;
+    expect((country?.['enum'] as string[])?.includes('gb')).toBe(false);
+  });
+});
+
+test.describe('Datalist suggestions', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/datalist-form.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('text input with datalist has enum from suggestions', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const topic = props?.['topic'] as Record<string, unknown>;
+    expect(topic?.['type']).toBe('string');
+    expect(topic?.['enum']).toEqual(['javascript', 'python', 'rust', 'typescript']);
+  });
+
+  test('text input with datalist has oneOf with titles', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const oneOf = (props?.['topic'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
+    expect(oneOf?.find((o) => o['const'] === 'javascript')?.['title']).toBe('JavaScript');
+  });
+
+  test('email input with datalist has format:email and enum', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const email = props?.['notify_email'] as Record<string, unknown>;
+    expect(email?.['format']).toBe('email');
+    expect(email?.['enum']).toEqual(['team@example.com', 'admin@example.com']);
+  });
+
+  test('plain text input without datalist has no enum', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const plain = props?.['plain_text'] as Record<string, unknown>;
+    expect(plain?.['enum']).toBeUndefined();
+  });
+});
+
+test.describe('Conditional/hidden fields', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/conditional-form.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('visible field is included in schema', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).toContain('full_name');
+  });
+
+  test('display:none field is excluded from schema', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).not.toContain('hidden_field');
+  });
+
+  test('visibility:hidden field is excluded from schema', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).not.toContain('invisible_field');
+  });
+
+  test('field inside aria-hidden container is excluded', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).not.toContain('aria_hidden_field');
+  });
+
+  test('field inside disabled fieldset is excluded', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).not.toContain('disabled_fieldset_field');
+  });
+
+  test('native hidden input is excluded', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(Object.keys(props)).not.toContain('csrf_token');
+  });
+});

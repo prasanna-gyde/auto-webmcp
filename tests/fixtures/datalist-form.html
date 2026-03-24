@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Search with Suggestions</title>
+</head>
+<body>
+  <h2>Search</h2>
+  <form id="search-form" action="/search" method="GET">
+    <label for="topic">Topic</label>
+    <input id="topic" name="topic" type="text" list="topics" required>
+    <datalist id="topics">
+      <option value="javascript">JavaScript</option>
+      <option value="python">Python</option>
+      <option value="rust">Rust</option>
+      <option value="typescript">TypeScript</option>
+      <option value="" disabled>invalid</option>
+    </datalist>
+
+    <label for="email">Notify Email</label>
+    <input id="email" name="notify_email" type="email" list="email-suggestions">
+    <datalist id="email-suggestions">
+      <option value="team@example.com">Team</option>
+      <option value="admin@example.com">Admin</option>
+    </datalist>
+
+    <label for="plain">Plain Text (no datalist)</label>
+    <input id="plain" name="plain_text" type="text">
+
+    <button type="submit">Search</button>
+  </form>
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

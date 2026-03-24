@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Conditional Form</title>
+  <style>
+    .hidden { display: none; }
+    .invisible { visibility: hidden; }
+  </style>
+</head>
+<body>
+  <h2>Order Form</h2>
+  <form id="order-form" action="/order" method="POST">
+    <label for="name">Full Name</label>
+    <input id="name" name="full_name" type="text" required>
+
+    <!-- Hidden via display:none class -->
+    <div class="hidden">
+      <input id="hidden-field" name="hidden_field" type="text">
+    </div>
+
+    <!-- Hidden via visibility:hidden -->
+    <input id="invisible-field" name="invisible_field" type="text" class="invisible">
+
+    <!-- Hidden via aria-hidden on parent -->
+    <div aria-hidden="true">
+      <input id="aria-hidden-field" name="aria_hidden_field" type="text">
+    </div>
+
+    <!-- Inside a disabled fieldset -->
+    <fieldset disabled>
+      <legend>Disabled Section</legend>
+      <input id="disabled-fieldset-field" name="disabled_fieldset_field" type="text">
+    </fieldset>
+
+    <!-- Native hidden input (excluded by type, not visibility) -->
+    <input type="hidden" name="csrf_token" value="abc123">
+
+    <button type="submit">Place Order</button>
+  </form>
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

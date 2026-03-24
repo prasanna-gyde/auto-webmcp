@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Region Selector</title>
+</head>
+<body>
+  <h2>Select Your Region</h2>
+  <form id="region-form" action="/region" method="POST">
+    <label for="country">Country</label>
+    <select id="country" name="country" required>
+      <option value="">Select a country</option>
+      <optgroup label="North America">
+        <option value="us">United States</option>
+        <option value="ca">Canada</option>
+        <option value="mx">Mexico</option>
+      </optgroup>
+      <optgroup label="Europe">
+        <option value="de">Germany</option>
+        <option value="fr">France</option>
+        <option value="gb" disabled>United Kingdom (unavailable)</option>
+      </optgroup>
+      <optgroup label="Disabled Region" disabled>
+        <option value="xx">Hidden Country</option>
+      </optgroup>
+      <option value="other">Other</option>
+    </select>
+    <button type="submit">Confirm Region</button>
+  </form>
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

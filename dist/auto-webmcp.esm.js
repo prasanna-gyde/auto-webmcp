@@ -170,15 +170,55 @@ function buildStringSchema(input) {
     prop.maxLength = input.maxLength;
   if (input.pattern)
     prop.pattern = input.pattern;
+  const listId = input.getAttribute("list");
+  if (listId) {
+    const datalist = input.ownerDocument.getElementById(listId);
+    if (datalist instanceof HTMLDataListElement) {
+      const options = Array.from(datalist.options).filter(
+        (o) => !o.disabled && o.value.trim() !== ""
+      );
+      if (options.length > 0) {
+        prop.enum = options.map((o) => o.value.trim());
+        prop.oneOf = options.map((o) => ({
+          const: o.value.trim(),
+          title: o.textContent?.trim() || o.value.trim()
+        }));
+      }
+    }
+  }
   return prop;
 }
 function mapSelectElement(select) {
-  const filtered = Array.from(select.options).filter((o) => o.value !== "" && !o.disabled);
-  if (filtered.length === 0) {
-    return { type: "string" };
+  const enumValues = [];
+  const oneOf = [];
+  for (const child of Array.from(select.children)) {
+    if (child instanceof HTMLOptGroupElement) {
+      if (child.disabled)
+        continue;
+      const groupLabel = child.label?.trim() ?? "";
+      for (const opt of Array.from(child.children)) {
+        if (!(opt instanceof HTMLOptionElement))
+          continue;
+        if (opt.disabled || opt.value === "")
+          continue;
+        enumValues.push(opt.value);
+        const entry = {
+          const: opt.value,
+          title: opt.text.trim() || opt.value
+        };
+        if (groupLabel)
+          entry.group = groupLabel;
+        oneOf.push(entry);
+      }
+    } else if (child instanceof HTMLOptionElement) {
+      if (child.disabled || child.value === "")
+        continue;
+      enumValues.push(child.value);
+      oneOf.push({ const: child.value, title: child.text.trim() || child.value });
+    }
   }
-  const enumValues = filtered.map((o) => o.value);
-  const oneOf = filtered.map((o) => ({ const: o.value, title: o.text.trim() || o.value }));
+  if (enumValues.length === 0)
+    return { type: "string" };
   return { type: "string", enum: enumValues, oneOf };
 }
 function collectRadioEnum(form, name) {
@@ -385,6 +425,8 @@ function buildSchema(form) {
     const schemaProp = inputTypeToSchema(control);
     if (!schemaProp)
       continue;
+    if (!isControlVisible(control))
+      continue;
     schemaProp.title = inferFieldTitle(control);
     const desc = inferFieldDescription(control);
     if (desc)
@@ -578,6 +620,24 @@ function labelTextWithoutNested(label) {
 function humanizeName(raw) {
   return raw.replace(/[-_]/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim().replace(/\b\w/g, (c) => c.toUpperCase());
 }
+function isControlVisible(el) {
+  const style = window.getComputedStyle(el);
+  if (style.display === "none")
+    return false;
+  if (style.visibility === "hidden")
+    return false;
+  if (el.offsetParent === null && style.position !== "fixed")
+    return false;
+  let node = el;
+  while (node && node !== document.body) {
+    if (node.getAttribute("aria-hidden") === "true")
+      return false;
+    node = node.parentElement;
+  }
+  if (el.closest("fieldset")?.disabled)
+    return false;
+  return true;
+}
 function analyzeOrphanInputGroup(container, inputs, submitBtn) {
   const name = inferOrphanToolName(container, submitBtn);
   const description = inferOrphanToolDescription(container);
@@ -647,6 +707,8 @@ function buildSchemaFromInputs(inputs) {
     }
     const schemaProp = inputTypeToSchema(control);
     if (!schemaProp)
+      continue;
+    if (!isControlVisible(control))
       continue;
     schemaProp.title = inferFieldTitle(control);
     const desc = inferFieldDescription(control);
