@@ -87,8 +87,30 @@ export function buildExecuteHandler(
         form.hasAttribute('toolautosubmit') ||
         form.dataset['webmcpAutosubmit'] !== undefined
       ) {
-        // Programmatically submit
-        form.requestSubmit();
+        // Wait 300 ms before submitting so React/Vue/etc. can commit any state
+        // updates queued by the InputEvents we dispatched during fill.
+        // Frameworks like React 18 batch state updates asynchronously — if we
+        // call requestSubmit() synchronously the framework reads stale state.
+        setTimeout(() => {
+          // Re-fill after React has committed, in case it reset values.
+          fillFormFields(form, params);
+
+          // If the stored form was remounted (React, Turbo etc.), find the live
+          // form via the submit button so requestSubmit() reaches the real DOM.
+          let submitForm: HTMLFormElement = form;
+          if (!form.isConnected) {
+            const liveBtn = document.querySelector<HTMLElement>(
+              'button[type="submit"]:not([disabled]), input[type="submit"]:not([disabled])',
+            );
+            const found = liveBtn?.closest('form') as HTMLFormElement | null;
+            if (found) {
+              submitForm = found;
+              pendingExecutions.set(submitForm, { resolve, reject });
+              attachSubmitInterceptor(submitForm, toolName);
+            }
+          }
+          submitForm.requestSubmit();
+        }, 300);
       }
       // Otherwise: the form stays filled; human clicks submit,
       // which fires the submit event interceptor below.
@@ -139,7 +161,9 @@ function setReactValue(el: HTMLInputElement | HTMLTextAreaElement, v: string): v
   // execCommand('insertText') simulates real typing — triggers native browser
   // input events that every framework (React, Catalyst, Stimulus, Vue, etc.)
   // listens to. Most reliable cross-framework approach.
-  if (document.execCommand('insertText', false, v)) {
+  // Guard: execCommand can return true but silently fail for inputs inside
+  // shadow DOM (e.g. GitHub's Catalyst components), so verify the value landed.
+  if (document.execCommand('insertText', false, v) && el.value === v) {
     return;
   }
 
@@ -163,17 +187,43 @@ function setReactChecked(el: HTMLInputElement, checked: boolean): void {
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-/** Find a native form control by name first, then by id (for unnamed React inputs). */
+/**
+ * Recursively search shadow roots for a native form control matching selector.
+ * GitHub's Catalyst and other custom-element frameworks render inputs inside
+ * shadow DOM that form.querySelector() cannot pierce.
+ */
+function findInShadowRoots(
+  root: Document | ShadowRoot,
+  selector: string,
+): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null {
+  for (const host of Array.from(root.querySelectorAll('*'))) {
+    const sr = (host as Element).shadowRoot;
+    if (!sr) continue;
+    const found = sr.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(selector);
+    if (found) return found;
+    const deeper = findInShadowRoots(sr, selector);
+    if (deeper) return deeper;
+  }
+  return null;
+}
+
+/** Find a native form control by name or id, including inside shadow DOM. */
 function findNativeField(
   form: HTMLFormElement,
   key: string,
 ): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null {
   const esc = CSS.escape(key);
-  return (
+  // Light DOM first (fast path)
+  const light =
     form.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[name="${esc}"]`) ??
     form.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
       `input#${esc}, textarea#${esc}, select#${esc}`,
-    )
+    );
+  if (light) return light;
+  // Shadow DOM fallback: search all shadow roots in the document
+  return (
+    findInShadowRoots(document, `[name="${esc}"]`) ??
+    findInShadowRoots(document, `input#${esc}, textarea#${esc}, select#${esc}`)
   );
 }
 
@@ -197,19 +247,30 @@ function fillFormFields(form: HTMLFormElement, params: Record<string, unknown>):
     }
 
     // Fall back to id-keyed or ARIA-role element from the field map.
-    // The element may be a native input stored by id (e.g. inside a shadow DOM
-    // that querySelector can't pierce), so check the type before filling.
     const ariaEl = fieldEls?.get(key);
     if (ariaEl) {
-      if (ariaEl instanceof HTMLInputElement) {
-        fillInput(ariaEl, form, key, value);
-      } else if (ariaEl instanceof HTMLTextAreaElement) {
-        setReactValue(ariaEl, String(value ?? ''));
-      } else if (ariaEl instanceof HTMLSelectElement) {
-        ariaEl.value = String(value ?? '');
-        ariaEl.dispatchEvent(new Event('change', { bubbles: true }));
+      // If the stored element was remounted by a framework (React, Catalyst etc.),
+      // find a fresh reference using its actual DOM id (which may differ from the
+      // sanitized schema key — e.g. "repository-name-input" → key "repository_name_input").
+      let effectiveEl: Element = ariaEl;
+      if (!ariaEl.isConnected) {
+        const elId = (ariaEl as HTMLElement).id;
+        if (elId) {
+          const fresh =
+            document.getElementById(elId) ??
+            findInShadowRoots(document, `#${CSS.escape(elId)}`);
+          if (fresh) effectiveEl = fresh;
+        }
+      }
+      if (effectiveEl instanceof HTMLInputElement) {
+        fillInput(effectiveEl, form, key, value);
+      } else if (effectiveEl instanceof HTMLTextAreaElement) {
+        setReactValue(effectiveEl, String(value ?? ''));
+      } else if (effectiveEl instanceof HTMLSelectElement) {
+        effectiveEl.value = String(value ?? '');
+        effectiveEl.dispatchEvent(new Event('change', { bubbles: true }));
       } else {
-        fillAriaField(ariaEl, value);
+        fillAriaField(effectiveEl, value);
       }
     }
   }
@@ -326,6 +387,37 @@ function serializeFormData(
   }
 
   return result;
+}
+
+/**
+ * Fill a single form control or ARIA element with the given value.
+ * Exported for use by orphan-input (formless) tool handlers in discovery.ts.
+ */
+export function fillElement(
+  el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | Element,
+  value: unknown,
+): void {
+  if (el instanceof HTMLInputElement) {
+    const type = el.type.toLowerCase();
+    if (type === 'checkbox') {
+      setReactChecked(el, Boolean(value));
+    } else if (type === 'radio') {
+      if (el.value === String(value)) {
+        if (_checkedSetter) _checkedSetter.call(el, true);
+        else el.checked = true;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    } else {
+      setReactValue(el, String(value ?? ''));
+    }
+  } else if (el instanceof HTMLTextAreaElement) {
+    setReactValue(el, String(value ?? ''));
+  } else if (el instanceof HTMLSelectElement) {
+    el.value = String(value ?? '');
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  } else {
+    fillAriaField(el, value);
+  }
 }
 
 function resolveFormAction(form: HTMLFormElement): string {

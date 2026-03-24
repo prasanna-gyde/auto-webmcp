@@ -421,3 +421,118 @@ function humanizeName(raw: string): string {
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+// ---------------------------------------------------------------------------
+// Orphan input group analysis (inputs not inside a <form> element)
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive ToolMetadata from a group of form controls that are NOT inside a <form>.
+ * Used by discovery.ts's orphan-input scanner for pages like newsletter landing pages.
+ */
+export function analyzeOrphanInputGroup(
+  container: Element,
+  inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  submitBtn: HTMLButtonElement | HTMLInputElement | null,
+): ToolMetadata {
+  const name = inferOrphanToolName(container, submitBtn);
+  const description = inferOrphanToolDescription(container);
+  const { schema: inputSchema, fieldElements } = buildSchemaFromInputs(inputs);
+  return { name, description, inputSchema, fieldElements };
+}
+
+function inferOrphanToolName(
+  container: Element,
+  submitBtn: HTMLButtonElement | HTMLInputElement | null,
+): string {
+  // 1. Submit button text
+  if (submitBtn) {
+    const text =
+      submitBtn instanceof HTMLInputElement
+        ? submitBtn.value.trim()
+        : submitBtn.textContent?.trim() ?? '';
+    if (text && text.length > 0 && text.length < 80) return sanitizeName(text);
+  }
+
+  // 2. Nearest heading within or above the container
+  const heading = getNearestHeadingTextFrom(container);
+  if (heading) return sanitizeName(heading);
+
+  // 3. Page title
+  const title = document.title?.trim();
+  if (title) return sanitizeName(title);
+
+  return `form_${++formIndex}`;
+}
+
+function inferOrphanToolDescription(container: Element): string {
+  // Nearest heading within or above the container
+  const heading = getNearestHeadingTextFrom(container);
+  const pageTitle = document.title?.trim();
+  if (heading && pageTitle && heading !== pageTitle) return `${heading} on ${pageTitle}`;
+  if (heading) return heading;
+  if (pageTitle) return pageTitle;
+  return 'Submit form';
+}
+
+/**
+ * Generic heading search starting from any Element (not just HTMLFormElement).
+ * Walks up the DOM checking preceding siblings and parent elements.
+ */
+function getNearestHeadingTextFrom(el: Element): string {
+  // Also check headings inside the container itself
+  const inner = el.querySelector('h1, h2, h3');
+  if (inner?.textContent?.trim()) return inner.textContent.trim();
+
+  let node: Element | null = el;
+  while (node) {
+    let sibling = node.previousElementSibling;
+    while (sibling) {
+      if (/^H[1-3]$/i.test(sibling.tagName)) {
+        const text = sibling.textContent?.trim() ?? '';
+        if (text) return text;
+      }
+      sibling = sibling.previousElementSibling;
+    }
+    node = node.parentElement;
+    if (!node || node === document.body) break;
+  }
+  return '';
+}
+
+/**
+ * Build a JSON Schema from an array of form controls (no <form> context needed).
+ * Reuses the same field title/description inference as buildSchema().
+ */
+function buildSchemaFromInputs(
+  inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+): { schema: JsonSchema; fieldElements: Map<string, Element> } {
+  const properties: Record<string, JsonSchemaProperty> = {};
+  const required: string[] = [];
+  const fieldElements = new Map<string, Element>();
+  const processedRadioGroups = new Set<string>();
+
+  for (const control of inputs) {
+    const name = control.name;
+    const fieldKey = name || resolveNativeControlFallbackKey(control);
+    if (!fieldKey) continue;
+
+    if (control instanceof HTMLInputElement && control.type === 'radio') {
+      if (processedRadioGroups.has(fieldKey)) continue;
+      processedRadioGroups.add(fieldKey);
+    }
+
+    const schemaProp = inputTypeToSchema(control);
+    if (!schemaProp) continue;
+
+    schemaProp.title = inferFieldTitle(control);
+    const desc = inferFieldDescription(control);
+    if (desc) schemaProp.description = desc;
+
+    properties[fieldKey] = schemaProp;
+    if (!name) fieldElements.set(fieldKey, control);
+    if (control.required) required.push(fieldKey);
+  }
+
+  return { schema: { type: 'object', properties, required }, fieldElements };
+}

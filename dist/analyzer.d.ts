@@ -14,4 +14,9 @@ export interface ToolMetadata {
 export declare function resetFormIndex(): void;
 /** Derive ToolMetadata from a <form> element */
 export declare function analyzeForm(form: HTMLFormElement, override?: FormOverride): ToolMetadata;
+/**
+ * Derive ToolMetadata from a group of form controls that are NOT inside a <form>.
+ * Used by discovery.ts's orphan-input scanner for pages like newsletter landing pages.
+ */
+export declare function analyzeOrphanInputGroup(container: Element, inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>, submitBtn: HTMLButtonElement | HTMLInputElement | null): ToolMetadata;
 //# sourceMappingURL=analyzer.d.ts.map

@@ -3,9 +3,9 @@
  */
 
 import { ResolvedConfig } from './config.js';
-import { analyzeForm } from './analyzer.js';
-import { registerFormTool, unregisterFormTool } from './registry.js';
-import { buildExecuteHandler } from './interceptor.js';
+import { analyzeForm, analyzeOrphanInputGroup } from './analyzer.js';
+import { registerFormTool, unregisterFormTool, isWebMCPSupported } from './registry.js';
+import { buildExecuteHandler, fillElement } from './interceptor.js';
 import { enrichMetadata } from './enhancer.js';
 import { ARIA_ROLES_TO_SCAN } from './schema.js';
 
@@ -73,6 +73,7 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
 
   await registerFormTool(form, metadata, execute);
   registeredForms.add(form);
+  registeredFormCount++;
 
   if (config.debug) {
     console.debug(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
@@ -104,6 +105,9 @@ let observer: MutationObserver | null = null;
 
 /** Set of currently registered forms, used to detect lazy-rendered child inputs. */
 const registeredForms = new WeakSet<HTMLFormElement>();
+
+/** Count of forms registered in the current discovery session. Reset on each startDiscovery call. */
+let registeredFormCount = 0;
 
 /** Debounce timers for re-analysis when inputs are added to existing forms. */
 const reAnalysisTimers = new Map<HTMLFormElement, ReturnType<typeof setTimeout>>();
@@ -213,6 +217,140 @@ async function scanForms(config: ResolvedConfig): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Orphan input scanner (fallback for pages with no <form> elements)
+// ---------------------------------------------------------------------------
+
+/** Input types that are never useful to expose to agents */
+const ORPHAN_EXCLUDED_TYPES = new Set([
+  'password', 'hidden', 'file', 'submit', 'reset', 'button', 'image',
+]);
+
+/**
+ * Find all visible form controls that are NOT inside a <form> element,
+ * group them by their nearest ancestor that also contains a submit button,
+ * and register each group as a WebMCP tool.
+ *
+ * This covers common patterns on landing pages and Ghost blogs where the
+ * subscribe/search UI is built from plain inputs + buttons without a <form> tag.
+ */
+async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
+  if (!isWebMCPSupported()) return;
+
+  const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button:not([type]):not([disabled])';
+  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
+
+  // Collect visible inputs that are not inside a <form>
+  const orphanInputs = Array.from(
+    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+      'input:not(form input), textarea:not(form textarea), select:not(form select)',
+    ),
+  ).filter((el) => {
+    if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) {
+      return false;
+    }
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+
+  if (orphanInputs.length === 0) return;
+
+  // Group inputs by the nearest ancestor that also contains a submit button.
+  // Walk up from each input until we find a container with a submit-like button.
+  const groups = new Map<Element, Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>>();
+
+  for (const input of orphanInputs) {
+    let container: Element | null = input.parentElement;
+    let foundContainer: Element = input.parentElement ?? document.body;
+
+    while (container && container !== document.body) {
+      const hasSubmitBtn =
+        container.querySelector(SUBMIT_BTN_SELECTOR) !== null ||
+        Array.from(container.querySelectorAll('button')).some(
+          (b) => SUBMIT_TEXT_RE.test(b.textContent ?? ''),
+        );
+      if (hasSubmitBtn) {
+        foundContainer = container;
+        break;
+      }
+      container = container.parentElement;
+    }
+
+    if (!groups.has(foundContainer)) groups.set(foundContainer, []);
+    groups.get(foundContainer)!.push(input);
+  }
+
+  for (const [container, inputs] of groups) {
+    // Pick the last visible submit button within the container (same logic as
+    // handleCallTool in background.js: primary action is always the last one).
+    const allCandidates = Array.from(
+      container.querySelectorAll<HTMLButtonElement | HTMLInputElement>(SUBMIT_BTN_SELECTOR),
+    ).filter((b) => {
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+
+    let submitBtn: HTMLButtonElement | HTMLInputElement | null =
+      (allCandidates[allCandidates.length - 1] as HTMLButtonElement | HTMLInputElement) ?? null;
+
+    // Fallback: nearest button with submit-like text anywhere on the page
+    if (!submitBtn) {
+      const pageBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(
+        (b) => {
+          const r = b.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && SUBMIT_TEXT_RE.test(b.textContent ?? '');
+        },
+      );
+      submitBtn = pageBtns[pageBtns.length - 1] ?? null;
+    }
+
+    const metadata = analyzeOrphanInputGroup(container, inputs, submitBtn);
+
+    // Build key → element pairs for the execute handler
+    const inputPairs: Array<{ key: string; el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement }> = [];
+    const schemaProps = metadata.inputSchema.properties;
+    for (const el of inputs) {
+      const key =
+        el.name ||
+        (el as HTMLElement).dataset['webmcpName'] ||
+        el.id ||
+        el.getAttribute('aria-label') ||
+        null;
+      const safeKey = key
+        ? key.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64)
+        : null;
+      if (safeKey && schemaProps[safeKey]) {
+        inputPairs.push({ key: safeKey, el });
+      }
+    }
+
+    const toolName = metadata.name;
+    const execute = async (params: Record<string, unknown>): Promise<{ content: Array<{ type: 'text'; text: string }> }> => {
+      for (const { key, el } of inputPairs) {
+        if (params[key] !== undefined) {
+          fillElement(el, params[key]);
+        }
+      }
+      window.dispatchEvent(new CustomEvent('toolactivated', { detail: { toolName } }));
+      return { content: [{ type: 'text', text: 'Fields filled. Ready to submit.' }] };
+    };
+
+    try {
+      await navigator.modelContext!.registerTool({
+        name: metadata.name,
+        description: metadata.description,
+        inputSchema: metadata.inputSchema,
+        execute,
+      });
+      if (config.debug) {
+        console.debug(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
+      }
+    } catch {
+      // Best-effort
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -235,9 +373,16 @@ export async function startDiscovery(config: ResolvedConfig): Promise<void> {
     );
   }
 
+  registeredFormCount = 0;
   startObserver(config);
   listenForRouteChanges(config);
   await scanForms(config);
+
+  // If no form-based tools were found, try orphan inputs (inputs outside <form> elements).
+  // This covers newsletter subscribe widgets, search bars, and other formless UI patterns.
+  if (registeredFormCount === 0) {
+    await scanOrphanInputs(config);
+  }
 }
 
 export function stopDiscovery(): void {

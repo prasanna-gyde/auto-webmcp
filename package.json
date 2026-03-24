@@ -1,6 +1,6 @@
 {
   "name": "auto-webmcp",
-  "version": "0.2.3",
+  "version": "0.2.5",
   "description": "Automatically make any HTML form WebMCP-ready — zero coding required",
   "author": "Prasanna Vaidya <prasanna@gyde.ai>",
   "license": "MIT",

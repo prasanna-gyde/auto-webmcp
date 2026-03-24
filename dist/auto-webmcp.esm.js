@@ -569,6 +569,88 @@ function labelTextWithoutNested(label) {
 function humanizeName(raw) {
   return raw.replace(/[-_]/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim().replace(/\b\w/g, (c) => c.toUpperCase());
 }
+function analyzeOrphanInputGroup(container, inputs, submitBtn) {
+  const name = inferOrphanToolName(container, submitBtn);
+  const description = inferOrphanToolDescription(container);
+  const { schema: inputSchema, fieldElements } = buildSchemaFromInputs(inputs);
+  return { name, description, inputSchema, fieldElements };
+}
+function inferOrphanToolName(container, submitBtn) {
+  if (submitBtn) {
+    const text = submitBtn instanceof HTMLInputElement ? submitBtn.value.trim() : submitBtn.textContent?.trim() ?? "";
+    if (text && text.length > 0 && text.length < 80)
+      return sanitizeName(text);
+  }
+  const heading = getNearestHeadingTextFrom(container);
+  if (heading)
+    return sanitizeName(heading);
+  const title = document.title?.trim();
+  if (title)
+    return sanitizeName(title);
+  return `form_${++formIndex}`;
+}
+function inferOrphanToolDescription(container) {
+  const heading = getNearestHeadingTextFrom(container);
+  const pageTitle = document.title?.trim();
+  if (heading && pageTitle && heading !== pageTitle)
+    return `${heading} on ${pageTitle}`;
+  if (heading)
+    return heading;
+  if (pageTitle)
+    return pageTitle;
+  return "Submit form";
+}
+function getNearestHeadingTextFrom(el) {
+  const inner = el.querySelector("h1, h2, h3");
+  if (inner?.textContent?.trim())
+    return inner.textContent.trim();
+  let node = el;
+  while (node) {
+    let sibling = node.previousElementSibling;
+    while (sibling) {
+      if (/^H[1-3]$/i.test(sibling.tagName)) {
+        const text = sibling.textContent?.trim() ?? "";
+        if (text)
+          return text;
+      }
+      sibling = sibling.previousElementSibling;
+    }
+    node = node.parentElement;
+    if (!node || node === document.body)
+      break;
+  }
+  return "";
+}
+function buildSchemaFromInputs(inputs) {
+  const properties = {};
+  const required = [];
+  const fieldElements = /* @__PURE__ */ new Map();
+  const processedRadioGroups = /* @__PURE__ */ new Set();
+  for (const control of inputs) {
+    const name = control.name;
+    const fieldKey = name || resolveNativeControlFallbackKey(control);
+    if (!fieldKey)
+      continue;
+    if (control instanceof HTMLInputElement && control.type === "radio") {
+      if (processedRadioGroups.has(fieldKey))
+        continue;
+      processedRadioGroups.add(fieldKey);
+    }
+    const schemaProp = inputTypeToSchema(control);
+    if (!schemaProp)
+      continue;
+    schemaProp.title = inferFieldTitle(control);
+    const desc = inferFieldDescription(control);
+    if (desc)
+      schemaProp.description = desc;
+    properties[fieldKey] = schemaProp;
+    if (!name)
+      fieldElements.set(fieldKey, control);
+    if (control.required)
+      required.push(fieldKey);
+  }
+  return { schema: { type: "object", properties, required }, fieldElements };
+}
 
 // src/discovery.ts
 init_registry();
@@ -591,7 +673,22 @@ function buildExecuteHandler(form, config, toolName, metadata) {
     return new Promise((resolve, reject) => {
       pendingExecutions.set(form, { resolve, reject });
       if (config.autoSubmit || form.hasAttribute("toolautosubmit") || form.dataset["webmcpAutosubmit"] !== void 0) {
-        form.requestSubmit();
+        setTimeout(() => {
+          fillFormFields(form, params);
+          let submitForm = form;
+          if (!form.isConnected) {
+            const liveBtn = document.querySelector(
+              'button[type="submit"]:not([disabled]), input[type="submit"]:not([disabled])'
+            );
+            const found = liveBtn?.closest("form");
+            if (found) {
+              submitForm = found;
+              pendingExecutions.set(submitForm, { resolve, reject });
+              attachSubmitInterceptor(submitForm, toolName);
+            }
+          }
+          submitForm.requestSubmit();
+        }, 300);
       }
     });
   };
@@ -622,7 +719,7 @@ function attachSubmitInterceptor(form, toolName) {
 function setReactValue(el, v) {
   el.focus();
   el.select?.();
-  if (document.execCommand("insertText", false, v)) {
+  if (document.execCommand("insertText", false, v) && el.value === v) {
     return;
   }
   const setter = el instanceof HTMLTextAreaElement ? _textareaValueSetter : _inputValueSetter;
@@ -642,11 +739,28 @@ function setReactChecked(el, checked) {
   }
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
+function findInShadowRoots(root, selector) {
+  for (const host of Array.from(root.querySelectorAll("*"))) {
+    const sr = host.shadowRoot;
+    if (!sr)
+      continue;
+    const found = sr.querySelector(selector);
+    if (found)
+      return found;
+    const deeper = findInShadowRoots(sr, selector);
+    if (deeper)
+      return deeper;
+  }
+  return null;
+}
 function findNativeField(form, key) {
   const esc = CSS.escape(key);
-  return form.querySelector(`[name="${esc}"]`) ?? form.querySelector(
+  const light = form.querySelector(`[name="${esc}"]`) ?? form.querySelector(
     `input#${esc}, textarea#${esc}, select#${esc}`
   );
+  if (light)
+    return light;
+  return findInShadowRoots(document, `[name="${esc}"]`) ?? findInShadowRoots(document, `input#${esc}, textarea#${esc}, select#${esc}`);
 }
 function fillFormFields(form, params) {
   lastParams.set(form, params);
@@ -666,15 +780,24 @@ function fillFormFields(form, params) {
     }
     const ariaEl = fieldEls?.get(key);
     if (ariaEl) {
-      if (ariaEl instanceof HTMLInputElement) {
-        fillInput(ariaEl, form, key, value);
-      } else if (ariaEl instanceof HTMLTextAreaElement) {
-        setReactValue(ariaEl, String(value ?? ""));
-      } else if (ariaEl instanceof HTMLSelectElement) {
-        ariaEl.value = String(value ?? "");
-        ariaEl.dispatchEvent(new Event("change", { bubbles: true }));
+      let effectiveEl = ariaEl;
+      if (!ariaEl.isConnected) {
+        const elId = ariaEl.id;
+        if (elId) {
+          const fresh = document.getElementById(elId) ?? findInShadowRoots(document, `#${CSS.escape(elId)}`);
+          if (fresh)
+            effectiveEl = fresh;
+        }
+      }
+      if (effectiveEl instanceof HTMLInputElement) {
+        fillInput(effectiveEl, form, key, value);
+      } else if (effectiveEl instanceof HTMLTextAreaElement) {
+        setReactValue(effectiveEl, String(value ?? ""));
+      } else if (effectiveEl instanceof HTMLSelectElement) {
+        effectiveEl.value = String(value ?? "");
+        effectiveEl.dispatchEvent(new Event("change", { bubbles: true }));
       } else {
-        fillAriaField(ariaEl, value);
+        fillAriaField(effectiveEl, value);
       }
     }
   }
@@ -761,6 +884,31 @@ function serializeFormData(form, params, fieldEls) {
     }
   }
   return result;
+}
+function fillElement(el, value) {
+  if (el instanceof HTMLInputElement) {
+    const type = el.type.toLowerCase();
+    if (type === "checkbox") {
+      setReactChecked(el, Boolean(value));
+    } else if (type === "radio") {
+      if (el.value === String(value)) {
+        if (_checkedSetter)
+          _checkedSetter.call(el, true);
+        else
+          el.checked = true;
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } else {
+      setReactValue(el, String(value ?? ""));
+    }
+  } else if (el instanceof HTMLTextAreaElement) {
+    setReactValue(el, String(value ?? ""));
+  } else if (el instanceof HTMLSelectElement) {
+    el.value = String(value ?? "");
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  } else {
+    fillAriaField(el, value);
+  }
 }
 
 // src/enhancer.ts
@@ -874,6 +1022,7 @@ async function registerForm(form, config) {
   const execute = buildExecuteHandler(form, config, metadata.name, metadata);
   await registerFormTool(form, metadata, execute);
   registeredForms.add(form);
+  registeredFormCount++;
   if (config.debug) {
     console.debug(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
   }
@@ -893,6 +1042,7 @@ async function unregisterForm(form, config) {
 }
 var observer = null;
 var registeredForms = /* @__PURE__ */ new WeakSet();
+var registeredFormCount = 0;
 var reAnalysisTimers = /* @__PURE__ */ new Map();
 var RE_ANALYSIS_DEBOUNCE_MS = 300;
 function isInterestingNode(node) {
@@ -974,6 +1124,102 @@ async function scanForms(config) {
   const forms = Array.from(document.querySelectorAll("form"));
   await Promise.allSettled(forms.map((form) => registerForm(form, config)));
 }
+var ORPHAN_EXCLUDED_TYPES = /* @__PURE__ */ new Set([
+  "password",
+  "hidden",
+  "file",
+  "submit",
+  "reset",
+  "button",
+  "image"
+]);
+async function scanOrphanInputs(config) {
+  if (!isWebMCPSupported())
+    return;
+  const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button:not([type]):not([disabled])';
+  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
+  const orphanInputs = Array.from(
+    document.querySelectorAll(
+      "input:not(form input), textarea:not(form textarea), select:not(form select)"
+    )
+  ).filter((el) => {
+    if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) {
+      return false;
+    }
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+  if (orphanInputs.length === 0)
+    return;
+  const groups = /* @__PURE__ */ new Map();
+  for (const input of orphanInputs) {
+    let container = input.parentElement;
+    let foundContainer = input.parentElement ?? document.body;
+    while (container && container !== document.body) {
+      const hasSubmitBtn = container.querySelector(SUBMIT_BTN_SELECTOR) !== null || Array.from(container.querySelectorAll("button")).some(
+        (b) => SUBMIT_TEXT_RE.test(b.textContent ?? "")
+      );
+      if (hasSubmitBtn) {
+        foundContainer = container;
+        break;
+      }
+      container = container.parentElement;
+    }
+    if (!groups.has(foundContainer))
+      groups.set(foundContainer, []);
+    groups.get(foundContainer).push(input);
+  }
+  for (const [container, inputs] of groups) {
+    const allCandidates = Array.from(
+      container.querySelectorAll(SUBMIT_BTN_SELECTOR)
+    ).filter((b) => {
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+    let submitBtn = allCandidates[allCandidates.length - 1] ?? null;
+    if (!submitBtn) {
+      const pageBtns = Array.from(document.querySelectorAll("button")).filter(
+        (b) => {
+          const r = b.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && SUBMIT_TEXT_RE.test(b.textContent ?? "");
+        }
+      );
+      submitBtn = pageBtns[pageBtns.length - 1] ?? null;
+    }
+    const metadata = analyzeOrphanInputGroup(container, inputs, submitBtn);
+    const inputPairs = [];
+    const schemaProps = metadata.inputSchema.properties;
+    for (const el of inputs) {
+      const key = el.name || el.dataset["webmcpName"] || el.id || el.getAttribute("aria-label") || null;
+      const safeKey = key ? key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) : null;
+      if (safeKey && schemaProps[safeKey]) {
+        inputPairs.push({ key: safeKey, el });
+      }
+    }
+    const toolName = metadata.name;
+    const execute = async (params) => {
+      for (const { key, el } of inputPairs) {
+        if (params[key] !== void 0) {
+          fillElement(el, params[key]);
+        }
+      }
+      window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
+      return { content: [{ type: "text", text: "Fields filled. Ready to submit." }] };
+    };
+    try {
+      await navigator.modelContext.registerTool({
+        name: metadata.name,
+        description: metadata.description,
+        inputSchema: metadata.inputSchema,
+        execute
+      });
+      if (config.debug) {
+        console.debug(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
+      }
+    } catch {
+    }
+  }
+}
 function warnToolQuality(name, description) {
   if (/^form_\d+$|^submit$|^form$/.test(name)) {
     console.warn(`[auto-webmcp] Tool "${name}" has a generic name. Consider adding a toolname or data-webmcp-name attribute.`);
@@ -991,9 +1237,13 @@ async function startDiscovery(config) {
       (resolve) => document.addEventListener("DOMContentLoaded", () => resolve(), { once: true })
     );
   }
+  registeredFormCount = 0;
   startObserver(config);
   listenForRouteChanges(config);
   await scanForms(config);
+  if (registeredFormCount === 0) {
+    await scanOrphanInputs(config);
+  }
 }
 function stopDiscovery() {
   observer?.disconnect();
