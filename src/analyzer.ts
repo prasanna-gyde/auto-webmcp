@@ -5,10 +5,18 @@
 import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum, collectRadioOneOf, collectCheckboxEnum, ARIA_ROLES_TO_SCAN, AriaRole, ariaRoleToSchema } from './schema.js';
 import { FormOverride } from './config.js';
 
+export interface ToolAnnotations {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
 export interface ToolMetadata {
   name: string;
   description: string;
   inputSchema: JsonSchema;
+  annotations?: ToolAnnotations;
   /** Key → DOM element for fields not addressable by name (id-keyed or ARIA-role controls). */
   fieldElements?: Map<string, Element>;
 }
@@ -26,8 +34,9 @@ export function analyzeForm(form: HTMLFormElement, override?: FormOverride): Too
   const name = override?.name ?? inferToolName(form);
   const description = override?.description ?? inferToolDescription(form);
   const { schema: inputSchema, fieldElements } = buildSchema(form);
+  const annotations = inferAnnotations(form);
 
-  return { name, description, inputSchema, fieldElements };
+  return { name, description, inputSchema, annotations, fieldElements };
 }
 
 // ---------------------------------------------------------------------------
@@ -159,8 +168,101 @@ function inferToolDescription(form: HTMLFormElement): string {
 }
 
 // ---------------------------------------------------------------------------
+// Tool annotations inference
+// ---------------------------------------------------------------------------
+
+const READONLY_BUTTON_PATTERNS = /^(search|find|look|filter|browse|view|show|check|preview|get|fetch|retrieve|load)\b/i;
+const DESTRUCTIVE_BUTTON_PATTERNS = /^(delete|remove|cancel|terminate|destroy|purge|revoke|unsubscribe|deactivate)\b/i;
+const DESTRUCTIVE_URL_PATTERNS = /\/(delete|remove|cancel|destroy)\b/i;
+
+function inferAnnotations(form: HTMLFormElement): ToolAnnotations {
+  const annotations: ToolAnnotations = {};
+
+  // Manual overrides via data-webmcp-* attributes take highest priority
+  if (form.dataset['webmcpReadonly'] !== undefined) {
+    annotations.readOnlyHint = form.dataset['webmcpReadonly'] !== 'false';
+  }
+  if (form.dataset['webmcpDestructive'] !== undefined) {
+    annotations.destructiveHint = form.dataset['webmcpDestructive'] !== 'false';
+  }
+  if (form.dataset['webmcpIdempotent'] !== undefined) {
+    annotations.idempotentHint = form.dataset['webmcpIdempotent'] !== 'false';
+  }
+  if (form.dataset['webmcpOpenworld'] !== undefined) {
+    annotations.openWorldHint = form.dataset['webmcpOpenworld'] !== 'false';
+  }
+
+  // readOnlyHint: GET method or common read-action button text
+  if (annotations.readOnlyHint === undefined) {
+    const isGet = form.method.toLowerCase() === 'get';
+    const submitText = getSubmitButtonText(form);
+    const isReadLabel = submitText ? READONLY_BUTTON_PATTERNS.test(submitText.trim()) : false;
+    if (isGet || isReadLabel) annotations.readOnlyHint = true;
+  }
+
+  // destructiveHint: common delete/cancel button text or URL path
+  if (annotations.destructiveHint === undefined) {
+    const submitText = getSubmitButtonText(form);
+    const isDestructiveLabel = submitText ? DESTRUCTIVE_BUTTON_PATTERNS.test(submitText.trim()) : false;
+    const isDestructiveUrl = form.action ? DESTRUCTIVE_URL_PATTERNS.test(form.action) : false;
+    if (isDestructiveLabel || isDestructiveUrl) annotations.destructiveHint = true;
+  }
+
+  // idempotentHint: read-only forms and GET requests are naturally idempotent
+  if (annotations.idempotentHint === undefined) {
+    if (annotations.readOnlyHint === true || form.method.toLowerCase() === 'get') {
+      annotations.idempotentHint = true;
+    }
+  }
+
+  // openWorldHint: forms that write/mutate data interact with external entities
+  if (annotations.openWorldHint === undefined) {
+    annotations.openWorldHint = annotations.readOnlyHint !== true;
+  }
+
+  // Return empty object if no non-default hints were inferred (avoids polluting registrations)
+  const hasNonDefault =
+    annotations.readOnlyHint === true ||
+    annotations.destructiveHint === true ||
+    annotations.idempotentHint === true ||
+    annotations.openWorldHint === false;
+
+  return hasNonDefault ? annotations : {};
+}
+
+// ---------------------------------------------------------------------------
 // JSON Schema construction
 // ---------------------------------------------------------------------------
+
+/**
+ * Returns the current DOM value of a control as a JSON Schema `default`, or
+ * `undefined` if the control is empty/unchecked (no useful default to expose).
+ * Number and range inputs are returned as numbers, not strings.
+ */
+function extractDefaultValue(
+  control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+): unknown {
+  if (control instanceof HTMLInputElement) {
+    const type = control.type.toLowerCase();
+    if (type === 'checkbox') return control.checked ? true : undefined;
+    if (type === 'radio') return undefined; // handled at the radio-group level
+    if (type === 'number' || type === 'range') {
+      return control.value !== '' ? parseFloat(control.value) : undefined;
+    }
+    return control.value !== '' ? control.value : undefined;
+  }
+  if (control instanceof HTMLTextAreaElement) {
+    return control.value !== '' ? control.value : undefined;
+  }
+  if (control instanceof HTMLSelectElement) {
+    if (control.multiple) {
+      const selected = Array.from(control.options).filter((o) => o.selected).map((o) => o.value);
+      return selected.length > 0 ? selected : undefined;
+    }
+    return control.value !== '' ? control.value : undefined;
+  }
+  return undefined;
+}
 
 function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements: Map<string, Element> } {
   const properties: Record<string, JsonSchemaProperty> = {};
@@ -203,11 +305,19 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
     const desc = inferFieldDescription(control);
     if (desc) schemaProp.description = desc;
 
-    // For radio groups, add enum and oneOf values
+    // Attach current DOM value as JSON Schema 'default' so agents know the pre-filled state
+    const defaultVal = extractDefaultValue(control);
+    if (defaultVal !== undefined) schemaProp.default = defaultVal;
+
+    // For radio groups, add enum, oneOf, and default (currently checked value)
     if (control instanceof HTMLInputElement && control.type === 'radio') {
       schemaProp.enum = collectRadioEnum(form, fieldKey);
       const radioOneOf = collectRadioOneOf(form, fieldKey);
       if (radioOneOf.length > 0) schemaProp.oneOf = radioOneOf;
+      const checkedRadio = form.querySelector<HTMLInputElement>(
+        `input[type="radio"][name="${CSS.escape(fieldKey)}"]:checked`,
+      );
+      if (checkedRadio?.value) schemaProp.default = checkedRadio.value;
     }
 
     // For checkbox groups (multiple checkboxes with same name), upgrade to array schema
@@ -220,6 +330,12 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
           title: schemaProp.title,
         };
         if (schemaProp.description) arrayProp.description = schemaProp.description;
+        const checkedBoxes = Array.from(
+          form.querySelectorAll<HTMLInputElement>(
+            `input[type="checkbox"][name="${CSS.escape(fieldKey)}"]:checked`,
+          ),
+        ).map((b) => b.value);
+        if (checkedBoxes.length > 0) arrayProp.default = checkedBoxes;
         properties[fieldKey] = arrayProp;
         if (control.required) required.push(fieldKey);
         continue;
@@ -386,6 +502,10 @@ function resolveAriaFieldKey(el: Element): string | null {
 }
 
 function inferAriaFieldTitle(el: Element): string {
+  // 1. Native toolparamtitle attribute (spec)
+  const nativeTitle = el.getAttribute('toolparamtitle');
+  if (nativeTitle?.trim()) return nativeTitle.trim();
+
   const htmlEl = el as HTMLElement;
   if (htmlEl.dataset?.['webmcpTitle']) return htmlEl.dataset['webmcpTitle']!;
   const label = el.getAttribute('aria-label');
@@ -419,7 +539,11 @@ function inferAriaFieldDescription(el: Element): string {
 function inferFieldTitle(
   control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
 ): string {
-  // 1. data-webmcp-title
+  // 1. Native toolparamtitle attribute (spec)
+  const nativeTitle = control.getAttribute('toolparamtitle');
+  if (nativeTitle?.trim()) return nativeTitle.trim();
+
+  // 2. data-webmcp-title
   if ('dataset' in control && (control as HTMLElement).dataset['webmcpTitle']) {
     return (control as HTMLElement).dataset['webmcpTitle']!;
   }

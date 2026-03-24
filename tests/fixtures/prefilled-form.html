@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pre-filled Form Test</title>
+</head>
+<body>
+  <h2>Pre-filled Form</h2>
+  <form
+    data-webmcp-name="book_flight"
+    data-webmcp-description="Book a flight with pre-filled preferences"
+    action="/flights/book"
+    method="POST"
+  >
+    <!-- Text input with pre-filled value -->
+    <label for="destination">Destination</label>
+    <input id="destination" name="destination" type="text" value="Paris">
+
+    <!-- Select with pre-selected option -->
+    <label for="cabin_class">Cabin Class</label>
+    <select id="cabin_class" name="cabin_class">
+      <option value="economy" selected>Economy</option>
+      <option value="business">Business</option>
+      <option value="first">First</option>
+    </select>
+
+    <!-- Number input with pre-filled value -->
+    <label for="passengers">Passengers</label>
+    <input id="passengers" name="passengers" type="number" min="1" max="9" value="2">
+
+    <!-- Checked checkbox -->
+    <label>
+      <input type="checkbox" name="newsletter" value="yes" checked> Subscribe to newsletter
+    </label>
+
+    <!-- Textarea with default content -->
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes">Default notes</textarea>
+
+    <!-- Empty input — should have no default key -->
+    <label for="promo_code">Promo Code</label>
+    <input id="promo_code" name="promo_code" type="text">
+
+    <button type="submit">Book Flight</button>
+  </form>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

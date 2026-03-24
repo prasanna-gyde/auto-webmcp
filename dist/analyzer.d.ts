@@ -3,10 +3,17 @@
  */
 import { JsonSchema } from './schema.js';
 import { FormOverride } from './config.js';
+export interface ToolAnnotations {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+}
 export interface ToolMetadata {
     name: string;
     description: string;
     inputSchema: JsonSchema;
+    annotations?: ToolAnnotations;
     /** Key → DOM element for fields not addressable by name (id-keyed or ARIA-role controls). */
     fieldElements?: Map<string, Element>;
 }

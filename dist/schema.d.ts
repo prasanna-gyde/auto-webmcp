@@ -23,6 +23,7 @@ export interface JsonSchemaProperty {
     minLength?: number;
     maxLength?: number;
     pattern?: string;
+    default?: unknown;
 }
 export interface JsonSchema {
     type: 'object';

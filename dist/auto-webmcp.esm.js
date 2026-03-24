@@ -28,22 +28,21 @@ async function registerFormTool(form, metadata, execute) {
   if (existing) {
     await unregisterFormTool(form);
   }
+  const toolDef = {
+    name: metadata.name,
+    description: metadata.description,
+    inputSchema: metadata.inputSchema,
+    execute
+  };
+  if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
+    toolDef.annotations = metadata.annotations;
+  }
   try {
-    await navigator.modelContext.registerTool({
-      name: metadata.name,
-      description: metadata.description,
-      inputSchema: metadata.inputSchema,
-      execute
-    });
+    await navigator.modelContext.registerTool(toolDef);
   } catch {
     try {
       await navigator.modelContext.unregisterTool(metadata.name);
-      await navigator.modelContext.registerTool({
-        name: metadata.name,
-        description: metadata.description,
-        inputSchema: metadata.inputSchema,
-        execute
-      });
+      await navigator.modelContext.registerTool(toolDef);
     } catch {
     }
   }
@@ -321,7 +320,8 @@ function analyzeForm(form, override) {
   const name = override?.name ?? inferToolName(form);
   const description = override?.description ?? inferToolDescription(form);
   const { schema: inputSchema, fieldElements } = buildSchema(form);
-  return { name, description, inputSchema, fieldElements };
+  const annotations = inferAnnotations(form);
+  return { name, description, inputSchema, annotations, fieldElements };
 }
 function inferToolName(form) {
   const nativeName = form.getAttribute("toolname");
@@ -418,6 +418,72 @@ function inferToolDescription(form) {
     return pageTitle;
   return "Submit form";
 }
+var READONLY_BUTTON_PATTERNS = /^(search|find|look|filter|browse|view|show|check|preview|get|fetch|retrieve|load)\b/i;
+var DESTRUCTIVE_BUTTON_PATTERNS = /^(delete|remove|cancel|terminate|destroy|purge|revoke|unsubscribe|deactivate)\b/i;
+var DESTRUCTIVE_URL_PATTERNS = /\/(delete|remove|cancel|destroy)\b/i;
+function inferAnnotations(form) {
+  const annotations = {};
+  if (form.dataset["webmcpReadonly"] !== void 0) {
+    annotations.readOnlyHint = form.dataset["webmcpReadonly"] !== "false";
+  }
+  if (form.dataset["webmcpDestructive"] !== void 0) {
+    annotations.destructiveHint = form.dataset["webmcpDestructive"] !== "false";
+  }
+  if (form.dataset["webmcpIdempotent"] !== void 0) {
+    annotations.idempotentHint = form.dataset["webmcpIdempotent"] !== "false";
+  }
+  if (form.dataset["webmcpOpenworld"] !== void 0) {
+    annotations.openWorldHint = form.dataset["webmcpOpenworld"] !== "false";
+  }
+  if (annotations.readOnlyHint === void 0) {
+    const isGet = form.method.toLowerCase() === "get";
+    const submitText = getSubmitButtonText(form);
+    const isReadLabel = submitText ? READONLY_BUTTON_PATTERNS.test(submitText.trim()) : false;
+    if (isGet || isReadLabel)
+      annotations.readOnlyHint = true;
+  }
+  if (annotations.destructiveHint === void 0) {
+    const submitText = getSubmitButtonText(form);
+    const isDestructiveLabel = submitText ? DESTRUCTIVE_BUTTON_PATTERNS.test(submitText.trim()) : false;
+    const isDestructiveUrl = form.action ? DESTRUCTIVE_URL_PATTERNS.test(form.action) : false;
+    if (isDestructiveLabel || isDestructiveUrl)
+      annotations.destructiveHint = true;
+  }
+  if (annotations.idempotentHint === void 0) {
+    if (annotations.readOnlyHint === true || form.method.toLowerCase() === "get") {
+      annotations.idempotentHint = true;
+    }
+  }
+  if (annotations.openWorldHint === void 0) {
+    annotations.openWorldHint = annotations.readOnlyHint !== true;
+  }
+  const hasNonDefault = annotations.readOnlyHint === true || annotations.destructiveHint === true || annotations.idempotentHint === true || annotations.openWorldHint === false;
+  return hasNonDefault ? annotations : {};
+}
+function extractDefaultValue(control) {
+  if (control instanceof HTMLInputElement) {
+    const type = control.type.toLowerCase();
+    if (type === "checkbox")
+      return control.checked ? true : void 0;
+    if (type === "radio")
+      return void 0;
+    if (type === "number" || type === "range") {
+      return control.value !== "" ? parseFloat(control.value) : void 0;
+    }
+    return control.value !== "" ? control.value : void 0;
+  }
+  if (control instanceof HTMLTextAreaElement) {
+    return control.value !== "" ? control.value : void 0;
+  }
+  if (control instanceof HTMLSelectElement) {
+    if (control.multiple) {
+      const selected = Array.from(control.options).filter((o) => o.selected).map((o) => o.value);
+      return selected.length > 0 ? selected : void 0;
+    }
+    return control.value !== "" ? control.value : void 0;
+  }
+  return void 0;
+}
 function buildSchema(form) {
   const properties = {};
   const required = [];
@@ -453,11 +519,19 @@ function buildSchema(form) {
     const desc = inferFieldDescription(control);
     if (desc)
       schemaProp.description = desc;
+    const defaultVal = extractDefaultValue(control);
+    if (defaultVal !== void 0)
+      schemaProp.default = defaultVal;
     if (control instanceof HTMLInputElement && control.type === "radio") {
       schemaProp.enum = collectRadioEnum(form, fieldKey);
       const radioOneOf = collectRadioOneOf(form, fieldKey);
       if (radioOneOf.length > 0)
         schemaProp.oneOf = radioOneOf;
+      const checkedRadio = form.querySelector(
+        `input[type="radio"][name="${CSS.escape(fieldKey)}"]:checked`
+      );
+      if (checkedRadio?.value)
+        schemaProp.default = checkedRadio.value;
     }
     if (control instanceof HTMLInputElement && control.type === "checkbox") {
       const checkboxValues = collectCheckboxEnum(form, fieldKey);
@@ -469,6 +543,13 @@ function buildSchema(form) {
         };
         if (schemaProp.description)
           arrayProp.description = schemaProp.description;
+        const checkedBoxes = Array.from(
+          form.querySelectorAll(
+            `input[type="checkbox"][name="${CSS.escape(fieldKey)}"]:checked`
+          )
+        ).map((b) => b.value);
+        if (checkedBoxes.length > 0)
+          arrayProp.default = checkedBoxes;
         properties[fieldKey] = arrayProp;
         if (control.required)
           required.push(fieldKey);
@@ -591,6 +672,9 @@ function resolveAriaFieldKey(el) {
   return null;
 }
 function inferAriaFieldTitle(el) {
+  const nativeTitle = el.getAttribute("toolparamtitle");
+  if (nativeTitle?.trim())
+    return nativeTitle.trim();
   const htmlEl = el;
   if (htmlEl.dataset?.["webmcpTitle"])
     return htmlEl.dataset["webmcpTitle"];
@@ -629,6 +713,9 @@ function inferAriaFieldDescription(el) {
   return "";
 }
 function inferFieldTitle(control) {
+  const nativeTitle = control.getAttribute("toolparamtitle");
+  if (nativeTitle?.trim())
+    return nativeTitle.trim();
   if ("dataset" in control && control.dataset["webmcpTitle"]) {
     return control.dataset["webmcpTitle"];
   }

@@ -21,15 +21,17 @@
   </form>
 
   <script>
-    // Simulate a framework remount: 80ms after page load, replace the form's
-    // inner HTML with a fresh copy. This blanks all field values, just like
-    // React running a reconciliation cycle after a state update.
-    setTimeout(function() {
+    // Simulate a framework remount: when toolactivated fires (fields just got
+    // filled by the agent), replace the form's inner HTML with a fresh copy.
+    // This blanks all field values, just like React running a reconciliation
+    // cycle after a state update triggers a re-render.
+    window.addEventListener('toolactivated', function() {
+      if (window.__remountDone) return;
       var form = document.getElementById('test-form');
       if (!form) return;
       form.innerHTML = form.innerHTML;
       window.__remountDone = true;
-    }, 80);
+    });
   </script>
 
   <script type="module" src="../../dist/auto-webmcp.esm.js"></script>

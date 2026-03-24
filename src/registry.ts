@@ -12,7 +12,13 @@ export interface WebMCPTool {
   name: string;
   description: string;
   inputSchema: object;
-  execute: (params: Record<string, unknown>) => Promise<unknown>;
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+  execute: (params: Record<string, unknown>, client?: unknown) => Promise<unknown>;
 }
 
 declare global {
@@ -53,24 +59,24 @@ export async function registerFormTool(
     await unregisterFormTool(form);
   }
 
+  const toolDef: WebMCPTool = {
+    name: metadata.name,
+    description: metadata.description,
+    inputSchema: metadata.inputSchema,
+    execute,
+  };
+  if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
+    toolDef.annotations = metadata.annotations;
+  }
+
   try {
-    await navigator.modelContext!.registerTool({
-      name: metadata.name,
-      description: metadata.description,
-      inputSchema: metadata.inputSchema,
-      execute,
-    });
+    await navigator.modelContext!.registerTool(toolDef);
   } catch {
     // Chrome may hold a stale registration from a previous page load.
     // Unregister by name and retry once.
     try {
       await navigator.modelContext!.unregisterTool(metadata.name);
-      await navigator.modelContext!.registerTool({
-        name: metadata.name,
-        description: metadata.description,
-        inputSchema: metadata.inputSchema,
-        execute,
-      });
+      await navigator.modelContext!.registerTool(toolDef);
     } catch {
       // Give up Chrome registration — local handlers and form:registered still work.
     }

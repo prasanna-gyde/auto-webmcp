@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Annotations Test</title>
+</head>
+<body>
+  <h2>Annotations Test Forms</h2>
+
+  <!-- Form 1: GET form — should infer readOnlyHint:true, idempotentHint:true -->
+  <form
+    data-webmcp-name="search_products"
+    data-webmcp-description="Search for products by keyword"
+    method="GET"
+    action="/search"
+  >
+    <input name="q" type="search" placeholder="Search...">
+    <button type="submit">Search</button>
+  </form>
+
+  <!-- Form 2: Delete button — should infer destructiveHint:true -->
+  <form
+    data-webmcp-name="delete_account"
+    data-webmcp-description="Permanently delete the user account"
+    action="/account/delete"
+    method="POST"
+  >
+    <input name="confirm" type="text" placeholder="Type DELETE to confirm">
+    <button type="submit">Delete Account</button>
+  </form>
+
+  <!-- Form 3: data-webmcp-readonly override on a POST form -->
+  <form
+    data-webmcp-name="get_status"
+    data-webmcp-description="Check the current status"
+    data-webmcp-readonly="true"
+    action="/status"
+    method="POST"
+  >
+    <input name="id" type="text">
+    <button type="submit">Check Status</button>
+  </form>
+
+  <!-- Form 4: data-webmcp-destructive override on a neutral form -->
+  <form
+    data-webmcp-name="reset_settings"
+    data-webmcp-description="Reset all settings to defaults"
+    data-webmcp-destructive="true"
+    action="/settings/reset"
+    method="POST"
+  >
+    <input name="scope" type="text" value="all">
+    <button type="submit">Reset</button>
+  </form>
+
+  <!-- Form 5: Plain POST form with no hints — should produce no annotations -->
+  <form
+    data-webmcp-name="update_profile"
+    data-webmcp-description="Update user profile"
+    action="/profile"
+    method="POST"
+  >
+    <input name="name" type="text" placeholder="Name">
+    <button type="submit">Save Profile</button>
+  </form>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

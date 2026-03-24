@@ -330,6 +330,13 @@ test.describe('Native WebMCP attributes', () => {
     const props = schema['properties'] as Record<string, Record<string, unknown>>;
     expect(props['frequency']?.['enum']).toEqual(['daily', 'weekly', 'monthly']);
   });
+
+  test('uses toolparamtitle attribute for field title', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
+    const props = schema['properties'] as Record<string, Record<string, unknown>>;
+    expect(props['email']?.['title']).toBe('Email Address');
+  });
 });
 
 test.describe('toolactivated and toolcancel events', () => {
@@ -895,5 +902,96 @@ test.describe('Post-fill snapshot (framework remount protection)', () => {
     // The snapshot should have preserved the filled values despite the DOM reset
     expect(text).toContain('"username":"alice"');
     expect(text).toContain('"bio":"Software engineer"');
+  });
+});
+
+test.describe('Tool annotations', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/annotations-form.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length >= 5,
+      { timeout: 5000 },
+    );
+  });
+
+  test('GET form infers readOnlyHint and idempotentHint', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const search = (tools as Array<Record<string, unknown>>).find((t) => t['name'] === 'search_products');
+    const annotations = search?.['annotations'] as Record<string, unknown>;
+    expect(annotations?.['readOnlyHint']).toBe(true);
+    expect(annotations?.['idempotentHint']).toBe(true);
+  });
+
+  test('Delete button text infers destructiveHint', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const del = (tools as Array<Record<string, unknown>>).find((t) => t['name'] === 'delete_account');
+    const annotations = del?.['annotations'] as Record<string, unknown>;
+    expect(annotations?.['destructiveHint']).toBe(true);
+  });
+
+  test('data-webmcp-readonly sets readOnlyHint on POST form', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const status = (tools as Array<Record<string, unknown>>).find((t) => t['name'] === 'get_status');
+    const annotations = status?.['annotations'] as Record<string, unknown>;
+    expect(annotations?.['readOnlyHint']).toBe(true);
+  });
+
+  test('data-webmcp-destructive sets destructiveHint on neutral form', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const reset = (tools as Array<Record<string, unknown>>).find((t) => t['name'] === 'reset_settings');
+    const annotations = reset?.['annotations'] as Record<string, unknown>;
+    expect(annotations?.['destructiveHint']).toBe(true);
+  });
+
+  test('plain POST form with no hints produces no annotations', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const profile = (tools as Array<Record<string, unknown>>).find((t) => t['name'] === 'update_profile');
+    const annotations = profile?.['annotations'] as Record<string, unknown> | undefined;
+    // Either no annotations key or empty object
+    expect(!annotations || Object.keys(annotations).length === 0).toBe(true);
+  });
+});
+
+test.describe('Default values in schema', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/prefilled-form.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('pre-filled text input exposes default string value', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect((props?.['destination'] as Record<string, unknown>)?.['default']).toBe('Paris');
+  });
+
+  test('pre-selected option exposes default string value', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect((props?.['cabin_class'] as Record<string, unknown>)?.['default']).toBe('economy');
+  });
+
+  test('number input with value exposes default as a number', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const passengersDefault = (props?.['passengers'] as Record<string, unknown>)?.['default'];
+    expect(passengersDefault).toBe(2);
+    expect(typeof passengersDefault).toBe('number');
+  });
+
+  test('pre-filled textarea exposes default string value', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect((props?.['notes'] as Record<string, unknown>)?.['default']).toBe('Default notes');
+  });
+
+  test('empty input has no default key', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect((props?.['promo_code'] as Record<string, unknown>)?.['default']).toBeUndefined();
   });
 });

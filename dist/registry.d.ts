@@ -6,7 +6,13 @@ export interface WebMCPTool {
     name: string;
     description: string;
     inputSchema: object;
-    execute: (params: Record<string, unknown>) => Promise<unknown>;
+    annotations?: {
+        readOnlyHint?: boolean;
+        destructiveHint?: boolean;
+        idempotentHint?: boolean;
+        openWorldHint?: boolean;
+    };
+    execute: (params: Record<string, unknown>, client?: unknown) => Promise<unknown>;
 }
 declare global {
     interface Navigator {
