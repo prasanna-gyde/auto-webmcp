@@ -747,3 +747,153 @@ test.describe('ARIA radiogroup', () => {
     expect(Object.keys(props)).not.toContain('private');
   });
 });
+
+test.describe('Multi-select schema and fill', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await page.goto('/tests/fixtures/multi-select.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('multi-select produces array schema with items.enum', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const categories = props?.['categories'] as Record<string, unknown>;
+    expect(categories?.['type']).toBe('array');
+    expect((categories?.['items'] as Record<string, unknown>)?.['enum']).toEqual([
+      'news', 'sports', 'tech', 'health',
+    ]);
+  });
+
+  test('multi-select array schema has no oneOf', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const categories = props?.['categories'] as Record<string, unknown>;
+    expect(categories?.['oneOf']).toBeUndefined();
+  });
+
+  test('single-value select still produces string schema with enum', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const region = props?.['region'] as Record<string, unknown>;
+    expect(region?.['type']).toBe('string');
+    expect(region?.['enum']).toEqual(['us', 'eu', 'apac']);
+  });
+
+  test('agent fills multi-select with an array value', async ({ page }) => {
+    await page.evaluate(() => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      handlers['filter_results']?.({ categories: ['news', 'tech'] }).catch(() => {});
+    });
+    await page.waitForTimeout(100);
+    const selected = await page.evaluate(() => {
+      const sel = document.querySelector<HTMLSelectElement>('select[name="categories"]');
+      return Array.from(sel?.options ?? []).filter((o) => o.selected).map((o) => o.value);
+    });
+    expect(selected).toEqual(['news', 'tech']);
+  });
+
+  test('agent fills multi-select with a single string value', async ({ page }) => {
+    await page.evaluate(() => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      handlers['filter_results']?.({ categories: 'sports' }).catch(() => {});
+    });
+    await page.waitForTimeout(100);
+    const selected = await page.evaluate(() => {
+      const sel = document.querySelector<HTMLSelectElement>('select[name="categories"]');
+      return Array.from(sel?.options ?? []).filter((o) => o.selected).map((o) => o.value);
+    });
+    expect(selected).toEqual(['sports']);
+  });
+});
+
+test.describe('Meaningful empty-value select options', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/placeholder-select.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('meaningful empty-value option is included in enum', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const diet = props?.['diet'] as Record<string, unknown>;
+    expect(diet?.['enum']).toEqual(['', 'veg', 'vegan', 'halal']);
+  });
+
+  test('meaningful empty-value option has descriptive title in oneOf', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const oneOf = (props?.['diet'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
+    expect(oneOf?.find((o) => o['const'] === '')?.['title']).toBe('No preference');
+  });
+
+  test('placeholder option starting with dashes is excluded', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const size = props?.['size'] as Record<string, unknown>;
+    expect((size?.['enum'] as string[])?.includes('')).toBe(false);
+    expect(size?.['enum']).toEqual(['s', 'm', 'l']);
+  });
+
+  test('placeholder option starting with "Choose" word is excluded', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    const region = props?.['region'] as Record<string, unknown>;
+    expect((region?.['enum'] as string[])?.includes('')).toBe(false);
+    expect(region?.['enum']).toEqual(['na', 'eu']);
+  });
+});
+
+test.describe('Post-fill snapshot (framework remount protection)', () => {
+  test('ExecuteResult preserves filled values when DOM is reset after fill', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await page.goto('/tests/fixtures/react-remount-form.html');
+
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    // Start the execute handler (fills form, then waits for submit)
+    const resultPromise = page.evaluate(async () => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      return handlers['save_profile']?.({
+        username: 'alice',
+        bio: 'Software engineer',
+      });
+    });
+
+    // Wait for the remount to complete (80ms) then submit
+    await page.waitForFunction(
+      () => (window as unknown as Record<string, unknown>)['__remountDone'] === true,
+      { timeout: 2000 },
+    );
+
+    // Verify the form fields were blanked by the remount
+    const valuesAfterRemount = await page.evaluate(() => ({
+      username: (document.querySelector<HTMLInputElement>('#username'))?.value,
+      bio: (document.querySelector<HTMLTextAreaElement>('#bio'))?.value,
+    }));
+    expect(valuesAfterRemount.username).toBe('');
+    expect(valuesAfterRemount.bio).toBe('');
+
+    // Now submit the form manually to trigger serialization
+    await page.evaluate(() => {
+      document.querySelector<HTMLFormElement>('form')?.requestSubmit();
+    });
+
+    const result = await resultPromise as Record<string, unknown>;
+    const text = (result?.['content'] as Array<Record<string, unknown>>)?.[0]?.['text'] as string;
+
+    // The snapshot should have preserved the filled values despite the DOM reset
+    expect(text).toContain('"username":"alice"');
+    expect(text).toContain('"bio":"Software engineer"');
+  });
+});

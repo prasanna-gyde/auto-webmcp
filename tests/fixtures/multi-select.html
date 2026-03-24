@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multi-Select Test</title>
+</head>
+<body>
+  <h2>Filter Options</h2>
+  <form
+    data-webmcp-name="filter_results"
+    data-webmcp-description="Filter search results by category and region"
+    toolautosubmit
+  >
+    <label for="categories">Categories</label>
+    <select id="categories" name="categories" multiple>
+      <option value="news">News</option>
+      <option value="sports">Sports</option>
+      <option value="tech">Technology</option>
+      <option value="health">Health</option>
+    </select>
+
+    <label for="region">Region</label>
+    <select id="region" name="region">
+      <option value="us">United States</option>
+      <option value="eu">Europe</option>
+      <option value="apac">Asia Pacific</option>
+    </select>
+
+    <button type="submit">Apply Filter</button>
+  </form>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

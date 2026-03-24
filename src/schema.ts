@@ -140,6 +140,28 @@ function buildStringSchema(input: HTMLInputElement): JsonSchemaProperty {
   return prop;
 }
 
+/**
+ * Matches common placeholder/prompt option text patterns so that options like
+ * "-- Select a size --" or "Choose region" are excluded from the schema enum
+ * while genuinely meaningful empty-value options like "No preference" are kept.
+ */
+const PLACEHOLDER_PATTERNS = /^(select|choose|pick)\b|^--+|---/i;
+
+/**
+ * Returns true when an option should be treated as a UI placeholder that agents
+ * should not select. An option is a placeholder when it is explicitly disabled,
+ * or when its submission value is empty and its visible text matches common
+ * prompt patterns ("Select...", "Choose...", "Pick...", "-- ... --").
+ *
+ * Options with empty values that carry real meaning ("No preference", "Any",
+ * "All Categories") are NOT considered placeholders and will be included.
+ */
+function isPlaceholderOption(opt: HTMLOptionElement): boolean {
+  if (opt.disabled) return true;
+  if (opt.value !== '') return false;
+  return PLACEHOLDER_PATTERNS.test(opt.text.trim());
+}
+
 function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
   const enumValues: string[] = [];
   const oneOf: Array<{ const: string; title: string; group?: string }> = [];
@@ -150,7 +172,7 @@ function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
       const groupLabel = child.label?.trim() ?? '';
       for (const opt of Array.from(child.children)) {
         if (!(opt instanceof HTMLOptionElement)) continue;
-        if (opt.disabled || opt.value === '') continue;
+        if (isPlaceholderOption(opt)) continue;
         enumValues.push(opt.value);
         const entry: { const: string; title: string; group?: string } = {
           const: opt.value,
@@ -160,13 +182,19 @@ function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
         oneOf.push(entry);
       }
     } else if (child instanceof HTMLOptionElement) {
-      if (child.disabled || child.value === '') continue;
+      if (isPlaceholderOption(child)) continue;
       enumValues.push(child.value);
       oneOf.push({ const: child.value, title: child.text.trim() || child.value });
     }
   }
 
   if (enumValues.length === 0) return { type: 'string' };
+
+  if (select.multiple) {
+    // Multi-select: agent passes an array of selected values
+    return { type: 'array', items: { type: 'string', enum: enumValues } };
+  }
+
   return { type: 'string', enum: enumValues, oneOf };
 }
 

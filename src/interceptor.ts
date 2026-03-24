@@ -48,6 +48,14 @@ const pendingWarnings = new WeakMap<HTMLFormElement, string[]>();
 /** Per-form fill warnings (invalid/out-of-range values detected during field filling) */
 const pendingFillWarnings = new WeakMap<HTMLFormElement, string[]>();
 
+/**
+ * Per-form snapshot of field values captured immediately after fillFormFields()
+ * completes. Used by serializeFormData() so that id-keyed and ARIA-keyed fields
+ * are serialized from the snapshot rather than re-querying a potentially stale
+ * DOM (e.g. after a React reconciliation cycle resets field values).
+ */
+const lastFilledSnapshot = new WeakMap<HTMLFormElement, Record<string, unknown>>();
+
 // React-compatible native prototype setters (retrieved once at module init).
 // Using these bypasses React's controlled-input tracking so onChange fires correctly.
 const _inputValueSetter: ((v: string) => void) | undefined =
@@ -155,6 +163,7 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
     pendingExecutions.delete(form);
 
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
+    lastFilledSnapshot.delete(form);
     const missing = pendingWarnings.get(form);
     pendingWarnings.delete(form);
     const fillWarnings = pendingFillWarnings.get(form) ?? [];
@@ -177,6 +186,7 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
 
   // Dispatch toolcancel when form is reset
   form.addEventListener('reset', () => {
+    lastFilledSnapshot.delete(form);
     window.dispatchEvent(new CustomEvent('toolcancel', { detail: { toolName } }));
   });
 }
@@ -262,6 +272,7 @@ function findNativeField(
 function fillFormFields(form: HTMLFormElement, params: Record<string, unknown>): void {
   lastParams.set(form, params);
   const fieldEls = formFieldElements.get(form);
+  const snapshot: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(params)) {
     const input = findNativeField(form, key);
@@ -269,11 +280,26 @@ function fillFormFields(form: HTMLFormElement, params: Record<string, unknown>):
     if (input) {
       if (input instanceof HTMLInputElement) {
         fillInput(input, form, key, value);
+        if (input.type === 'checkbox') {
+          if (Array.isArray(value)) {
+            const esc = CSS.escape(key);
+            snapshot[key] = Array.from(
+              form.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][name="${esc}"]`),
+            ).filter((b) => b.checked).map((b) => b.value);
+          } else {
+            snapshot[key] = input.checked;
+          }
+        } else {
+          snapshot[key] = input.value;
+        }
       } else if (input instanceof HTMLTextAreaElement) {
         setReactValue(input, String(value ?? ''));
+        snapshot[key] = input.value;
       } else if (input instanceof HTMLSelectElement) {
-        input.value = String(value ?? '');
-        input.dispatchEvent(new Event('change', { bubbles: true }));
+        fillSelectElement(input, value);
+        snapshot[key] = input.multiple
+          ? Array.from(input.options).filter((o) => o.selected).map((o) => o.value)
+          : input.value;
       }
       continue;
     }
@@ -296,16 +322,23 @@ function fillFormFields(form: HTMLFormElement, params: Record<string, unknown>):
       }
       if (effectiveEl instanceof HTMLInputElement) {
         fillInput(effectiveEl, form, key, value);
+        snapshot[key] = effectiveEl.type === 'checkbox' ? effectiveEl.checked : effectiveEl.value;
       } else if (effectiveEl instanceof HTMLTextAreaElement) {
         setReactValue(effectiveEl, String(value ?? ''));
+        snapshot[key] = effectiveEl.value;
       } else if (effectiveEl instanceof HTMLSelectElement) {
-        effectiveEl.value = String(value ?? '');
-        effectiveEl.dispatchEvent(new Event('change', { bubbles: true }));
+        fillSelectElement(effectiveEl, value);
+        snapshot[key] = effectiveEl.multiple
+          ? Array.from(effectiveEl.options).filter((o) => o.selected).map((o) => o.value)
+          : effectiveEl.value;
       } else {
         fillAriaField(effectiveEl, value);
+        snapshot[key] = value; // Use the raw value for ARIA elements (no reliable DOM readback)
       }
     }
   }
+
+  lastFilledSnapshot.set(form, snapshot);
 }
 
 function fillInput(
@@ -374,6 +407,27 @@ function fillInput(
   setReactValue(input, String(value ?? ''));
 }
 
+/**
+ * Fill a select element. For multi-select, deselects all options then selects
+ * those whose value is in the agent-supplied array. A single string value is
+ * treated as a one-element array for multi-select. For single-select, sets
+ * select.value directly (original behavior).
+ */
+function fillSelectElement(select: HTMLSelectElement, value: unknown): void {
+  if (select.multiple) {
+    const vals: string[] = Array.isArray(value)
+      ? (value as unknown[]).map(String)
+      : [String(value ?? '')];
+    for (const opt of Array.from(select.options)) {
+      opt.selected = vals.includes(opt.value);
+    }
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return;
+  }
+  select.value = String(value ?? '');
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function fillAriaField(el: Element, value: unknown): void {
   const role = el.getAttribute('role');
 
@@ -426,6 +480,7 @@ function serializeFormData(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const data = new FormData(form);
+  const snapshot = lastFilledSnapshot.get(form);
 
   for (const [key, val] of data.entries()) {
     if (result[key] !== undefined) {
@@ -441,10 +496,18 @@ function serializeFormData(
     }
   }
 
-  // Supplement with id-keyed or ARIA-keyed fields not captured by FormData
+  // Supplement with id-keyed or ARIA-keyed fields not captured by FormData.
+  // Prefer the post-fill snapshot over a live DOM query: the DOM may have been
+  // reset by a framework re-render (React reconciliation) between fill and submit.
   if (params) {
     for (const key of Object.keys(params)) {
       if (key in result) continue;
+
+      if (snapshot && key in snapshot) {
+        result[key] = snapshot[key];
+        continue;
+      }
+
       const el =
         findNativeField(form, key) ??
         fieldEls?.get(key) ??
@@ -493,8 +556,7 @@ export function fillElement(
   } else if (el instanceof HTMLTextAreaElement) {
     setReactValue(el, String(value ?? ''));
   } else if (el instanceof HTMLSelectElement) {
-    el.value = String(value ?? '');
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+    fillSelectElement(el, value);
   } else {
     fillAriaField(el, value);
   }

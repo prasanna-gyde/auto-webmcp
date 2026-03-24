@@ -207,6 +207,14 @@ function buildStringSchema(input) {
   }
   return prop;
 }
+var PLACEHOLDER_PATTERNS = /^(select|choose|pick)\b|^--+|---/i;
+function isPlaceholderOption(opt) {
+  if (opt.disabled)
+    return true;
+  if (opt.value !== "")
+    return false;
+  return PLACEHOLDER_PATTERNS.test(opt.text.trim());
+}
 function mapSelectElement(select) {
   const enumValues = [];
   const oneOf = [];
@@ -218,7 +226,7 @@ function mapSelectElement(select) {
       for (const opt of Array.from(child.children)) {
         if (!(opt instanceof HTMLOptionElement))
           continue;
-        if (opt.disabled || opt.value === "")
+        if (isPlaceholderOption(opt))
           continue;
         enumValues.push(opt.value);
         const entry = {
@@ -230,7 +238,7 @@ function mapSelectElement(select) {
         oneOf.push(entry);
       }
     } else if (child instanceof HTMLOptionElement) {
-      if (child.disabled || child.value === "")
+      if (isPlaceholderOption(child))
         continue;
       enumValues.push(child.value);
       oneOf.push({ const: child.value, title: child.text.trim() || child.value });
@@ -238,6 +246,9 @@ function mapSelectElement(select) {
   }
   if (enumValues.length === 0)
     return { type: "string" };
+  if (select.multiple) {
+    return { type: "array", items: { type: "string", enum: enumValues } };
+  }
   return { type: "string", enum: enumValues, oneOf };
 }
 function collectCheckboxEnum(form, name) {
@@ -834,6 +845,7 @@ var lastParams = /* @__PURE__ */ new WeakMap();
 var formFieldElements = /* @__PURE__ */ new WeakMap();
 var pendingWarnings = /* @__PURE__ */ new WeakMap();
 var pendingFillWarnings = /* @__PURE__ */ new WeakMap();
+var lastFilledSnapshot = /* @__PURE__ */ new WeakMap();
 var _inputValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 var _textareaValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
 var _checkedSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked")?.set;
@@ -894,6 +906,7 @@ function attachSubmitInterceptor(form, toolName) {
     const { resolve } = pending;
     pendingExecutions.delete(form);
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
+    lastFilledSnapshot.delete(form);
     const missing = pendingWarnings.get(form);
     pendingWarnings.delete(form);
     const fillWarnings = pendingFillWarnings.get(form) ?? [];
@@ -912,6 +925,7 @@ function attachSubmitInterceptor(form, toolName) {
     resolve(result);
   });
   form.addEventListener("reset", () => {
+    lastFilledSnapshot.delete(form);
     window.dispatchEvent(new CustomEvent("toolcancel", { detail: { toolName } }));
   });
 }
@@ -964,16 +978,30 @@ function findNativeField(form, key) {
 function fillFormFields(form, params) {
   lastParams.set(form, params);
   const fieldEls = formFieldElements.get(form);
+  const snapshot = {};
   for (const [key, value] of Object.entries(params)) {
     const input = findNativeField(form, key);
     if (input) {
       if (input instanceof HTMLInputElement) {
         fillInput(input, form, key, value);
+        if (input.type === "checkbox") {
+          if (Array.isArray(value)) {
+            const esc = CSS.escape(key);
+            snapshot[key] = Array.from(
+              form.querySelectorAll(`input[type="checkbox"][name="${esc}"]`)
+            ).filter((b) => b.checked).map((b) => b.value);
+          } else {
+            snapshot[key] = input.checked;
+          }
+        } else {
+          snapshot[key] = input.value;
+        }
       } else if (input instanceof HTMLTextAreaElement) {
         setReactValue(input, String(value ?? ""));
+        snapshot[key] = input.value;
       } else if (input instanceof HTMLSelectElement) {
-        input.value = String(value ?? "");
-        input.dispatchEvent(new Event("change", { bubbles: true }));
+        fillSelectElement(input, value);
+        snapshot[key] = input.multiple ? Array.from(input.options).filter((o) => o.selected).map((o) => o.value) : input.value;
       }
       continue;
     }
@@ -990,16 +1018,20 @@ function fillFormFields(form, params) {
       }
       if (effectiveEl instanceof HTMLInputElement) {
         fillInput(effectiveEl, form, key, value);
+        snapshot[key] = effectiveEl.type === "checkbox" ? effectiveEl.checked : effectiveEl.value;
       } else if (effectiveEl instanceof HTMLTextAreaElement) {
         setReactValue(effectiveEl, String(value ?? ""));
+        snapshot[key] = effectiveEl.value;
       } else if (effectiveEl instanceof HTMLSelectElement) {
-        effectiveEl.value = String(value ?? "");
-        effectiveEl.dispatchEvent(new Event("change", { bubbles: true }));
+        fillSelectElement(effectiveEl, value);
+        snapshot[key] = effectiveEl.multiple ? Array.from(effectiveEl.options).filter((o) => o.selected).map((o) => o.value) : effectiveEl.value;
       } else {
         fillAriaField(effectiveEl, value);
+        snapshot[key] = value;
       }
     }
   }
+  lastFilledSnapshot.set(form, snapshot);
 }
 function fillInput(input, form, key, value) {
   const type = input.type.toLowerCase();
@@ -1056,6 +1088,18 @@ function fillInput(input, form, key, value) {
   }
   setReactValue(input, String(value ?? ""));
 }
+function fillSelectElement(select, value) {
+  if (select.multiple) {
+    const vals = Array.isArray(value) ? value.map(String) : [String(value ?? "")];
+    for (const opt of Array.from(select.options)) {
+      opt.selected = vals.includes(opt.value);
+    }
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    return;
+  }
+  select.value = String(value ?? "");
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
 function fillAriaField(el, value) {
   const role = el.getAttribute("role");
   if (role === "checkbox" || role === "switch") {
@@ -1094,6 +1138,7 @@ function fillAriaField(el, value) {
 function serializeFormData(form, params, fieldEls) {
   const result = {};
   const data = new FormData(form);
+  const snapshot = lastFilledSnapshot.get(form);
   for (const [key, val] of data.entries()) {
     if (result[key] !== void 0) {
       const existing = result[key];
@@ -1110,6 +1155,10 @@ function serializeFormData(form, params, fieldEls) {
     for (const key of Object.keys(params)) {
       if (key in result)
         continue;
+      if (snapshot && key in snapshot) {
+        result[key] = snapshot[key];
+        continue;
+      }
       const el = findNativeField(form, key) ?? fieldEls?.get(key) ?? null;
       if (!el)
         continue;
@@ -1148,8 +1197,7 @@ function fillElement(el, value) {
   } else if (el instanceof HTMLTextAreaElement) {
     setReactValue(el, String(value ?? ""));
   } else if (el instanceof HTMLSelectElement) {
-    el.value = String(value ?? "");
-    el.dispatchEvent(new Event("change", { bubbles: true }));
+    fillSelectElement(el, value);
   } else {
     fillAriaField(el, value);
   }

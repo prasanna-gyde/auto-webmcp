@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Placeholder Select Test</title>
+</head>
+<body>
+  <h2>Preference Form</h2>
+  <form
+    data-webmcp-name="set_preferences"
+    data-webmcp-description="Set user preferences"
+  >
+    <label for="diet">Dietary Preference</label>
+    <select id="diet" name="diet">
+      <option value="">No preference</option>
+      <option value="veg">Vegetarian</option>
+      <option value="vegan">Vegan</option>
+      <option value="halal">Halal</option>
+    </select>
+
+    <label for="size">T-shirt size</label>
+    <select id="size" name="size">
+      <option value="">-- Select a size --</option>
+      <option value="s">Small</option>
+      <option value="m">Medium</option>
+      <option value="l">Large</option>
+    </select>
+
+    <label for="region">Region</label>
+    <select id="region" name="region">
+      <option value="">Choose region</option>
+      <option value="na">North America</option>
+      <option value="eu">Europe</option>
+    </select>
+
+    <button type="submit">Save</button>
+  </form>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>
