@@ -173,7 +173,7 @@ function buildStringSchema(input) {
   return prop;
 }
 function mapSelectElement(select) {
-  const filtered = Array.from(select.options).filter((o) => o.value !== "");
+  const filtered = Array.from(select.options).filter((o) => o.value !== "" && !o.disabled);
   if (filtered.length === 0) {
     return { type: "string" };
   }
@@ -668,6 +668,7 @@ init_registry();
 var pendingExecutions = /* @__PURE__ */ new WeakMap();
 var lastParams = /* @__PURE__ */ new WeakMap();
 var formFieldElements = /* @__PURE__ */ new WeakMap();
+var pendingWarnings = /* @__PURE__ */ new WeakMap();
 var _inputValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 var _textareaValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
 var _checkedSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked")?.set;
@@ -682,22 +683,36 @@ function buildExecuteHandler(form, config, toolName, metadata) {
     return new Promise((resolve, reject) => {
       pendingExecutions.set(form, { resolve, reject });
       if (config.autoSubmit || form.hasAttribute("toolautosubmit") || form.dataset["webmcpAutosubmit"] !== void 0) {
-        setTimeout(() => {
-          fillFormFields(form, params);
-          let submitForm = form;
-          if (!form.isConnected) {
-            const liveBtn = document.querySelector(
-              'button[type="submit"]:not([disabled]), input[type="submit"]:not([disabled])'
-            );
-            const found = liveBtn?.closest("form");
-            if (found) {
-              submitForm = found;
-              pendingExecutions.set(submitForm, { resolve, reject });
-              attachSubmitInterceptor(submitForm, toolName);
+        waitForDomStable(form).then(async () => {
+          try {
+            fillFormFields(form, params);
+            for (let attempt = 0; attempt < 2; attempt++) {
+              const reset = getResetFields(form, params, formFieldElements.get(form));
+              if (reset.length === 0)
+                break;
+              fillFormFields(form, params);
+              await waitForDomStable(form, 400, 100);
             }
+            let submitForm = form;
+            if (!form.isConnected) {
+              const liveBtn = document.querySelector(
+                'button[type="submit"]:not([disabled]), input[type="submit"]:not([disabled])'
+              );
+              const found = liveBtn?.closest("form");
+              if (found) {
+                submitForm = found;
+                pendingExecutions.set(submitForm, { resolve, reject });
+                attachSubmitInterceptor(submitForm, toolName);
+              }
+            }
+            const missing = getMissingRequired(metadata, params);
+            if (missing.length > 0)
+              pendingWarnings.set(submitForm, missing);
+            submitForm.requestSubmit();
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error(String(err)));
           }
-          submitForm.requestSubmit();
-        }, 300);
+        });
       }
     });
   };
@@ -713,7 +728,10 @@ function attachSubmitInterceptor(form, toolName) {
     const { resolve } = pending;
     pendingExecutions.delete(form);
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
-    const text = `Form submitted. Fields: ${JSON.stringify(formData)}`;
+    const missing = pendingWarnings.get(form);
+    pendingWarnings.delete(form);
+    const warningText = missing?.length ? ` Note: required fields were not filled: ${missing.join(", ")}.` : "";
+    const text = `Form submitted. Fields: ${JSON.stringify(formData)}${warningText}`;
     const result = { content: [{ type: "text", text }] };
     if (e.agentInvoked && typeof e.respondWith === "function") {
       e.preventDefault();
@@ -918,6 +936,50 @@ function fillElement(el, value) {
   } else {
     fillAriaField(el, value);
   }
+}
+function waitForDomStable(form, maxMs = 800, debounceMs = 150) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let debounceTimer = null;
+    const settle = () => {
+      if (settled)
+        return;
+      settled = true;
+      observer2.disconnect();
+      if (debounceTimer !== null)
+        clearTimeout(debounceTimer);
+      resolve();
+    };
+    const observer2 = new MutationObserver(() => {
+      if (debounceTimer !== null)
+        clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(settle, debounceMs);
+    });
+    observer2.observe(form, { childList: true, subtree: true, attributes: true, characterData: true });
+    setTimeout(settle, maxMs);
+    debounceTimer = setTimeout(settle, debounceMs);
+  });
+}
+function getResetFields(form, params, fieldEls) {
+  const reset = [];
+  for (const [key, expected] of Object.entries(params)) {
+    const el = findNativeField(form, key) ?? (fieldEls?.get(key) ?? null);
+    if (!el)
+      continue;
+    if (el instanceof HTMLInputElement && el.type === "checkbox") {
+      if (el.checked !== Boolean(expected))
+        reset.push(key);
+    } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+      if (el.value !== String(expected ?? ""))
+        reset.push(key);
+    }
+  }
+  return reset;
+}
+function getMissingRequired(metadata, params) {
+  if (!metadata?.inputSchema?.required?.length)
+    return [];
+  return metadata.inputSchema.required.filter((fieldKey) => !(fieldKey in params));
 }
 
 // src/enhancer.ts

@@ -42,6 +42,9 @@ const lastParams = new WeakMap<HTMLFormElement, Record<string, unknown>>();
 /** Per-form field element map (key → DOM element for non-name-addressable fields) */
 const formFieldElements = new WeakMap<HTMLFormElement, Map<string, Element>>();
 
+/** Per-form required fields that the agent did not supply (populated before submit, consumed in interceptor) */
+const pendingWarnings = new WeakMap<HTMLFormElement, string[]>();
+
 // React-compatible native prototype setters (retrieved once at module init).
 // Using these bypasses React's controlled-input tracking so onChange fires correctly.
 const _inputValueSetter: ((v: string) => void) | undefined =
@@ -87,30 +90,46 @@ export function buildExecuteHandler(
         form.hasAttribute('toolautosubmit') ||
         form.dataset['webmcpAutosubmit'] !== undefined
       ) {
-        // Wait 300 ms before submitting so React/Vue/etc. can commit any state
-        // updates queued by the InputEvents we dispatched during fill.
-        // Frameworks like React 18 batch state updates asynchronously — if we
-        // call requestSubmit() synchronously the framework reads stale state.
-        setTimeout(() => {
-          // Re-fill after React has committed, in case it reset values.
-          fillFormFields(form, params);
+        // Wait for the form DOM to stabilize before submitting. Frameworks like
+        // React 18 batch state updates asynchronously after InputEvents — a fixed
+        // delay is unreliable. waitForDomStable polls for 150 ms of silence (no
+        // mutations) and caps at 800 ms so we never hang indefinitely.
+        waitForDomStable(form).then(async () => {
+          try {
+            // Re-fill after framework has committed state updates.
+            fillFormFields(form, params);
 
-          // If the stored form was remounted (React, Turbo etc.), find the live
-          // form via the submit button so requestSubmit() reaches the real DOM.
-          let submitForm: HTMLFormElement = form;
-          if (!form.isConnected) {
-            const liveBtn = document.querySelector<HTMLElement>(
-              'button[type="submit"]:not([disabled]), input[type="submit"]:not([disabled])',
-            );
-            const found = liveBtn?.closest('form') as HTMLFormElement | null;
-            if (found) {
-              submitForm = found;
-              pendingExecutions.set(submitForm, { resolve, reject });
-              attachSubmitInterceptor(submitForm, toolName);
+            // Retry up to 2 times if the framework reset any filled values.
+            for (let attempt = 0; attempt < 2; attempt++) {
+              const reset = getResetFields(form, params, formFieldElements.get(form));
+              if (reset.length === 0) break;
+              fillFormFields(form, params);
+              await waitForDomStable(form, 400, 100);
             }
+
+            // If the stored form was remounted (React, Turbo etc.), find the live
+            // form via the submit button so requestSubmit() reaches the real DOM.
+            let submitForm: HTMLFormElement = form;
+            if (!form.isConnected) {
+              const liveBtn = document.querySelector<HTMLElement>(
+                'button[type="submit"]:not([disabled]), input[type="submit"]:not([disabled])',
+              );
+              const found = liveBtn?.closest('form') as HTMLFormElement | null;
+              if (found) {
+                submitForm = found;
+                pendingExecutions.set(submitForm, { resolve, reject });
+                attachSubmitInterceptor(submitForm, toolName);
+              }
+            }
+
+            const missing = getMissingRequired(metadata, params);
+            if (missing.length > 0) pendingWarnings.set(submitForm, missing);
+
+            submitForm.requestSubmit();
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error(String(err)));
           }
-          submitForm.requestSubmit();
-        }, 300);
+        });
       }
       // Otherwise: the form stays filled; human clicks submit,
       // which fires the submit event interceptor below.
@@ -132,7 +151,12 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
     pendingExecutions.delete(form);
 
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
-    const text = `Form submitted. Fields: ${JSON.stringify(formData)}`;
+    const missing = pendingWarnings.get(form);
+    pendingWarnings.delete(form);
+    const warningText = missing?.length
+      ? ` Note: required fields were not filled: ${missing.join(', ')}.`
+      : '';
+    const text = `Form submitted. Fields: ${JSON.stringify(formData)}${warningText}`;
     const result: ExecuteResult = { content: [{ type: 'text', text }] };
 
     if (e.agentInvoked && typeof e.respondWith === 'function') {
@@ -418,6 +442,83 @@ export function fillElement(
   } else {
     fillAriaField(el, value);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers for DOM stabilization, reset detection, and required-field warnings
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves when the form DOM has been stable (no mutations) for debounceMs,
+ * or when maxMs has elapsed. Replaces the hardcoded 300 ms pre-submit delay
+ * so React/Vue/etc. can finish committing batched state updates.
+ */
+function waitForDomStable(
+  form: HTMLFormElement,
+  maxMs = 800,
+  debounceMs = 150,
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const settle = (): void => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      resolve();
+    };
+
+    const observer = new MutationObserver(() => {
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(settle, debounceMs);
+    });
+
+    observer.observe(form, { childList: true, subtree: true, attributes: true, characterData: true });
+
+    setTimeout(settle, maxMs);              // hard cap
+    debounceTimer = setTimeout(settle, debounceMs); // resolves early if already stable
+  });
+}
+
+/**
+ * Returns the keys of params whose corresponding DOM field values no longer
+ * match what was filled, indicating the framework reset them.
+ */
+function getResetFields(
+  form: HTMLFormElement,
+  params: Record<string, unknown>,
+  fieldEls: Map<string, Element> | undefined,
+): string[] {
+  const reset: string[] = [];
+  for (const [key, expected] of Object.entries(params)) {
+    const el = findNativeField(form, key) ?? (fieldEls?.get(key) ?? null);
+    if (!el) continue;
+    if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+      if (el.checked !== Boolean(expected)) reset.push(key);
+    } else if (
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement
+    ) {
+      if (el.value !== String(expected ?? '')) reset.push(key);
+    }
+  }
+  return reset;
+}
+
+/**
+ * Returns required field keys from the schema that the agent did not supply.
+ * Uses the `in` operator so fields explicitly passed as empty string or false
+ * are not flagged (intentional empty values are valid).
+ */
+function getMissingRequired(
+  metadata: ToolMetadata | undefined,
+  params: Record<string, unknown>,
+): string[] {
+  if (!metadata?.inputSchema?.required?.length) return [];
+  return metadata.inputSchema.required.filter((fieldKey) => !(fieldKey in params));
 }
 
 function resolveFormAction(form: HTMLFormElement): string {

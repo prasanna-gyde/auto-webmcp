@@ -120,7 +120,7 @@ function buildStringSchema(input: HTMLInputElement): JsonSchemaProperty {
 }
 
 function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
-  const filtered = Array.from(select.options).filter((o) => o.value !== '');
+  const filtered = Array.from(select.options).filter((o) => o.value !== '' && !o.disabled);
 
   if (filtered.length === 0) {
     return { type: 'string' };
