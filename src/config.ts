@@ -2,12 +2,6 @@
  * config.ts — User configuration merging & defaults
  */
 
-export interface EnhancerConfig {
-  provider: 'gemini' | 'claude';
-  apiKey: string;
-  model?: string;
-}
-
 export interface FormOverride {
   name?: string;
   description?: string;
@@ -26,11 +20,6 @@ export interface AutoWebMCPConfig {
   autoSubmit?: boolean;
 
   /**
-   * Optional AI enrichment for richer tool descriptions.
-   */
-  enhance?: EnhancerConfig;
-
-  /**
    * Per-form name/description overrides keyed by CSS selector.
    */
   overrides?: Record<string, FormOverride>;
@@ -44,7 +33,6 @@ export interface AutoWebMCPConfig {
 export interface ResolvedConfig {
   exclude: string[];
   autoSubmit: boolean;
-  enhance: EnhancerConfig | null;
   overrides: Record<string, FormOverride>;
   debug: boolean;
 }
@@ -53,7 +41,6 @@ export function resolveConfig(userConfig?: AutoWebMCPConfig): ResolvedConfig {
   return {
     exclude: userConfig?.exclude ?? [],
     autoSubmit: userConfig?.autoSubmit ?? false,
-    enhance: userConfig?.enhance ?? null,
     overrides: userConfig?.overrides ?? {},
     debug: userConfig?.debug ?? false,
   };

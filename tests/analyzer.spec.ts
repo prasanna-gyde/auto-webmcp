@@ -230,42 +230,6 @@ test.describe('Graceful degradation', () => {
   });
 });
 
-test.describe('Enhancer integration', () => {
-  test('uses LLM-enriched description when config.enhance is set', async ({ page }) => {
-    await page.addInitScript(MOCK_WEBMCP);
-
-    // Intercept the Claude API
-    await page.route('https://api.anthropic.com/**', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          content: [{ type: 'text', text: 'Search for available flights between two cities.' }],
-        }),
-      });
-    });
-
-    await page.goto('/tests/fixtures/search.html');
-
-    // Disable auto-init before re-running manually with enhance config
-    await page.evaluate(async () => {
-      (window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_NO_AUTOINIT'] = true;
-    });
-
-    // Re-run with enhance config
-    await page.evaluate(async () => {
-      const { autoWebMCP } = await import('/dist/auto-webmcp.esm.js') as { autoWebMCP: (config: unknown) => Promise<void> };
-      await autoWebMCP({
-        enhance: { provider: 'claude', apiKey: 'test-key' },
-      });
-    });
-
-    const tools = await page.evaluate(() => (window as unknown as Record<string, unknown>)['__registeredTools'] as Array<Record<string, unknown>>);
-    expect(tools[tools.length - 1]?.['description']).toBe(
-      'Search for available flights between two cities.'
-    );
-  });
-});
 
 // Enhanced mock that preserves execute handlers for invocation testing
 const MOCK_WEBMCP_WITH_EXECUTE = `

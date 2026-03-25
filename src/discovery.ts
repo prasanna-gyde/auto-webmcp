@@ -6,7 +6,6 @@ import { ResolvedConfig } from './config.js';
 import { analyzeForm, analyzeOrphanInputGroup } from './analyzer.js';
 import { registerFormTool, unregisterFormTool, isWebMCPSupported } from './registry.js';
 import { buildExecuteHandler, fillElement } from './interceptor.js';
-import { enrichMetadata } from './enhancer.js';
 import { ARIA_ROLES_TO_SCAN } from './schema.js';
 
 // ---------------------------------------------------------------------------
@@ -59,11 +58,7 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
     }
   }
 
-  let metadata = analyzeForm(form, override);
-  if (config.enhance) {
-    if (config.debug) console.debug(`[auto-webmcp] Enriching: ${metadata.name}…`);
-    metadata = await enrichMetadata(metadata, config.enhance);
-  }
+  const metadata = analyzeForm(form, override);
 
   if (config.debug) {
     warnToolQuality(metadata.name, metadata.description);

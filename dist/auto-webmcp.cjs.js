@@ -102,7 +102,6 @@ function resolveConfig(userConfig) {
   return {
     exclude: userConfig?.exclude ?? [],
     autoSubmit: userConfig?.autoSubmit ?? false,
-    enhance: userConfig?.enhance ?? null,
     overrides: userConfig?.overrides ?? {},
     debug: userConfig?.debug ?? false
   };
@@ -1384,74 +1383,6 @@ function getMissingRequired(metadata, params) {
   return metadata.inputSchema.required.filter((fieldKey) => !(fieldKey in params));
 }
 
-// src/enhancer.ts
-async function enrichMetadata(metadata, enhancer) {
-  try {
-    const enriched = await callLLM(metadata, enhancer);
-    return { ...metadata, description: enriched };
-  } catch (err) {
-    console.warn("[auto-webmcp] Enrichment failed, using heuristic description:", err);
-    return metadata;
-  }
-}
-async function callLLM(metadata, config) {
-  const prompt = buildPrompt(metadata);
-  if (config.provider === "claude") {
-    return callClaude(prompt, config);
-  } else {
-    return callGemini(prompt, config);
-  }
-}
-function buildPrompt(metadata) {
-  const fields = Object.entries(metadata.inputSchema.properties).map(([name, prop]) => `- ${prop.title ?? name} (${prop.type}): ${prop.description ?? ""}`).join("\n");
-  return `You are helping describe a web form as an AI tool. Given this form information:
-
-Name: ${metadata.name}
-Current description: ${metadata.description}
-Fields:
-${fields}
-
-Write a concise (1-2 sentence) description of what this tool does and when an AI agent should use it. Be specific and actionable. Respond with only the description, no preamble.`;
-}
-async function callClaude(prompt, config) {
-  const model = config.model ?? "claude-haiku-4-5-20251001";
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": config.apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 150,
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-  if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status}`);
-  }
-  const data = await response.json();
-  return data.content.filter((block) => block.type === "text").map((block) => block.text).join("").trim();
-}
-async function callGemini(prompt, config) {
-  const model = config.model ?? "gemini-1.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 150, temperature: 0.2 }
-    })
-  });
-  if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.status}`);
-  }
-  const data = await response.json();
-  return data.candidates[0]?.content.parts.map((p) => p.text).join("").trim() ?? "";
-}
-
 // src/discovery.ts
 function emit(type, form, toolName) {
   window.dispatchEvent(
@@ -1483,12 +1414,7 @@ async function registerForm(form, config) {
     } catch {
     }
   }
-  let metadata = analyzeForm(form, override);
-  if (config.enhance) {
-    if (config.debug)
-      console.debug(`[auto-webmcp] Enriching: ${metadata.name}\u2026`);
-    metadata = await enrichMetadata(metadata, config.enhance);
-  }
+  const metadata = analyzeForm(form, override);
   if (config.debug) {
     warnToolQuality(metadata.name, metadata.description);
   }

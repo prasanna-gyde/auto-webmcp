@@ -57,9 +57,6 @@ await autoWebMCP({
   // Auto-submit when agent invokes (default: false — human must click submit)
   autoSubmit: false,
 
-  // Optional AI enrichment for richer descriptions
-  enhance: { provider: 'claude', apiKey: 'sk-...' },
-
   // Per-form name / description overrides
   overrides: {
     '#checkout-form': {
