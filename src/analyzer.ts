@@ -160,7 +160,7 @@ function inferToolDescription(form: HTMLFormElement): string {
   // 5. Combine nearest heading + page title
   const heading = getNearestHeadingText(form);
   const pageTitle = document.title?.trim();
-  if (heading && pageTitle) return `${heading} — ${pageTitle}`;
+  if (heading && pageTitle) return `${heading}: ${pageTitle}`;
   if (heading) return heading;
   if (pageTitle) return pageTitle;
 

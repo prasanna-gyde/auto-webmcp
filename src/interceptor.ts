@@ -105,6 +105,7 @@ export function buildExecuteHandler(
 
   return async (params: Record<string, unknown>): Promise<ExecuteResult> => {
     pendingFillWarnings.set(form, []);
+    pendingWarnings.delete(form);
     fillFormFields(form, params);
 
     // Compute missing required fields now so they are available when the
@@ -698,13 +699,3 @@ function getMissingRequired(
   return metadata.inputSchema.required.filter((fieldKey) => !(fieldKey in params));
 }
 
-function resolveFormAction(form: HTMLFormElement): string {
-  if (form.action) {
-    try {
-      return new URL(form.action, window.location.href).href;
-    } catch {
-      // ignore
-    }
-  }
-  return window.location.href;
-}

@@ -429,7 +429,7 @@ function inferToolDescription(form) {
   const heading = getNearestHeadingText(form);
   const pageTitle = document.title?.trim();
   if (heading && pageTitle)
-    return `${heading} \u2014 ${pageTitle}`;
+    return `${heading}: ${pageTitle}`;
   if (heading)
     return heading;
   if (pageTitle)
@@ -958,6 +958,7 @@ function buildExecuteHandler(form, config, toolName, metadata) {
   attachSubmitInterceptor(form, toolName);
   return async (params) => {
     pendingFillWarnings.set(form, []);
+    pendingWarnings.delete(form);
     fillFormFields(form, params);
     const missingNow = getMissingRequired(metadata, params);
     if (missingNow.length > 0)
