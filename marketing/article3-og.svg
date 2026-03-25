@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="840" viewBox="0 0 1600 840">
+  <defs>
+    <linearGradient id="topbar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="bggrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1117"/>
+      <stop offset="100%" stop-color="#13151f"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff07" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="840" fill="url(#bggrad)"/>
+  <rect width="1600" height="840" fill="url(#grid)"/>
+  <rect x="0" y="0" width="1600" height="5" fill="url(#topbar)"/>
+
+  <!-- Version badge -->
+  <rect x="625" y="100" width="350" height="46" rx="23" fill="#6366f118" stroke="#6366f150" stroke-width="1"/>
+  <text x="800" y="130" font-family="ui-monospace, monospace" font-size="20" fill="#a5b4fc" text-anchor="middle">auto-webmcp · v0.3.0 · MIT · open source</text>
+
+  <!-- Main title -->
+  <text x="800" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="72" font-weight="700" fill="#ffffff" text-anchor="middle">React support, richer schemas,</text>
+  <text x="800" y="325" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="72" font-weight="700" fill="#ffffff" text-anchor="middle">and WebMCP spec compliance</text>
+
+  <!-- Code snippet -->
+  <rect x="200" y="375" width="1200" height="190" rx="12" fill="#1e2130"/>
+  <rect x="200" y="375" width="5" height="190" rx="2" fill="#6366f1"/>
+  <text x="240" y="415" font-family="ui-monospace, 'SF Mono', monospace" font-size="18" fill="#64748b">// ToolAnnotations auto-inferred — no config needed</text>
+  <text x="240" y="450" font-family="ui-monospace, 'SF Mono', monospace" font-size="18" fill="#94a3b8">&lt;form <tspan fill="#a5b4fc">toolname</tspan>=<tspan fill="#86efac">"delete_account"</tspan> <tspan fill="#a5b4fc">data-webmcp-destructive</tspan>=<tspan fill="#86efac">"true"</tspan>&gt;</text>
+  <text x="240" y="485" font-family="ui-monospace, 'SF Mono', monospace" font-size="18" fill="#94a3b8">  &lt;input <tspan fill="#a5b4fc">type</tspan>=<tspan fill="#86efac">"email"</tspan> <tspan fill="#a5b4fc">toolparamtitle</tspan>=<tspan fill="#86efac">"Confirm email"</tspan>&gt;</text>
+  <text x="240" y="520" font-family="ui-monospace, 'SF Mono', monospace" font-size="18" fill="#64748b">  &lt;!-- React-compatible fill · snapshot · 82 tests --&gt;</text>
+  <text x="240" y="555" font-family="ui-monospace, 'SF Mono', monospace" font-size="18" fill="#94a3b8">&lt;/form&gt;</text>
+
+  <!-- Four feature pills -->
+  <rect x="130" y="610" width="290" height="54" rx="27" fill="#1e2130" stroke="#6366f140" stroke-width="1"/>
+  <text x="275" y="642" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="19" fill="#a5b4fc" text-anchor="middle">React Forms</text>
+
+  <rect x="450" y="610" width="290" height="54" rx="27" fill="#1e2130" stroke="#8b5cf640" stroke-width="1"/>
+  <text x="595" y="642" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="19" fill="#c4b5fd" text-anchor="middle">Orphan Inputs</text>
+
+  <rect x="770" y="610" width="290" height="54" rx="27" fill="#1e2130" stroke="#06b6d440" stroke-width="1"/>
+  <text x="915" y="642" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="19" fill="#67e8f9" text-anchor="middle">ToolAnnotations</text>
+
+  <rect x="1090" y="610" width="290" height="54" rx="27" fill="#1e2130" stroke="#10b98140" stroke-width="1"/>
+  <text x="1235" y="642" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="19" fill="#6ee7b7" text-anchor="middle">Schema Defaults</text>
+
+  <!-- Bottom -->
+  <text x="800" y="760" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="22" fill="#475569" text-anchor="middle">autowebmcp.dev · by Prasanna</text>
+</svg>

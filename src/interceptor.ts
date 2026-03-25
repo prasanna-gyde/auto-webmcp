@@ -27,6 +27,22 @@ export interface ExecuteResult {
   content: Array<{ type: 'text'; text: string }>;
 }
 
+export interface FillWarning {
+  field: string;
+  type: 'clamped' | 'not_filled' | 'missing_required' | 'type_mismatch';
+  message: string;
+  original?: unknown;
+  actual?: unknown;
+}
+
+export interface StructuredExecuteData {
+  status: 'success' | 'partial' | 'error';
+  filled_fields: Record<string, unknown>;
+  skipped_fields: string[];
+  missing_required: string[];
+  warnings: FillWarning[];
+}
+
 type Resolver = (result: ExecuteResult) => void;
 type Rejecter = (error: Error) => void;
 
@@ -46,7 +62,7 @@ const formFieldElements = new WeakMap<HTMLFormElement, Map<string, Element>>();
 const pendingWarnings = new WeakMap<HTMLFormElement, string[]>();
 
 /** Per-form fill warnings (invalid/out-of-range values detected during field filling) */
-const pendingFillWarnings = new WeakMap<HTMLFormElement, string[]>();
+const pendingFillWarnings = new WeakMap<HTMLFormElement, FillWarning[]>();
 
 /**
  * Per-form snapshot of field values captured immediately after fillFormFields()
@@ -91,6 +107,11 @@ export function buildExecuteHandler(
     pendingFillWarnings.set(form, []);
     fillFormFields(form, params);
 
+    // Compute missing required fields now so they are available when the
+    // form submits, regardless of whether autoSubmit is enabled.
+    const missingNow = getMissingRequired(metadata, params);
+    if (missingNow.length > 0) pendingWarnings.set(form, missingNow);
+
     // Dispatch toolactivated event per spec
     window.dispatchEvent(new CustomEvent('toolactivated', { detail: { toolName } }));
 
@@ -134,8 +155,11 @@ export function buildExecuteHandler(
               }
             }
 
-            const missing = getMissingRequired(metadata, params);
-            if (missing.length > 0) pendingWarnings.set(submitForm, missing);
+            // If the form was remounted, transfer the pending warnings to the live form.
+            if (submitForm !== form && pendingWarnings.has(form)) {
+              pendingWarnings.set(submitForm, pendingWarnings.get(form)!);
+              pendingWarnings.delete(form);
+            }
 
             submitForm.requestSubmit();
           } catch (err) {
@@ -164,17 +188,42 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
 
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
     lastFilledSnapshot.delete(form);
-    const missing = pendingWarnings.get(form);
+    const missingRequired = pendingWarnings.get(form) ?? [];
     pendingWarnings.delete(form);
     const fillWarnings = pendingFillWarnings.get(form) ?? [];
     pendingFillWarnings.delete(form);
-    const allWarnings = [
-      ...(missing?.length ? [`required fields were not filled: ${missing.join(', ')}`] : []),
-      ...fillWarnings,
+
+    const skippedFields = fillWarnings
+      .filter((w) => w.type === 'not_filled')
+      .map((w) => w.field);
+
+    const structured: StructuredExecuteData = {
+      status: missingRequired.length > 0 || skippedFields.length > 0 ? 'partial' : 'success',
+      filled_fields: formData,
+      skipped_fields: skippedFields,
+      missing_required: missingRequired,
+      warnings: [
+        ...missingRequired.map((f): FillWarning => ({
+          field: f,
+          type: 'missing_required',
+          message: `required field "${f}" was not provided`,
+        })),
+        ...fillWarnings,
+      ],
+    };
+
+    const allWarnMessages = [
+      ...(missingRequired.length ? [`required fields were not filled: ${missingRequired.join(', ')}`] : []),
+      ...fillWarnings.map((w) => w.message),
     ];
-    const warningText = allWarnings.length ? ` Note: ${allWarnings.join('; ')}.` : '';
+    const warningText = allWarnMessages.length ? ` Note: ${allWarnMessages.join('; ')}.` : '';
     const text = `Form submitted. Fields: ${JSON.stringify(formData)}${warningText}`;
-    const result: ExecuteResult = { content: [{ type: 'text', text }] };
+    const result: ExecuteResult = {
+      content: [
+        { type: 'text', text },
+        { type: 'text', text: JSON.stringify(structured) },
+      ],
+    };
 
     if (e.agentInvoked && typeof e.respondWith === 'function') {
       // Native WebMCP path: use respondWith to return to browser
@@ -367,16 +416,26 @@ function fillInput(
     const raw = String(value ?? '');
     const num = Number(raw);
     if (raw === '' || isNaN(num)) {
-      pendingFillWarnings.get(form)?.push(`"${key}" expects a number, got: ${JSON.stringify(value)}`);
+      pendingFillWarnings.get(form)?.push({
+        field: key,
+        type: 'type_mismatch',
+        message: `"${key}" expects a number, got: ${JSON.stringify(value)}`,
+        original: value,
+      });
       return;
     }
     const min = input.min !== '' ? parseFloat(input.min) : -Infinity;
     const max = input.max !== '' ? parseFloat(input.max) : Infinity;
     if (num < min || num > max) {
-      pendingFillWarnings.get(form)?.push(
-        `"${key}" value ${num} is outside allowed range [${input.min || '?'}, ${input.max || '?'}]`,
-      );
-      input.value = String(Math.min(Math.max(num, min), max));
+      const clamped = Math.min(Math.max(num, min), max);
+      pendingFillWarnings.get(form)?.push({
+        field: key,
+        type: 'clamped',
+        message: `"${key}" value ${num} is outside allowed range [${input.min || '?'}, ${input.max || '?'}], clamped to ${clamped}`,
+        original: num,
+        actual: clamped,
+      });
+      input.value = String(clamped);
     } else {
       input.value = String(num);
     }

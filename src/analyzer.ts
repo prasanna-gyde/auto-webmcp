@@ -264,6 +264,35 @@ function extractDefaultValue(
   return undefined;
 }
 
+/**
+ * Recursively collect native form controls inside shadow roots.
+ * querySelectorAll() does not pierce shadow DOM, so Web Components and
+ * design-system elements that render inputs inside their shadow root are
+ * invisible to the standard form scan. This helper walks every element,
+ * enters its shadowRoot when present, and collects inputs/textareas/selects.
+ */
+function collectShadowControls(
+  root: Element | ShadowRoot,
+  visited = new Set<Element | ShadowRoot>(),
+): Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> {
+  if (visited.has(root)) return [];
+  visited.add(root);
+  const results: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> = [];
+  for (const el of Array.from(root.querySelectorAll('*'))) {
+    if (el.shadowRoot) {
+      results.push(
+        ...Array.from(
+          el.shadowRoot.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+            'input, textarea, select',
+          ),
+        ),
+        ...collectShadowControls(el.shadowRoot, visited),
+      );
+    }
+  }
+  return results;
+}
+
 function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements: Map<string, Element> } {
   const properties: Record<string, JsonSchemaProperty> = {};
   const required: string[] = [];
@@ -273,11 +302,14 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
   const processedRadioGroups = new Set<string>();
   const processedCheckboxGroups = new Set<string>();
 
-  const controls = Array.from(
-    form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-      'input, textarea, select',
+  const controls = [
+    ...Array.from(
+      form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+        'input, textarea, select',
+      ),
     ),
-  );
+    ...collectShadowControls(form),
+  ];
 
   for (const control of controls) {
     const name = control.name;
@@ -502,10 +534,6 @@ function resolveAriaFieldKey(el: Element): string | null {
 }
 
 function inferAriaFieldTitle(el: Element): string {
-  // 1. Native toolparamtitle attribute (spec)
-  const nativeTitle = el.getAttribute('toolparamtitle');
-  if (nativeTitle?.trim()) return nativeTitle.trim();
-
   const htmlEl = el as HTMLElement;
   if (htmlEl.dataset?.['webmcpTitle']) return htmlEl.dataset['webmcpTitle']!;
   const label = el.getAttribute('aria-label');
@@ -539,11 +567,7 @@ function inferAriaFieldDescription(el: Element): string {
 function inferFieldTitle(
   control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
 ): string {
-  // 1. Native toolparamtitle attribute (spec)
-  const nativeTitle = control.getAttribute('toolparamtitle');
-  if (nativeTitle?.trim()) return nativeTitle.trim();
-
-  // 2. data-webmcp-title
+  // 1. data-webmcp-title
   if ('dataset' in control && (control as HTMLElement).dataset['webmcpTitle']) {
     return (control as HTMLElement).dataset['webmcpTitle']!;
   }

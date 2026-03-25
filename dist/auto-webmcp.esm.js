@@ -484,17 +484,39 @@ function extractDefaultValue(control) {
   }
   return void 0;
 }
+function collectShadowControls(root, visited = /* @__PURE__ */ new Set()) {
+  if (visited.has(root))
+    return [];
+  visited.add(root);
+  const results = [];
+  for (const el of Array.from(root.querySelectorAll("*"))) {
+    if (el.shadowRoot) {
+      results.push(
+        ...Array.from(
+          el.shadowRoot.querySelectorAll(
+            "input, textarea, select"
+          )
+        ),
+        ...collectShadowControls(el.shadowRoot, visited)
+      );
+    }
+  }
+  return results;
+}
 function buildSchema(form) {
   const properties = {};
   const required = [];
   const fieldElements = /* @__PURE__ */ new Map();
   const processedRadioGroups = /* @__PURE__ */ new Set();
   const processedCheckboxGroups = /* @__PURE__ */ new Set();
-  const controls = Array.from(
-    form.querySelectorAll(
-      "input, textarea, select"
-    )
-  );
+  const controls = [
+    ...Array.from(
+      form.querySelectorAll(
+        "input, textarea, select"
+      )
+    ),
+    ...collectShadowControls(form)
+  ];
   for (const control of controls) {
     const name = control.name;
     const fieldKey = name || resolveNativeControlFallbackKey(control);
@@ -672,9 +694,6 @@ function resolveAriaFieldKey(el) {
   return null;
 }
 function inferAriaFieldTitle(el) {
-  const nativeTitle = el.getAttribute("toolparamtitle");
-  if (nativeTitle?.trim())
-    return nativeTitle.trim();
   const htmlEl = el;
   if (htmlEl.dataset?.["webmcpTitle"])
     return htmlEl.dataset["webmcpTitle"];
@@ -713,9 +732,6 @@ function inferAriaFieldDescription(el) {
   return "";
 }
 function inferFieldTitle(control) {
-  const nativeTitle = control.getAttribute("toolparamtitle");
-  if (nativeTitle?.trim())
-    return nativeTitle.trim();
   if ("dataset" in control && control.dataset["webmcpTitle"]) {
     return control.dataset["webmcpTitle"];
   }
@@ -925,6 +941,9 @@ function buildExecuteHandler(form, config, toolName, metadata) {
   return async (params) => {
     pendingFillWarnings.set(form, []);
     fillFormFields(form, params);
+    const missingNow = getMissingRequired(metadata, params);
+    if (missingNow.length > 0)
+      pendingWarnings.set(form, missingNow);
     window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
     return new Promise((resolve, reject) => {
       pendingExecutions.set(form, { resolve, reject });
@@ -951,9 +970,10 @@ function buildExecuteHandler(form, config, toolName, metadata) {
                 attachSubmitInterceptor(submitForm, toolName);
               }
             }
-            const missing = getMissingRequired(metadata, params);
-            if (missing.length > 0)
-              pendingWarnings.set(submitForm, missing);
+            if (submitForm !== form && pendingWarnings.has(form)) {
+              pendingWarnings.set(submitForm, pendingWarnings.get(form));
+              pendingWarnings.delete(form);
+            }
             submitForm.requestSubmit();
           } catch (err) {
             reject(err instanceof Error ? err : new Error(String(err)));
@@ -975,17 +995,37 @@ function attachSubmitInterceptor(form, toolName) {
     pendingExecutions.delete(form);
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
     lastFilledSnapshot.delete(form);
-    const missing = pendingWarnings.get(form);
+    const missingRequired = pendingWarnings.get(form) ?? [];
     pendingWarnings.delete(form);
     const fillWarnings = pendingFillWarnings.get(form) ?? [];
     pendingFillWarnings.delete(form);
-    const allWarnings = [
-      ...missing?.length ? [`required fields were not filled: ${missing.join(", ")}`] : [],
-      ...fillWarnings
+    const skippedFields = fillWarnings.filter((w) => w.type === "not_filled").map((w) => w.field);
+    const structured = {
+      status: missingRequired.length > 0 || skippedFields.length > 0 ? "partial" : "success",
+      filled_fields: formData,
+      skipped_fields: skippedFields,
+      missing_required: missingRequired,
+      warnings: [
+        ...missingRequired.map((f) => ({
+          field: f,
+          type: "missing_required",
+          message: `required field "${f}" was not provided`
+        })),
+        ...fillWarnings
+      ]
+    };
+    const allWarnMessages = [
+      ...missingRequired.length ? [`required fields were not filled: ${missingRequired.join(", ")}`] : [],
+      ...fillWarnings.map((w) => w.message)
     ];
-    const warningText = allWarnings.length ? ` Note: ${allWarnings.join("; ")}.` : "";
+    const warningText = allWarnMessages.length ? ` Note: ${allWarnMessages.join("; ")}.` : "";
     const text = `Form submitted. Fields: ${JSON.stringify(formData)}${warningText}`;
-    const result = { content: [{ type: "text", text }] };
+    const result = {
+      content: [
+        { type: "text", text },
+        { type: "text", text: JSON.stringify(structured) }
+      ]
+    };
     if (e.agentInvoked && typeof e.respondWith === "function") {
       e.preventDefault();
       e.respondWith(Promise.resolve(result));
@@ -1119,16 +1159,26 @@ function fillInput(input, form, key, value) {
     const raw = String(value ?? "");
     const num = Number(raw);
     if (raw === "" || isNaN(num)) {
-      pendingFillWarnings.get(form)?.push(`"${key}" expects a number, got: ${JSON.stringify(value)}`);
+      pendingFillWarnings.get(form)?.push({
+        field: key,
+        type: "type_mismatch",
+        message: `"${key}" expects a number, got: ${JSON.stringify(value)}`,
+        original: value
+      });
       return;
     }
     const min = input.min !== "" ? parseFloat(input.min) : -Infinity;
     const max = input.max !== "" ? parseFloat(input.max) : Infinity;
     if (num < min || num > max) {
-      pendingFillWarnings.get(form)?.push(
-        `"${key}" value ${num} is outside allowed range [${input.min || "?"}, ${input.max || "?"}]`
-      );
-      input.value = String(Math.min(Math.max(num, min), max));
+      const clamped = Math.min(Math.max(num, min), max);
+      pendingFillWarnings.get(form)?.push({
+        field: key,
+        type: "clamped",
+        message: `"${key}" value ${num} is outside allowed range [${input.min || "?"}, ${input.max || "?"}], clamped to ${clamped}`,
+        original: num,
+        actual: clamped
+      });
+      input.value = String(clamped);
     } else {
       input.value = String(num);
     }

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="840" viewBox="0 0 1600 840">
+  <defs>
+    <linearGradient id="topbar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="bggrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1117"/>
+      <stop offset="100%" stop-color="#13151f"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff07" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="840" fill="url(#bggrad)"/>
+  <rect width="1600" height="840" fill="url(#grid)"/>
+  <rect x="0" y="0" width="1600" height="5" fill="url(#topbar)"/>
+
+  <!-- Chrome badge -->
+  <rect x="575" y="100" width="450" height="46" rx="23" fill="#6366f118" stroke="#6366f150" stroke-width="1"/>
+  <text x="800" y="130" font-family="ui-monospace, monospace" font-size="20" fill="#a5b4fc" text-anchor="middle">Chrome 146 · Early Preview · chrome://flags/#enable-webmcp-testing</text>
+
+  <!-- Main title -->
+  <text x="800" y="260" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="80" font-weight="700" fill="#ffffff" text-anchor="middle">What is WebMCP?</text>
+
+  <!-- Subtitle -->
+  <text x="800" y="340" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="32" fill="#94a3b8" text-anchor="middle">Chrome's browser-native API for AI agents</text>
+
+  <!-- Code snippet -->
+  <rect x="200" y="390" width="1200" height="130" rx="12" fill="#1e2130"/>
+  <rect x="200" y="390" width="5" height="130" rx="2" fill="#6366f1"/>
+  <text x="800" y="432" font-family="ui-monospace, 'SF Mono', monospace" font-size="19" fill="#64748b" text-anchor="middle">&lt;form toolname="search_flights" tooldescription="Search for flights"&gt;</text>
+  <text x="800" y="468" font-family="ui-monospace, 'SF Mono', monospace" font-size="19" fill="#a5b4fc" text-anchor="middle">  &lt;input type="text" name="origin"&gt;</text>
+  <text x="800" y="504" font-family="ui-monospace, 'SF Mono', monospace" font-size="19" fill="#64748b" text-anchor="middle">&lt;/form&gt;  &lt;!-- instantly callable by AI agents --&gt;</text>
+
+  <!-- Three concept pills -->
+  <rect x="218" y="570" width="330" height="56" rx="28" fill="#1e2130" stroke="#6366f140" stroke-width="1"/>
+  <text x="383" y="603" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="20" fill="#a5b4fc" text-anchor="middle">Declarative API</text>
+
+  <rect x="635" y="570" width="330" height="56" rx="28" fill="#1e2130" stroke="#8b5cf640" stroke-width="1"/>
+  <text x="800" y="603" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="20" fill="#c4b5fd" text-anchor="middle">Imperative API</text>
+
+  <rect x="1052" y="570" width="330" height="56" rx="28" fill="#1e2130" stroke="#06b6d440" stroke-width="1"/>
+  <text x="1217" y="603" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="20" fill="#67e8f9" text-anchor="middle">JSON Schema</text>
+
+  <!-- Bottom -->
+  <text x="800" y="750" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="22" fill="#475569" text-anchor="middle">autowebmcp.dev · by Prasanna</text>
+</svg>

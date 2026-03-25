@@ -22,6 +22,20 @@ export interface ExecuteResult {
         text: string;
     }>;
 }
+export interface FillWarning {
+    field: string;
+    type: 'clamped' | 'not_filled' | 'missing_required' | 'type_mismatch';
+    message: string;
+    original?: unknown;
+    actual?: unknown;
+}
+export interface StructuredExecuteData {
+    status: 'success' | 'partial' | 'error';
+    filled_fields: Record<string, unknown>;
+    skipped_fields: string[];
+    missing_required: string[];
+    warnings: FillWarning[];
+}
 /**
  * Build an `execute` function for a form tool.
  *

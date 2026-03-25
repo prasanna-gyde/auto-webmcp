@@ -331,7 +331,7 @@ test.describe('Native WebMCP attributes', () => {
     expect(props['frequency']?.['enum']).toEqual(['daily', 'weekly', 'monthly']);
   });
 
-  test('uses toolparamtitle attribute for field title', async ({ page }) => {
+  test('uses label text for field title', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
     const props = schema['properties'] as Record<string, Record<string, unknown>>;
@@ -993,5 +993,138 @@ test.describe('Default values in schema', () => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
     expect((props?.['promo_code'] as Record<string, unknown>)?.['default']).toBeUndefined();
+  });
+});
+
+test.describe('Shadow DOM field discovery', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/shadow-dom-form.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+  });
+
+  test('registers form containing shadow DOM custom element', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    expect(tools.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('includes light DOM field (name) in schema', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(props).toHaveProperty('name');
+    expect((props['name'] as Record<string, unknown>)?.['type']).toBe('string');
+  });
+
+  test('discovers city input inside shadow root', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(props).toHaveProperty('city');
+    expect((props['city'] as Record<string, unknown>)?.['type']).toBe('string');
+  });
+
+  test('discovers zip input inside shadow root', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
+    expect(props).toHaveProperty('zip');
+    expect((props['zip'] as Record<string, unknown>)?.['type']).toBe('string');
+  });
+
+  test('marks shadow DOM required fields as required', async ({ page }) => {
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const required = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['required'] as string[];
+    expect(required).toContain('name');
+    expect(required).toContain('city');
+  });
+});
+
+test.describe('Structured ExecuteResult', () => {
+  // These tests use native-attrs.html which has no toolautosubmit.
+  // Pattern: start the execute handler (fills form, returns pending promise),
+  // then programmatically submit the form, then await the result.
+
+  test('execute returns content[0] human-readable text and content[1] structured JSON', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await page.goto('/tests/fixtures/native-attrs.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    const resultPromise = page.evaluate(async () => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      return handlers['subscribe_newsletter']?.({ email: 'a@b.com', frequency: 'weekly' });
+    });
+
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      document.querySelector<HTMLFormElement>('form')?.requestSubmit();
+    });
+
+    const result = await resultPromise as { content: Array<{ type: string; text: string }> };
+    expect(result?.content[0]?.type).toBe('text');
+    expect(result?.content[0]?.text).toContain('Form submitted');
+    const raw = result?.content[1]?.text;
+    expect(raw).toBeDefined();
+    const structured = JSON.parse(raw!);
+    expect(structured).toHaveProperty('status');
+    expect(structured).toHaveProperty('filled_fields');
+    expect(structured).toHaveProperty('missing_required');
+    expect(structured).toHaveProperty('warnings');
+    expect(Array.isArray(structured.warnings)).toBe(true);
+  });
+
+  test('status is success when all required fields provided', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await page.goto('/tests/fixtures/native-attrs.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    const resultPromise = page.evaluate(async () => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      return handlers['subscribe_newsletter']?.({ email: 'a@b.com', frequency: 'weekly' });
+    });
+
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      document.querySelector<HTMLFormElement>('form')?.requestSubmit();
+    });
+
+    const result = await resultPromise as { content: Array<{ type: string; text: string }> };
+    const structured = JSON.parse(result.content[1]!.text);
+    expect(structured.status).toBe('success');
+    expect(structured.missing_required).toHaveLength(0);
+  });
+
+  test('status is partial when required field missing', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await page.goto('/tests/fixtures/native-attrs.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    const resultPromise = page.evaluate(async () => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      // email is required but not provided
+      return handlers['subscribe_newsletter']?.({ frequency: 'weekly' });
+    });
+
+    await page.waitForTimeout(200);
+    // Bypass HTML5 validation so the submit event fires even with missing required fields
+    await page.evaluate(() => {
+      const f = document.querySelector<HTMLFormElement>('form');
+      if (f) { f.noValidate = true; f.requestSubmit(); }
+    });
+
+    const result = await resultPromise as { content: Array<{ type: string; text: string }> };
+    const structured = JSON.parse(result.content[1]!.text);
+    expect(structured.status).toBe('partial');
+    expect(structured.missing_required).toContain('email');
+    expect(structured.warnings.some((w: { type: string }) => w.type === 'missing_required')).toBe(true);
   });
 });

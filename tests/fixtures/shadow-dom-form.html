@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Shadow DOM Form</title>
+</head>
+<body>
+  <h1>Shadow DOM Form Test</h1>
+
+  <!--
+    A form that contains a custom element (<location-picker>).
+    The custom element renders its inputs inside a shadow root,
+    so querySelectorAll('input') on the form does not find them.
+    auto-webmcp should pierce the shadow DOM and discover them.
+  -->
+  <form id="delivery-form" action="/deliver" method="post">
+    <label for="name">Full Name</label>
+    <input id="name" name="name" type="text" required>
+
+    <!-- Custom element whose shadow root contains city + zip inputs -->
+    <location-picker></location-picker>
+
+    <button type="submit">Place Order</button>
+  </form>
+
+  <script>
+    customElements.define('location-picker', class extends HTMLElement {
+      constructor() {
+        super();
+        const shadow = this.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+          <label>City <input type="text" name="city" id="city" required></label>
+          <label>ZIP <input type="text" name="zip" id="zip" pattern="[0-9]{5}"></label>
+        `;
+      }
+    });
+  </script>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>
