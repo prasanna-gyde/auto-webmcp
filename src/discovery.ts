@@ -373,11 +373,9 @@ export async function startDiscovery(config: ResolvedConfig): Promise<void> {
   listenForRouteChanges(config);
   await scanForms(config);
 
-  // If no form-based tools were found, try orphan inputs (inputs outside <form> elements).
-  // This covers newsletter subscribe widgets, search bars, and other formless UI patterns.
-  if (registeredFormCount === 0) {
-    await scanOrphanInputs(config);
-  }
+  // Always scan for orphan inputs (inputs outside <form> elements) in addition to form-based tools.
+  // Many modern SPAs (GitHub issues, Twitter compose, LinkedIn) render inputs without a <form> wrapper.
+  await scanOrphanInputs(config);
 }
 
 export function stopDiscovery(): void {
