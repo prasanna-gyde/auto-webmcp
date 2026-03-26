@@ -21,7 +21,18 @@ window._awmcpToggleSchema = function (name) {
 };
 
 window._awmcpCopyMcp = function (name, btn) {
-  var payload = JSON.stringify({ type: 'tool_use', name: name, input: {} }, null, 2);
+  var m = window.__registeredToolMeta[name];
+  var input = {};
+  var props = (m && m.inputSchema && m.inputSchema.properties) || {};
+  Object.keys(props).forEach(function (k) {
+    var p = props[k];
+    if (p.type === 'array') input[k] = [];
+    else if (p.type === 'number' || p.type === 'integer') input[k] = 0;
+    else if (p.type === 'boolean') input[k] = false;
+    else if (p.enum && p.enum.length) input[k] = p.enum[0];
+    else input[k] = '';
+  });
+  var payload = JSON.stringify({ type: 'tool_use', name: name, input: input }, null, 2);
   navigator.clipboard.writeText(payload).then(function () {
     var prev = btn.textContent; btn.textContent = 'Copied!';
     setTimeout(function () { btn.textContent = prev; }, 1500);
