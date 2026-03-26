@@ -1640,9 +1640,7 @@ async function startDiscovery(config) {
   startObserver(config);
   listenForRouteChanges(config);
   await scanForms(config);
-  if (registeredFormCount === 0) {
-    await scanOrphanInputs(config);
-  }
+  await scanOrphanInputs(config);
 }
 function stopDiscovery() {
   observer?.disconnect();
