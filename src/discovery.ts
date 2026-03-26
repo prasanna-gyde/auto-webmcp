@@ -232,6 +232,9 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
   if (!isWebMCPSupported()) return;
 
   const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button:not([type]):not([disabled])';
+  // Includes disabled buttons — used only to identify which container is the "form group".
+  // Many sites (GitHub, Twitter) start with the submit button disabled until fields are filled.
+  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button:not([type])';
   const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
 
   // Collect visible inputs that are not inside a <form>
@@ -259,7 +262,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
 
     while (container && container !== document.body) {
       const hasSubmitBtn =
-        container.querySelector(SUBMIT_BTN_SELECTOR) !== null ||
+        container.querySelector(SUBMIT_BTN_GROUPING_SELECTOR) !== null ||
         Array.from(container.querySelectorAll('button')).some(
           (b) => SUBMIT_TEXT_RE.test(b.textContent ?? ''),
         );

@@ -1536,6 +1536,7 @@ async function scanOrphanInputs(config) {
   if (!isWebMCPSupported())
     return;
   const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button:not([type]):not([disabled])';
+  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button:not([type])';
   const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
   const orphanInputs = Array.from(
     document.querySelectorAll(
@@ -1555,7 +1556,7 @@ async function scanOrphanInputs(config) {
     let container = input.parentElement;
     let foundContainer = input.parentElement ?? document.body;
     while (container && container !== document.body) {
-      const hasSubmitBtn = container.querySelector(SUBMIT_BTN_SELECTOR) !== null || Array.from(container.querySelectorAll("button")).some(
+      const hasSubmitBtn = container.querySelector(SUBMIT_BTN_GROUPING_SELECTOR) !== null || Array.from(container.querySelectorAll("button")).some(
         (b) => SUBMIT_TEXT_RE.test(b.textContent ?? "")
       );
       if (hasSubmitBtn) {
