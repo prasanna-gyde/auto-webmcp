@@ -346,7 +346,7 @@ function fillFormFields(form: HTMLFormElement, params: Record<string, unknown>):
         setReactValue(input, String(value ?? ''));
         snapshot[key] = input.value;
       } else if (input instanceof HTMLSelectElement) {
-        fillSelectElement(input, value);
+        fillSelectElement(input, value, form, key);
         snapshot[key] = input.multiple
           ? Array.from(input.options).filter((o) => o.selected).map((o) => o.value)
           : input.value;
@@ -377,7 +377,7 @@ function fillFormFields(form: HTMLFormElement, params: Record<string, unknown>):
         setReactValue(effectiveEl, String(value ?? ''));
         snapshot[key] = effectiveEl.value;
       } else if (effectiveEl instanceof HTMLSelectElement) {
-        fillSelectElement(effectiveEl, value);
+        fillSelectElement(effectiveEl, value, form, key);
         snapshot[key] = effectiveEl.multiple
           ? Array.from(effectiveEl.options).filter((o) => o.selected).map((o) => o.value)
           : effectiveEl.value;
@@ -389,6 +389,12 @@ function fillFormFields(form: HTMLFormElement, params: Record<string, unknown>):
   }
 
   lastFilledSnapshot.set(form, snapshot);
+
+  // Expose fill warnings for external readers (extension, bridge).
+  // The WeakMap is not accessible outside the IIFE closure, so we mirror the
+  // current warnings onto window so the extension can read them after filling.
+  (window as unknown as Record<string, unknown>)['__lastFillWarnings'] =
+    pendingFillWarnings.get(form) ?? [];
 }
 
 function fillInput(
@@ -470,10 +476,15 @@ function fillInput(
 /**
  * Fill a select element. For multi-select, deselects all options then selects
  * those whose value is in the agent-supplied array. A single string value is
- * treated as a one-element array for multi-select. For single-select, sets
- * select.value directly (original behavior).
+ * treated as a one-element array for multi-select. For single-select, tries
+ * exact value match first, then case-insensitive label match as fallback.
  */
-function fillSelectElement(select: HTMLSelectElement, value: unknown): void {
+function fillSelectElement(
+  select: HTMLSelectElement,
+  value: unknown,
+  form?: HTMLFormElement,
+  key?: string,
+): void {
   if (select.multiple) {
     const vals: string[] = Array.isArray(value)
       ? (value as unknown[]).map(String)
@@ -484,7 +495,30 @@ function fillSelectElement(select: HTMLSelectElement, value: unknown): void {
     select.dispatchEvent(new Event('change', { bubbles: true }));
     return;
   }
-  select.value = String(value ?? '');
+
+  const strVal = String(value ?? '');
+  select.value = strVal;
+
+  // If the value didn't match any option (browser silently ignores unknown values),
+  // try case-insensitive label/text matching as a fallback.
+  if (select.value !== strVal) {
+    const lower = strVal.toLowerCase();
+    const byLabel = Array.from(select.options).find(
+      (o) => o.text.trim().toLowerCase() === lower || o.label.trim().toLowerCase() === lower,
+    );
+    if (byLabel) {
+      select.value = byLabel.value;
+    } else if (form && key) {
+      // Neither value nor label matched — record a not_filled warning.
+      pendingFillWarnings.get(form)?.push({
+        field: key,
+        type: 'not_filled',
+        message: `"${key}" value "${strVal}" did not match any option in the select`,
+        original: strVal,
+      });
+    }
+  }
+
   select.dispatchEvent(new Event('change', { bubbles: true }));
 }
 

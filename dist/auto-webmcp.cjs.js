@@ -1127,7 +1127,7 @@ function fillFormFields(form, params) {
         setReactValue(input, String(value ?? ""));
         snapshot[key] = input.value;
       } else if (input instanceof HTMLSelectElement) {
-        fillSelectElement(input, value);
+        fillSelectElement(input, value, form, key);
         snapshot[key] = input.multiple ? Array.from(input.options).filter((o) => o.selected).map((o) => o.value) : input.value;
       }
       continue;
@@ -1150,7 +1150,7 @@ function fillFormFields(form, params) {
         setReactValue(effectiveEl, String(value ?? ""));
         snapshot[key] = effectiveEl.value;
       } else if (effectiveEl instanceof HTMLSelectElement) {
-        fillSelectElement(effectiveEl, value);
+        fillSelectElement(effectiveEl, value, form, key);
         snapshot[key] = effectiveEl.multiple ? Array.from(effectiveEl.options).filter((o) => o.selected).map((o) => o.value) : effectiveEl.value;
       } else {
         fillAriaField(effectiveEl, value);
@@ -1159,6 +1159,7 @@ function fillFormFields(form, params) {
     }
   }
   lastFilledSnapshot.set(form, snapshot);
+  window["__lastFillWarnings"] = pendingFillWarnings.get(form) ?? [];
 }
 function fillInput(input, form, key, value) {
   const type = input.type.toLowerCase();
@@ -1225,7 +1226,7 @@ function fillInput(input, form, key, value) {
   }
   setReactValue(input, String(value ?? ""));
 }
-function fillSelectElement(select, value) {
+function fillSelectElement(select, value, form, key) {
   if (select.multiple) {
     const vals = Array.isArray(value) ? value.map(String) : [String(value ?? "")];
     for (const opt of Array.from(select.options)) {
@@ -1234,7 +1235,24 @@ function fillSelectElement(select, value) {
     select.dispatchEvent(new Event("change", { bubbles: true }));
     return;
   }
-  select.value = String(value ?? "");
+  const strVal = String(value ?? "");
+  select.value = strVal;
+  if (select.value !== strVal) {
+    const lower = strVal.toLowerCase();
+    const byLabel = Array.from(select.options).find(
+      (o) => o.text.trim().toLowerCase() === lower || o.label.trim().toLowerCase() === lower
+    );
+    if (byLabel) {
+      select.value = byLabel.value;
+    } else if (form && key) {
+      pendingFillWarnings.get(form)?.push({
+        field: key,
+        type: "not_filled",
+        message: `"${key}" value "${strVal}" did not match any option in the select`,
+        original: strVal
+      });
+    }
+  }
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 function fillAriaField(el, value) {
