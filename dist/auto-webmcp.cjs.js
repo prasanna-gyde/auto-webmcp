@@ -630,7 +630,7 @@ function buildSchema(form) {
       required.push(key);
     }
   }
-  return { schema: { type: "object", properties, required }, fieldElements };
+  return { schema: { "$schema": "https://json-schema.org/draft/2020-12/schema", type: "object", properties, required }, fieldElements };
 }
 function resolveNativeControlFallbackKey(control) {
   const el = control;
@@ -835,7 +835,24 @@ function analyzeOrphanInputGroup(container, inputs, submitBtn) {
   const name = inferOrphanToolName(container, submitBtn);
   const description = inferOrphanToolDescription(container);
   const { schema: inputSchema, fieldElements } = buildSchemaFromInputs(inputs);
-  return { name, description, inputSchema, fieldElements };
+  const annotations = inferOrphanAnnotations(submitBtn);
+  return { name, description, inputSchema, annotations, fieldElements };
+}
+function inferOrphanAnnotations(submitBtn) {
+  const annotations = {};
+  const submitText = submitBtn instanceof HTMLInputElement ? submitBtn.value.trim() : submitBtn?.textContent?.trim() ?? "";
+  if (READONLY_BUTTON_PATTERNS.test(submitText)) {
+    annotations.readOnlyHint = true;
+    annotations.idempotentHint = true;
+  }
+  if (DESTRUCTIVE_BUTTON_PATTERNS.test(submitText)) {
+    annotations.destructiveHint = true;
+  }
+  if (annotations.readOnlyHint !== true) {
+    annotations.openWorldHint = true;
+  }
+  const hasNonDefault = annotations.readOnlyHint === true || annotations.destructiveHint === true || annotations.idempotentHint === true || annotations.openWorldHint === false;
+  return hasNonDefault ? annotations : {};
 }
 function inferOrphanToolName(container, submitBtn) {
   if (submitBtn) {
@@ -890,8 +907,8 @@ function buildSchemaFromInputs(inputs) {
   const processedRadioGroups = /* @__PURE__ */ new Set();
   const processedCheckboxGroups = /* @__PURE__ */ new Set();
   for (const control of inputs) {
-    const name = control.name;
-    const fieldKey = name || resolveNativeControlFallbackKey(control);
+    const rawName = control.name;
+    const fieldKey = (rawName ? sanitizeName(rawName) : null) || resolveNativeControlFallbackKey(control);
     if (!fieldKey)
       continue;
     if (control instanceof HTMLInputElement && control.type === "radio") {
@@ -930,12 +947,12 @@ function buildSchemaFromInputs(inputs) {
       }
     }
     properties[fieldKey] = schemaProp;
-    if (!name)
+    if (!rawName)
       fieldElements.set(fieldKey, control);
     if (control.required)
       required.push(fieldKey);
   }
-  return { schema: { type: "object", properties, required }, fieldElements };
+  return { schema: { "$schema": "https://json-schema.org/draft/2020-12/schema", type: "object", properties, required }, fieldElements };
 }
 
 // src/discovery.ts
@@ -1623,15 +1640,42 @@ async function scanOrphanInputs(config) {
         }
       }
       window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
-      return { content: [{ type: "text", text: "Fields filled. Ready to submit." }] };
+      if (!config.autoSubmit) {
+        return { content: [{ type: "text", text: "Fields filled. Ready to submit." }] };
+      }
+      let btn = null;
+      const deadline = Date.now() + 2e3;
+      while (Date.now() < deadline) {
+        const candidates = Array.from(
+          container.querySelectorAll(SUBMIT_BTN_SELECTOR)
+        ).filter((b) => {
+          const r = b.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        });
+        const last = candidates[candidates.length - 1] ?? null;
+        if (last) {
+          btn = last;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!btn) {
+        return { content: [{ type: "text", text: "Fields filled but the submit button is still disabled. The page may require additional input before submitting." }] };
+      }
+      btn.click();
+      return { content: [{ type: "text", text: "Fields filled and form submitted." }] };
     };
     try {
-      await navigator.modelContext.registerTool({
+      const toolDef = {
         name: metadata.name,
         description: metadata.description,
         inputSchema: metadata.inputSchema,
         execute
-      });
+      };
+      if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
+        toolDef.annotations = metadata.annotations;
+      }
+      await navigator.modelContext.registerTool(toolDef);
       if (config.debug) {
         console.debug(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
       }

@@ -3,10 +3,10 @@
  */
 
 import { ResolvedConfig } from './config.js';
-import { analyzeForm, analyzeOrphanInputGroup } from './analyzer.js';
+import { analyzeForm, analyzeOrphanInputGroup, ToolAnnotations } from './analyzer.js';
 import { registerFormTool, unregisterFormTool, isWebMCPSupported } from './registry.js';
 import { buildExecuteHandler, fillElement } from './interceptor.js';
-import { ARIA_ROLES_TO_SCAN } from './schema.js';
+import { ARIA_ROLES_TO_SCAN, JsonSchema } from './schema.js';
 
 // ---------------------------------------------------------------------------
 // Events
@@ -329,16 +329,52 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         }
       }
       window.dispatchEvent(new CustomEvent('toolactivated', { detail: { toolName } }));
-      return { content: [{ type: 'text', text: 'Fields filled. Ready to submit.' }] };
+
+      if (!config.autoSubmit) {
+        return { content: [{ type: 'text', text: 'Fields filled. Ready to submit.' }] };
+      }
+
+      // Poll for the submit button to become enabled (handles React/Vue re-renders
+      // that enable the button after detecting field content).
+      let btn: HTMLButtonElement | HTMLInputElement | null = null;
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline) {
+        const candidates = Array.from(
+          container.querySelectorAll<HTMLButtonElement | HTMLInputElement>(SUBMIT_BTN_SELECTOR),
+        ).filter((b) => {
+          const r = b.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        });
+        const last = candidates[candidates.length - 1] ?? null;
+        if (last) { btn = last; break; }
+        await new Promise<void>((r) => setTimeout(r, 100));
+      }
+
+      if (!btn) {
+        return { content: [{ type: 'text', text: 'Fields filled but the submit button is still disabled. The page may require additional input before submitting.' }] };
+      }
+
+      btn.click();
+      return { content: [{ type: 'text', text: 'Fields filled and form submitted.' }] };
     };
 
     try {
-      await navigator.modelContext!.registerTool({
+      const toolDef: {
+        name: string;
+        description: string;
+        inputSchema: JsonSchema;
+        annotations?: ToolAnnotations;
+        execute: (params: Record<string, unknown>) => Promise<{ content: Array<{ type: 'text'; text: string }> }>;
+      } = {
         name: metadata.name,
         description: metadata.description,
         inputSchema: metadata.inputSchema,
         execute,
-      });
+      };
+      if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
+        toolDef.annotations = metadata.annotations;
+      }
+      await navigator.modelContext!.registerTool(toolDef);
       if (config.debug) {
         console.debug(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
       }

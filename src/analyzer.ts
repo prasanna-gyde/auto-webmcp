@@ -419,7 +419,7 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
     }
   }
 
-  return { schema: { type: 'object', properties, required }, fieldElements };
+  return { schema: { '$schema': 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties, required }, fieldElements };
 }
 
 /** Derive a schema key for a native control that lacks a name attribute */
@@ -706,7 +706,37 @@ export function analyzeOrphanInputGroup(
   const name = inferOrphanToolName(container, submitBtn);
   const description = inferOrphanToolDescription(container);
   const { schema: inputSchema, fieldElements } = buildSchemaFromInputs(inputs);
-  return { name, description, inputSchema, fieldElements };
+  const annotations = inferOrphanAnnotations(submitBtn);
+  return { name, description, inputSchema, annotations, fieldElements };
+}
+
+function inferOrphanAnnotations(
+  submitBtn: HTMLButtonElement | HTMLInputElement | null,
+): ToolAnnotations {
+  const annotations: ToolAnnotations = {};
+  const submitText =
+    submitBtn instanceof HTMLInputElement
+      ? submitBtn.value.trim()
+      : (submitBtn?.textContent?.trim() ?? '');
+
+  if (READONLY_BUTTON_PATTERNS.test(submitText)) {
+    annotations.readOnlyHint = true;
+    annotations.idempotentHint = true;
+  }
+  if (DESTRUCTIVE_BUTTON_PATTERNS.test(submitText)) {
+    annotations.destructiveHint = true;
+  }
+  if (annotations.readOnlyHint !== true) {
+    annotations.openWorldHint = true;
+  }
+
+  const hasNonDefault =
+    annotations.readOnlyHint === true ||
+    annotations.destructiveHint === true ||
+    annotations.idempotentHint === true ||
+    annotations.openWorldHint === false;
+
+  return hasNonDefault ? annotations : {};
 }
 
 function inferOrphanToolName(
@@ -782,8 +812,10 @@ function buildSchemaFromInputs(
   const processedCheckboxGroups = new Set<string>();
 
   for (const control of inputs) {
-    const name = control.name;
-    const fieldKey = name || resolveNativeControlFallbackKey(control);
+    const rawName = control.name;
+    // Sanitize the raw name (handles namespaced names like "issue[title]" → "issue_title")
+    // so schema keys match the sanitized keys used in the execute handler.
+    const fieldKey = (rawName ? sanitizeName(rawName) : null) || resolveNativeControlFallbackKey(control);
     if (!fieldKey) continue;
 
     if (control instanceof HTMLInputElement && control.type === 'radio') {
@@ -824,9 +856,9 @@ function buildSchemaFromInputs(
     }
 
     properties[fieldKey] = schemaProp;
-    if (!name) fieldElements.set(fieldKey, control);
+    if (!rawName) fieldElements.set(fieldKey, control);
     if (control.required) required.push(fieldKey);
   }
 
-  return { schema: { type: 'object', properties, required }, fieldElements };
+  return { schema: { '$schema': 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties, required }, fieldElements };
 }

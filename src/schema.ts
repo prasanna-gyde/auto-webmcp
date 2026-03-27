@@ -26,6 +26,7 @@ export interface JsonSchemaProperty {
 }
 
 export interface JsonSchema {
+  $schema?: string;
   type: 'object';
   properties: Record<string, JsonSchemaProperty>;
   required: string[];

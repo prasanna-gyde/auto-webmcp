@@ -6,6 +6,22 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.7] — 2026-03-27
+
+### Bug Fix
+
+- **Orphan field key mismatch fixed (GitHub issues, GitLab, Bitbucket, Rails apps).** Fields with namespaced `name` attributes like `issue[title]` were never filled because the schema stored the raw key `issue[title]` while the execute handler sanitized it to `issue_title`. Both now use sanitized keys, so parameters from agents correctly map to the right DOM elements.
+
+### New Features
+
+- **Orphan tools now auto-submit after filling.** When `autoSubmit` is enabled, the orphan execute handler polls for the submit button to become enabled (up to 2 seconds, handles React/Vue re-renders) and clicks it, matching the behavior of regular form tools. When the button remains disabled, a descriptive message is returned so agents can ask for missing required input.
+
+- **JSON Schema 2020-12 dialect declared.** All generated `inputSchema` objects now include `"$schema": "https://json-schema.org/draft/2020-12/schema"`, making the library spec-compliant with validators and future Chrome enforcement.
+
+- **Orphan groups inherit tool annotations.** `analyzeOrphanInputGroup()` now calls `inferOrphanAnnotations()` to set `readOnlyHint`/`idempotentHint` from search-like submit button text and `destructiveHint` from delete/remove/cancel text, matching the annotation inference already done for regular forms.
+
+---
+
 ## [0.2.0] — 2026-03-21
 
 ### Breaking Changes
