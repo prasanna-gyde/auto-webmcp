@@ -1459,7 +1459,7 @@ async function registerForm(form, config) {
   registeredForms.add(form);
   registeredFormCount++;
   if (config.debug) {
-    console.debug(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
+    console.log(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
   }
   emit("form:registered", form, metadata.name);
 }
@@ -1471,7 +1471,7 @@ async function unregisterForm(form, config) {
   await unregisterFormTool(form);
   registeredForms.delete(form);
   if (config.debug) {
-    console.debug(`[auto-webmcp] Unregistered: ${name}`);
+    console.log(`[auto-webmcp] Unregistered: ${name}`);
   }
   emit("form:unregistered", form, name);
 }
@@ -1580,17 +1580,17 @@ async function scanOrphanInputs(config) {
     )
   ).filter((el) => {
     if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) {
-      console.debug(`[auto-webmcp] orphan: skipping excluded type "${el.type}" (name="${el.name}" id="${el.id}")`);
+      console.log(`[auto-webmcp] orphan: skipping excluded type "${el.type}" (name="${el.name}" id="${el.id}")`);
       return false;
     }
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) {
-      console.debug(`[auto-webmcp] orphan: skipping invisible input (name="${el.name}" id="${el.id}")`);
+      console.log(`[auto-webmcp] orphan: skipping invisible input (name="${el.name}" id="${el.id}")`);
       return false;
     }
     return true;
   });
-  console.debug(`[auto-webmcp] orphan: found ${orphanInputs.length} visible orphan input(s)`);
+  console.log(`[auto-webmcp] orphan: found ${orphanInputs.length} visible orphan input(s)`);
   if (orphanInputs.length === 0)
     return;
   const groups = /* @__PURE__ */ new Map();
@@ -1607,12 +1607,12 @@ async function scanOrphanInputs(config) {
       }
       container = container.parentElement;
     }
-    console.debug(`[auto-webmcp] orphan: input (name="${input.name}" id="${input.id}") grouped into container`, foundContainer);
+    console.log(`[auto-webmcp] orphan: input (name="${input.name}" id="${input.id}") grouped into container`, foundContainer);
     if (!groups.has(foundContainer))
       groups.set(foundContainer, []);
     groups.get(foundContainer).push(input);
   }
-  console.debug(`[auto-webmcp] orphan: ${groups.size} group(s) found`);
+  console.log(`[auto-webmcp] orphan: ${groups.size} group(s) found`);
   for (const [container, inputs] of groups) {
     const allCandidates = Array.from(
       container.querySelectorAll(SUBMIT_BTN_SELECTOR)
@@ -1625,7 +1625,7 @@ async function scanOrphanInputs(config) {
       container.querySelectorAll(SUBMIT_BTN_GROUPING_SELECTOR)
     ).filter((b) => b.disabled);
     if (!submitBtn && disabledCandidates.length > 0) {
-      console.debug(`[auto-webmcp] orphan: no enabled submit button found in container \u2014 ${disabledCandidates.length} disabled button(s) present:`, disabledCandidates.map((b) => b.textContent?.trim()));
+      console.log(`[auto-webmcp] orphan: no enabled submit button found in container \u2014 ${disabledCandidates.length} disabled button(s) present:`, disabledCandidates.map((b) => b.textContent?.trim()));
     }
     if (!submitBtn) {
       const pageBtns = Array.from(document.querySelectorAll("button")).filter(
@@ -1636,42 +1636,42 @@ async function scanOrphanInputs(config) {
       );
       submitBtn = pageBtns[pageBtns.length - 1] ?? null;
       if (submitBtn)
-        console.debug(`[auto-webmcp] orphan: using page-wide fallback submit button: "${submitBtn.textContent?.trim()}"`);
+        console.log(`[auto-webmcp] orphan: using page-wide fallback submit button: "${submitBtn.textContent?.trim()}"`);
     }
-    console.debug(`[auto-webmcp] orphan: submit button for group:`, submitBtn ? `"${submitBtn.textContent?.trim()}" disabled=${submitBtn.disabled}` : "none");
+    console.log(`[auto-webmcp] orphan: submit button for group:`, submitBtn ? `"${submitBtn.textContent?.trim()}" disabled=${submitBtn.disabled}` : "none");
     const metadata = analyzeOrphanInputGroup(container, inputs, submitBtn);
-    console.debug(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
+    console.log(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
     const inputPairs = [];
     const schemaProps = metadata.inputSchema.properties;
     for (const el of inputs) {
       const key = el.name || el.dataset["webmcpName"] || el.id || el.getAttribute("aria-label") || null;
       const safeKey = key ? key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) : null;
       const matched = !!(safeKey && schemaProps[safeKey]);
-      console.debug(`[auto-webmcp] orphan: field (name="${el.name}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
+      console.log(`[auto-webmcp] orphan: field (name="${el.name}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
       if (matched) {
         inputPairs.push({ key: safeKey, el });
       }
     }
-    console.debug(`[auto-webmcp] orphan: ${inputPairs.length}/${inputs.length} input(s) mapped to schema keys`);
+    console.log(`[auto-webmcp] orphan: ${inputPairs.length}/${inputs.length} input(s) mapped to schema keys`);
     const toolName = metadata.name;
     const execute = async (params) => {
-      console.debug(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
-      console.debug(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map((p) => p.key));
+      console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
+      console.log(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map((p) => p.key));
       for (const { key, el } of inputPairs) {
         if (params[key] !== void 0) {
-          console.debug(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], "element=", el);
+          console.log(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], "element=", el);
           fillElement(el, params[key]);
-          console.debug(`[auto-webmcp] orphan execute: after fill, element value=`, el.value);
+          console.log(`[auto-webmcp] orphan execute: after fill, element value=`, el.value);
         } else {
-          console.debug(`[auto-webmcp] orphan execute: key="${key}" not in params, skipping`);
+          console.log(`[auto-webmcp] orphan execute: key="${key}" not in params, skipping`);
         }
       }
       window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
       if (!config.autoSubmit) {
-        console.debug(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
+        console.log(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
         return { content: [{ type: "text", text: "Fields filled. Ready to submit." }] };
       }
-      console.debug(`[auto-webmcp] orphan execute: polling for enabled submit button (up to 2s)...`);
+      console.log(`[auto-webmcp] orphan execute: polling for enabled submit button (up to 2s)...`);
       let btn = null;
       const deadline = Date.now() + 2e3;
       while (Date.now() < deadline) {
@@ -1692,7 +1692,7 @@ async function scanOrphanInputs(config) {
         console.warn(`[auto-webmcp] orphan execute: submit button still disabled after 2s`);
         return { content: [{ type: "text", text: "Fields filled but the submit button is still disabled. The page may require additional input before submitting." }] };
       }
-      console.debug(`[auto-webmcp] orphan execute: clicking submit button "${btn.textContent?.trim()}"`);
+      console.log(`[auto-webmcp] orphan execute: clicking submit button "${btn.textContent?.trim()}"`);
       btn.click();
       return { content: [{ type: "text", text: "Fields filled and form submitted." }] };
     };
@@ -1708,7 +1708,7 @@ async function scanOrphanInputs(config) {
       }
       await navigator.modelContext.registerTool(toolDef);
       if (config.debug) {
-        console.debug(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
+        console.log(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
       }
     } catch {
     }
