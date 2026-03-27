@@ -234,7 +234,11 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
   const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button:not([type]):not([disabled])';
   // Includes disabled buttons — used only to identify which container is the "form group".
   // Many sites (GitHub, Twitter) start with the submit button disabled until fields are filled.
-  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button:not([type])';
+  // Only [type="submit"] (even disabled) anchors grouping. Generic button:not([type]) was too
+  // broad — it matched tab buttons (e.g. GitHub's "Preview" tab) and split inputs that belong
+  // together into separate groups. Text-based fallback (SUBMIT_TEXT_RE) handles subscribe/send
+  // buttons that lack an explicit type.
+  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"]';
   const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
 
   // Collect visible inputs that are not inside a <form>
@@ -328,12 +332,17 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     // Build key → element pairs for the execute handler
     const inputPairs: Array<{ key: string; el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement }> = [];
     const schemaProps = metadata.inputSchema.properties;
+    // Auto-generated IDs (React: _r_1_, _r_c_) are not meaningful schema keys.
+    // Skip them so aria-label or placeholder can provide a better key.
+    const AUTO_ID_RE = /^_r_[0-9a-z]+_$/i;
     for (const el of inputs) {
+      const id = el.id && !AUTO_ID_RE.test(el.id) ? el.id : null;
       const key =
         el.name ||
         (el as HTMLElement).dataset['webmcpName'] ||
-        el.id ||
+        id ||
         el.getAttribute('aria-label') ||
+        (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.placeholder || null : null) ||
         null;
       const safeKey = key
         ? key.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64)

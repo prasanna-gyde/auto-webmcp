@@ -632,11 +632,12 @@ function buildSchema(form) {
   }
   return { schema: { "$schema": "https://json-schema.org/draft/2020-12/schema", type: "object", properties, required }, fieldElements };
 }
+var AUTO_GENERATED_ID_RE = /^_r_[0-9a-z]+_$|^:[a-z0-9]+:$/i;
 function resolveNativeControlFallbackKey(control) {
   const el = control;
   if (el.dataset["webmcpName"])
     return sanitizeName(el.dataset["webmcpName"]);
-  if (control.id)
+  if (control.id && !AUTO_GENERATED_ID_RE.test(control.id))
     return sanitizeName(control.id);
   const label = control.getAttribute("aria-label");
   if (label)
@@ -1572,7 +1573,7 @@ async function scanOrphanInputs(config) {
   if (!isWebMCPSupported())
     return;
   const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button:not([type]):not([disabled])';
-  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button:not([type])';
+  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"]';
   const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
   const orphanInputs = Array.from(
     document.querySelectorAll(
@@ -1643,8 +1644,10 @@ async function scanOrphanInputs(config) {
     console.log(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
     const inputPairs = [];
     const schemaProps = metadata.inputSchema.properties;
+    const AUTO_ID_RE = /^_r_[0-9a-z]+_$/i;
     for (const el of inputs) {
-      const key = el.name || el.dataset["webmcpName"] || el.id || el.getAttribute("aria-label") || null;
+      const id = el.id && !AUTO_ID_RE.test(el.id) ? el.id : null;
+      const key = el.name || el.dataset["webmcpName"] || id || el.getAttribute("aria-label") || (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.placeholder || null : null) || null;
       const safeKey = key ? key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) : null;
       const matched = !!(safeKey && schemaProps[safeKey]);
       console.log(`[auto-webmcp] orphan: field (name="${el.name}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);

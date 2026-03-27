@@ -422,13 +422,18 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
   return { schema: { '$schema': 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties, required }, fieldElements };
 }
 
+/** Matches auto-generated IDs that frameworks (React, etc.) assign and that carry no semantic meaning. */
+const AUTO_GENERATED_ID_RE = /^_r_[0-9a-z]+_$|^:[a-z0-9]+:$/i;
+
 /** Derive a schema key for a native control that lacks a name attribute */
 function resolveNativeControlFallbackKey(
   control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
 ): string | null {
   const el = control as HTMLElement;
   if (el.dataset['webmcpName']) return sanitizeName(el.dataset['webmcpName']!);
-  if (control.id) return sanitizeName(control.id);
+  // Skip auto-generated framework IDs (React: _r_1_, :r0:) — they are not meaningful.
+  // Prefer aria-label or placeholder which carry semantic meaning.
+  if (control.id && !AUTO_GENERATED_ID_RE.test(control.id)) return sanitizeName(control.id);
   const label = control.getAttribute('aria-label');
   if (label) return sanitizeName(label);
   // Fallback: placeholder text — common for minimalist forms (e.g. Ghost newsletter)
