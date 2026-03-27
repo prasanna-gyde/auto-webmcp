@@ -6,6 +6,16 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.8] — 2026-03-27
+
+### Bug Fixes
+
+- **Fixed orphan grouping regression (GitHub issues, Twitter).** Removed `button:not([type])` from the grouping selector — it was matching tab/nav buttons (e.g. GitHub's "Preview" markdown tab) and splitting inputs that belong together into separate single-field groups. Only `[type="submit"]` (even disabled) and text-matched buttons now anchor orphan groups.
+
+- **Skip auto-generated framework IDs for schema keys.** React and similar frameworks assign IDs like `_r_1_` and `:r0:` that carry no semantic meaning. These are now skipped so `aria-label` or placeholder text produces a meaningful schema key (e.g. `title` instead of `r_1`).
+
+---
+
 ## [0.3.7] — 2026-03-27
 
 ### Bug Fix
