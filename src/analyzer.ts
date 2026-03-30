@@ -451,6 +451,17 @@ function resolveNativeControlFallbackKey(
   return null;
 }
 
+/** Key derivation for ARIA / contenteditable elements that are not native form controls. */
+function resolveAriaElementKey(el: Element): string | null {
+  if ((el as HTMLElement).dataset['webmcpName']) return sanitizeName((el as HTMLElement).dataset['webmcpName']!);
+  if (el.id && !AUTO_GENERATED_ID_RE.test(el.id)) return sanitizeName(el.id);
+  const label = el.getAttribute('aria-label');
+  if (label) return sanitizeName(label);
+  const placeholder = el.getAttribute('placeholder');
+  if (placeholder) return sanitizeName(placeholder);
+  return null;
+}
+
 type AriaControlEntry = {
   el: Element;
   role: AriaRole;
@@ -705,7 +716,7 @@ function isControlVisible(el: HTMLElement): boolean {
  */
 export function analyzeOrphanInputGroup(
   container: Element,
-  inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement>,
   submitBtn: HTMLButtonElement | HTMLInputElement | null,
 ): ToolMetadata {
   const name = inferOrphanToolName(container, submitBtn);
@@ -808,7 +819,7 @@ function getNearestHeadingTextFrom(el: Element): string {
  * Reuses the same field title/description inference as buildSchema().
  */
 function buildSchemaFromInputs(
-  inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement>,
 ): { schema: JsonSchema; fieldElements: Map<string, Element> } {
   const properties: Record<string, JsonSchemaProperty> = {};
   const required: string[] = [];
@@ -817,7 +828,22 @@ function buildSchemaFromInputs(
   const processedCheckboxGroups = new Set<string>();
 
   for (const control of inputs) {
-    const rawName = control.name;
+    // ARIA / contenteditable elements (e.g. Twitter compose box, Notion editor)
+    if (!(control instanceof HTMLInputElement) && !(control instanceof HTMLTextAreaElement) && !(control instanceof HTMLSelectElement)) {
+      const fieldKey = resolveAriaElementKey(control);
+      if (!fieldKey) continue;
+      if (!isControlVisible(control)) continue;
+      const prop: JsonSchemaProperty = { type: 'string' };
+      prop.title = control.getAttribute('aria-label') ?? fieldKey;
+      const desc = control.getAttribute('aria-description') ?? control.getAttribute('aria-describedby') ? null : null;
+      if (desc) prop.description = desc;
+      properties[fieldKey] = prop;
+      fieldElements.set(fieldKey, control);
+      required.push(fieldKey);
+      continue;
+    }
+
+    const rawName = (control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).name;
     // Sanitize the raw name (handles namespaced names like "issue[title]" → "issue_title")
     // so schema keys match the sanitized keys used in the execute handler.
     const fieldKey = (rawName ? sanitizeName(rawName) : null) || resolveNativeControlFallbackKey(control);
@@ -843,7 +869,7 @@ function buildSchemaFromInputs(
 
     // For checkbox groups, derive values from the inputs array (no form context here)
     if (control instanceof HTMLInputElement && control.type === 'checkbox') {
-      const checkboxValues = (inputs as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>)
+      const checkboxValues = inputs
         .filter((i): i is HTMLInputElement => i instanceof HTMLInputElement && i.type === 'checkbox' && i.name === fieldKey)
         .map((cb) => cb.value)
         .filter((v) => v !== '' && v !== 'on');

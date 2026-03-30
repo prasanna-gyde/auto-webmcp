@@ -557,10 +557,19 @@ function fillAriaField(el: Element, value: unknown): void {
   // textbox, combobox, searchbox, spinbutton
   const htmlEl = el as HTMLElement;
   if (htmlEl.isContentEditable) {
-    htmlEl.textContent = String(value ?? '');
+    // Use execCommand so React's synthetic event system receives a proper
+    // InputEvent (textContent= bypasses React's event delegation).
+    htmlEl.focus();
+    const range = document.createRange();
+    range.selectNodeContents(htmlEl);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    document.execCommand('insertText', false, String(value ?? ''));
+  } else {
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
   }
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-  el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 // ---------------------------------------------------------------------------

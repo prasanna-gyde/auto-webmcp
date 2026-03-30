@@ -6,6 +6,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.10] — 2026-03-30
+
+### New Features
+
+- **contenteditable / ARIA textbox support.** The orphan scanner now detects `[role="textbox"]`, `[role="searchbox"]`, and `[contenteditable="true"]` elements outside `<form>` tags (e.g. Twitter/X compose box). Schema keys are inferred from `aria-label` or `placeholder`.
+
+- **React contenteditable fill fixed.** Filling a contenteditable div now uses `document.execCommand('insertText')` with a pre-selected range, which fires the native `InputEvent` that React's synthetic event system listens to. The old `textContent =` assignment silently failed for React-controlled editors.
+
+- **Container-scoped submit button fallback.** When no typed submit button is found in an orphan group container, the scanner now tries text-matched buttons within the container before falling back to a page-wide search. This ensures the compose dialog's "Post" button is used instead of an unrelated sidebar button with the same label.
+
+---
+
 ## [0.3.9] — 2026-03-30
 
 ### Bug Fixes

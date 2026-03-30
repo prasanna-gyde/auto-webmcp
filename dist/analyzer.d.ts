@@ -25,5 +25,5 @@ export declare function analyzeForm(form: HTMLFormElement, override?: FormOverri
  * Derive ToolMetadata from a group of form controls that are NOT inside a <form>.
  * Used by discovery.ts's orphan-input scanner for pages like newsletter landing pages.
  */
-export declare function analyzeOrphanInputGroup(container: Element, inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>, submitBtn: HTMLButtonElement | HTMLInputElement | null): ToolMetadata;
+export declare function analyzeOrphanInputGroup(container: Element, inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement>, submitBtn: HTMLButtonElement | HTMLInputElement | null): ToolMetadata;
 //# sourceMappingURL=analyzer.d.ts.map

@@ -650,6 +650,19 @@ function resolveNativeControlFallbackKey(control) {
   }
   return null;
 }
+function resolveAriaElementKey(el) {
+  if (el.dataset["webmcpName"])
+    return sanitizeName(el.dataset["webmcpName"]);
+  if (el.id && !AUTO_GENERATED_ID_RE.test(el.id))
+    return sanitizeName(el.id);
+  const label = el.getAttribute("aria-label");
+  if (label)
+    return sanitizeName(label);
+  const placeholder = el.getAttribute("placeholder");
+  if (placeholder)
+    return sanitizeName(placeholder);
+  return null;
+}
 function collectAriaControls(form) {
   const selector = ARIA_ROLES_TO_SCAN.map((r) => `[role="${r}"]`).join(", ");
   const rawResults = [];
@@ -908,6 +921,22 @@ function buildSchemaFromInputs(inputs) {
   const processedRadioGroups = /* @__PURE__ */ new Set();
   const processedCheckboxGroups = /* @__PURE__ */ new Set();
   for (const control of inputs) {
+    if (!(control instanceof HTMLInputElement) && !(control instanceof HTMLTextAreaElement) && !(control instanceof HTMLSelectElement)) {
+      const fieldKey2 = resolveAriaElementKey(control);
+      if (!fieldKey2)
+        continue;
+      if (!isControlVisible(control))
+        continue;
+      const prop = { type: "string" };
+      prop.title = control.getAttribute("aria-label") ?? fieldKey2;
+      const desc2 = control.getAttribute("aria-description") ?? control.getAttribute("aria-describedby") ? null : null;
+      if (desc2)
+        prop.description = desc2;
+      properties[fieldKey2] = prop;
+      fieldElements.set(fieldKey2, control);
+      required.push(fieldKey2);
+      continue;
+    }
     const rawName = control.name;
     const fieldKey = (rawName ? sanitizeName(rawName) : null) || resolveNativeControlFallbackKey(control);
     if (!fieldKey)
@@ -1303,10 +1332,17 @@ function fillAriaField(el, value) {
   }
   const htmlEl = el;
   if (htmlEl.isContentEditable) {
-    htmlEl.textContent = String(value ?? "");
+    htmlEl.focus();
+    const range = document.createRange();
+    range.selectNodeContents(htmlEl);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    document.execCommand("insertText", false, String(value ?? ""));
+  } else {
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-  el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 function serializeFormData(form, params, fieldEls) {
   const result = {};
@@ -1579,10 +1615,10 @@ async function scanOrphanInputs(config) {
     return;
   const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button[data-variant="primary"]:not([disabled])';
   const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button[data-variant="primary"]';
-  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
+  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search|post|tweet|publish/i;
   const orphanInputs = Array.from(
     document.querySelectorAll(
-      "input:not(form input), textarea:not(form textarea), select:not(form select)"
+      'input:not(form input), textarea:not(form textarea), select:not(form select), [role="textbox"]:not(form [role="textbox"]):not(input):not(textarea), [role="searchbox"]:not(form [role="searchbox"]):not(input):not(textarea), [contenteditable="true"]:not(form [contenteditable="true"]):not(input):not(textarea)'
     )
   ).filter((el) => {
     if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) {
@@ -1639,6 +1675,15 @@ async function scanOrphanInputs(config) {
         console.log(`[auto-webmcp] orphan: using disabled submit button as reference: "${submitBtn.textContent?.trim()}"`);
     }
     if (!submitBtn) {
+      const containerBtns = Array.from(container.querySelectorAll("button")).filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && !b.disabled && SUBMIT_TEXT_RE.test(b.textContent ?? "");
+      });
+      submitBtn = containerBtns[containerBtns.length - 1] ?? null;
+      if (submitBtn)
+        console.log(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
+    }
+    if (!submitBtn) {
       const pageBtns = Array.from(document.querySelectorAll("button")).filter(
         (b) => {
           const r = b.getBoundingClientRect();
@@ -1657,10 +1702,10 @@ async function scanOrphanInputs(config) {
     const AUTO_ID_RE = /^_r_[0-9a-z]+_$/i;
     for (const el of inputs) {
       const id = el.id && !AUTO_ID_RE.test(el.id) ? el.id : null;
-      const key = el.name || el.dataset["webmcpName"] || id || el.getAttribute("aria-label") || (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.placeholder || null : null) || null;
+      const key = el.name || el.getAttribute("name") || el.dataset["webmcpName"] || id || el.getAttribute("aria-label") || el.getAttribute("placeholder") || null;
       const safeKey = key ? key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) : null;
       const matched = !!(safeKey && schemaProps[safeKey]);
-      console.log(`[auto-webmcp] orphan: field (name="${el.name}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
+      console.log(`[auto-webmcp] orphan: field (name="${el.name ?? ""}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
       if (matched) {
         inputPairs.push({ key: safeKey, el });
       }

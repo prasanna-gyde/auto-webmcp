@@ -246,14 +246,19 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
   // Includes disabled variants — used only to identify which container is the "form group".
   // Many sites (GitHub) start with the submit button disabled until fields are filled.
   const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button[data-variant="primary"]';
-  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
+  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search|post|tweet|publish/i;
 
-  // Collect visible inputs that are not inside a <form>
-  const orphanInputs = Array.from(
-    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-      'input:not(form input), textarea:not(form textarea), select:not(form select)',
+  // Collect visible inputs that are not inside a <form>.
+  // Includes native controls AND ARIA textbox/contenteditable elements (e.g. Twitter/X
+  // compose box uses role="textbox" on a contenteditable div, not a native <textarea>).
+  const orphanInputs = (Array.from(
+    document.querySelectorAll(
+      'input:not(form input), textarea:not(form textarea), select:not(form select), ' +
+      '[role="textbox"]:not(form [role="textbox"]):not(input):not(textarea), ' +
+      '[role="searchbox"]:not(form [role="searchbox"]):not(input):not(textarea), ' +
+      '[contenteditable="true"]:not(form [contenteditable="true"]):not(input):not(textarea)',
     ),
-  ).filter((el) => {
+  ) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement>).filter((el) => {
     if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) {
       console.log(`[auto-webmcp] orphan: skipping excluded type "${el.type}" (name="${el.name}" id="${el.id}")`);
       return false;
@@ -271,7 +276,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
 
   // Group inputs by the nearest ancestor that also contains a submit button.
   // Walk up from each input until we find a container with a submit-like button.
-  const groups = new Map<Element, Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>>();
+  const groups = new Map<Element, Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement>>();
 
   for (const input of orphanInputs) {
     let container: Element | null = input.parentElement;
@@ -325,7 +330,20 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       if (submitBtn) console.log(`[auto-webmcp] orphan: using disabled submit button as reference: "${submitBtn.textContent?.trim()}"`);
     }
 
-    // Fallback 2: nearest button with submit-like text anywhere on the page
+    // Fallback 2: any visible button with submit-like text WITHIN the container.
+    // Catches React-style buttons (Twitter "Post", LinkedIn "Share") that use
+    // type="button" with no variant class, scoped to the container so we don't
+    // pick up unrelated buttons elsewhere on the page (e.g. sidebar).
+    if (!submitBtn) {
+      const containerBtns = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && !b.disabled && SUBMIT_TEXT_RE.test(b.textContent ?? '');
+      });
+      submitBtn = containerBtns[containerBtns.length - 1] ?? null;
+      if (submitBtn) console.log(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
+    }
+
+    // Fallback 3: nearest button with submit-like text anywhere on the page
     if (!submitBtn) {
       const pageBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(
         (b) => {
@@ -343,25 +361,28 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     console.log(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
 
     // Build key → element pairs for the execute handler
-    const inputPairs: Array<{ key: string; el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement }> = [];
+    const inputPairs: Array<{ key: string; el: HTMLElement }> = [];
     const schemaProps = metadata.inputSchema.properties;
     // Auto-generated IDs (React: _r_1_, _r_c_) are not meaningful schema keys.
     // Skip them so aria-label or placeholder can provide a better key.
     const AUTO_ID_RE = /^_r_[0-9a-z]+_$/i;
     for (const el of inputs) {
       const id = el.id && !AUTO_ID_RE.test(el.id) ? el.id : null;
+      // Use getAttribute for name/placeholder so this works for both native controls
+      // and ARIA/contenteditable elements (which lack .name and .placeholder properties).
       const key =
-        el.name ||
+        (el as HTMLInputElement).name ||
+        el.getAttribute('name') ||
         (el as HTMLElement).dataset['webmcpName'] ||
         id ||
         el.getAttribute('aria-label') ||
-        (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.placeholder || null : null) ||
+        el.getAttribute('placeholder') ||
         null;
       const safeKey = key
         ? key.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64)
         : null;
       const matched = !!(safeKey && schemaProps[safeKey]);
-      console.log(`[auto-webmcp] orphan: field (name="${el.name}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
+      console.log(`[auto-webmcp] orphan: field (name="${(el as HTMLInputElement).name ?? ''}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
       if (matched) {
         inputPairs.push({ key: safeKey!, el });
       }
