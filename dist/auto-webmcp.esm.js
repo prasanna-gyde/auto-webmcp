@@ -1671,21 +1671,23 @@ async function scanOrphanInputs(config) {
         console.log(`[auto-webmcp] orphan: using disabled submit button as reference: "${submitBtn.textContent?.trim()}"`);
     }
     if (!submitBtn) {
-      const containerBtns = Array.from(container.querySelectorAll("button")).filter((b) => {
+      const containerBtns = Array.from(
+        container.querySelectorAll('button, [role="button"]')
+      ).filter((b) => {
         const r = b.getBoundingClientRect();
-        return r.width > 0 && r.height > 0 && !b.disabled && SUBMIT_TEXT_RE.test(b.textContent ?? "");
+        return r.width > 0 && r.height > 0 && !b.disabled && b.getAttribute("aria-disabled") !== "true" && SUBMIT_TEXT_RE.test(b.textContent ?? "");
       });
       submitBtn = containerBtns[containerBtns.length - 1] ?? null;
       if (submitBtn)
         console.log(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
     }
     if (!submitBtn) {
-      const pageBtns = Array.from(document.querySelectorAll("button")).filter(
-        (b) => {
-          const r = b.getBoundingClientRect();
-          return r.width > 0 && r.height > 0 && SUBMIT_TEXT_RE.test(b.textContent ?? "");
-        }
-      );
+      const pageBtns = Array.from(
+        document.querySelectorAll('button, [role="button"]')
+      ).filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && b.getAttribute("aria-disabled") !== "true" && SUBMIT_TEXT_RE.test(b.textContent ?? "");
+      });
       submitBtn = pageBtns[pageBtns.length - 1] ?? null;
       if (submitBtn)
         console.log(`[auto-webmcp] orphan: using page-wide fallback submit button: "${submitBtn.textContent?.trim()}"`);

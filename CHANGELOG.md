@@ -6,6 +6,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.12] — 2026-03-30
+
+### New Features
+
+- **Gmail (and all `[role="button"]` apps) now work.** Submit button discovery and the background.js click loop now query `button, [role="button"]`, covering Gmail's `<div role="button">Send</div>` and any other app that uses ARIA button roles instead of native `<button>` elements.
+
+### Bug Fixes
+
+- **False "Form submitted" on SPA hash changes fixed.** Gmail updates the URL hash when the compose window opens (`#compose` to `#inbox?compose=ID`), which was incorrectly detected as a successful navigation. Navigation detection now checks whether the path or hash-path changed, not just any string difference in the full URL.
+
+---
+
 ## [0.3.11] — 2026-03-30
 
 ### Bug Fixes

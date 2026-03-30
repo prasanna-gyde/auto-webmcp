@@ -334,24 +334,33 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     // Catches React-style buttons (Twitter "Post", LinkedIn "Share") that use
     // type="button" with no variant class, scoped to the container so we don't
     // pick up unrelated buttons elsewhere on the page (e.g. sidebar).
+    // Also includes [role="button"] to cover div/span-based buttons (Gmail Send).
     if (!submitBtn) {
-      const containerBtns = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).filter((b) => {
+      const containerBtns = Array.from(
+        container.querySelectorAll<HTMLElement>('button, [role="button"]'),
+      ).filter((b) => {
         const r = b.getBoundingClientRect();
-        return r.width > 0 && r.height > 0 && !b.disabled && SUBMIT_TEXT_RE.test(b.textContent ?? '');
+        return r.width > 0 && r.height > 0 &&
+          !(b as HTMLButtonElement).disabled &&
+          b.getAttribute('aria-disabled') !== 'true' &&
+          SUBMIT_TEXT_RE.test(b.textContent ?? '');
       });
-      submitBtn = containerBtns[containerBtns.length - 1] ?? null;
+      submitBtn = (containerBtns[containerBtns.length - 1] as HTMLButtonElement | null) ?? null;
       if (submitBtn) console.log(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
     }
 
-    // Fallback 3: nearest button with submit-like text anywhere on the page
+    // Fallback 3: nearest button with submit-like text anywhere on the page.
+    // Includes [role="button"] for div/span-based buttons (Gmail, Outlook, etc.).
     if (!submitBtn) {
-      const pageBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(
-        (b) => {
-          const r = b.getBoundingClientRect();
-          return r.width > 0 && r.height > 0 && SUBMIT_TEXT_RE.test(b.textContent ?? '');
-        },
-      );
-      submitBtn = pageBtns[pageBtns.length - 1] ?? null;
+      const pageBtns = Array.from(
+        document.querySelectorAll<HTMLElement>('button, [role="button"]'),
+      ).filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 &&
+          b.getAttribute('aria-disabled') !== 'true' &&
+          SUBMIT_TEXT_RE.test(b.textContent ?? '');
+      });
+      submitBtn = (pageBtns[pageBtns.length - 1] as HTMLButtonElement | null) ?? null;
       if (submitBtn) console.log(`[auto-webmcp] orphan: using page-wide fallback submit button: "${submitBtn.textContent?.trim()}"`);
     }
 
