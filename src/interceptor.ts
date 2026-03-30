@@ -557,15 +557,35 @@ function fillAriaField(el: Element, value: unknown): void {
   // textbox, combobox, searchbox, spinbutton
   const htmlEl = el as HTMLElement;
   if (htmlEl.isContentEditable) {
-    // Use execCommand so React's synthetic event system receives a proper
-    // InputEvent (textContent= bypasses React's event delegation).
     htmlEl.focus();
+    // Select all existing content so it gets replaced.
     const range = document.createRange();
     range.selectNodeContents(htmlEl);
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
-    document.execCommand('insertText', false, String(value ?? ''));
+
+    // Primary: paste simulation. Draft.js, Slate, ProseMirror all listen for
+    // 'paste' events and call preventDefault() when handled, which enables
+    // their submit buttons. execCommand('insertText') inserts text visually
+    // but these frameworks read clipboard data, not the raw DOM mutation.
+    let handled = false;
+    try {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', String(value ?? ''));
+      const ev = new ClipboardEvent('paste', {
+        bubbles: true, cancelable: true, composed: true, clipboardData: dt,
+      });
+      // dispatchEvent returns false when the event's default was prevented
+      // (i.e. a framework handler intercepted the paste and processed it).
+      handled = !htmlEl.dispatchEvent(ev);
+    } catch { /* DataTransfer/ClipboardEvent not available, fall through */ }
+
+    if (!handled) {
+      // Fallback for simpler contenteditable (Monaco, plain div editors):
+      // fires InputEvent that React's synthetic system listens to.
+      document.execCommand('insertText', false, String(value ?? ''));
+    }
   } else {
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));

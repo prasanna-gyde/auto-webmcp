@@ -6,6 +6,16 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.11] — 2026-03-30
+
+### Bug Fixes
+
+- **Twitter/X tweet posting now works end-to-end.** The previous paste simulation dispatched `ClipboardEvent` correctly but Draft.js (Twitter's editor) requires `clipboardData` to be readable inside the event handler. The fix: use `execCommand('insertText')` as primary for the text insertion, then dispatch a synthetic `input` event with `inputType: 'insertText'` so Draft.js updates its internal EditorState and enables the Post button.
+
+- **background.js click: text-matched button fallback added.** After the 3-second poll for `__pendingSubmitBtns` and typed submit buttons, a final fallback searches for enabled text-matched buttons (`post`, `tweet`, `publish`, etc.), preferring those inside a `[role="dialog"]` or `[aria-modal]` container to avoid clicking an unrelated sidebar button with the same label.
+
+---
+
 ## [0.3.10] — 2026-03-30
 
 ### New Features

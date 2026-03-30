@@ -1319,7 +1319,22 @@ function fillAriaField(el, value) {
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
-    document.execCommand("insertText", false, String(value ?? ""));
+    let handled = false;
+    try {
+      const dt = new DataTransfer();
+      dt.setData("text/plain", String(value ?? ""));
+      const ev = new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clipboardData: dt
+      });
+      handled = !htmlEl.dispatchEvent(ev);
+    } catch {
+    }
+    if (!handled) {
+      document.execCommand("insertText", false, String(value ?? ""));
+    }
   } else {
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
