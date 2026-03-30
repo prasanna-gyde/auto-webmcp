@@ -6,6 +6,20 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.9] — 2026-03-30
+
+### Bug Fixes
+
+- **Duplicate tool name overwrite fixed.** When two orphan input groups resolved to the same name, the second registration silently replaced the first, leaving an execute handler with no mapped fields. Groups with zero inputs matched to schema keys are now skipped.
+
+- **Submit button reference exposed for all registered tools.** `registerForm` now stores the submit button in `window.__pendingSubmitBtns[toolName]`, matching what the orphan path already did. Background.js can now click form-based tools via direct DOM reference rather than CSS selector fallback.
+
+- **Primer/React design system button support.** `button[data-variant="primary"]` added to the orphan grouping and submit selectors, covering GitHub, Primer-based apps, and other React design systems that use `type="button"` with a variant class instead of `type="submit"`.
+
+- **Disabled submit button fallback in orphan grouping.** When no enabled submit button is found in a container, the grouping algorithm now considers disabled `[type="submit"]` and `[data-variant="primary"]` buttons as container anchors. The execute handler polls up to 2s for the button to become enabled before clicking.
+
+---
+
 ## [0.3.8] — 2026-03-27
 
 ### Bug Fixes

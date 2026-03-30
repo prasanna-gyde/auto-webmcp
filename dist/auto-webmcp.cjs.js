@@ -1459,6 +1459,11 @@ async function registerForm(form, config) {
   await registerFormTool(form, metadata, execute);
   registeredForms.add(form);
   registeredFormCount++;
+  const formSubmitBtn = form.querySelector(
+    '[type="submit"], button[data-variant="primary"], button:not([type])'
+  ) ?? null;
+  const pendingBtns = window["__pendingSubmitBtns"] ??= {};
+  pendingBtns[metadata.name] = formSubmitBtn;
   if (config.debug) {
     console.log(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
   }
@@ -1572,8 +1577,8 @@ var ORPHAN_EXCLUDED_TYPES = /* @__PURE__ */ new Set([
 async function scanOrphanInputs(config) {
   if (!isWebMCPSupported())
     return;
-  const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button:not([type]):not([disabled])';
-  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"]';
+  const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button[data-variant="primary"]:not([disabled])';
+  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button[data-variant="primary"]';
   const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
   const orphanInputs = Array.from(
     document.querySelectorAll(
@@ -1622,11 +1627,16 @@ async function scanOrphanInputs(config) {
       return r.width > 0 && r.height > 0;
     });
     let submitBtn = allCandidates[allCandidates.length - 1] ?? null;
-    const disabledCandidates = Array.from(
-      container.querySelectorAll(SUBMIT_BTN_GROUPING_SELECTOR)
-    ).filter((b) => b.disabled);
-    if (!submitBtn && disabledCandidates.length > 0) {
-      console.log(`[auto-webmcp] orphan: no enabled submit button found in container \u2014 ${disabledCandidates.length} disabled button(s) present:`, disabledCandidates.map((b) => b.textContent?.trim()));
+    if (!submitBtn) {
+      const disabledCandidates = Array.from(
+        container.querySelectorAll(SUBMIT_BTN_GROUPING_SELECTOR)
+      ).filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && b.disabled;
+      });
+      submitBtn = disabledCandidates[disabledCandidates.length - 1] ?? null;
+      if (submitBtn)
+        console.log(`[auto-webmcp] orphan: using disabled submit button as reference: "${submitBtn.textContent?.trim()}"`);
     }
     if (!submitBtn) {
       const pageBtns = Array.from(document.querySelectorAll("button")).filter(
@@ -1656,6 +1666,10 @@ async function scanOrphanInputs(config) {
       }
     }
     console.log(`[auto-webmcp] orphan: ${inputPairs.length}/${inputs.length} input(s) mapped to schema keys`);
+    if (inputPairs.length === 0) {
+      console.log(`[auto-webmcp] orphan: skipping group "${metadata.name}" \u2014 no inputs mapped to schema keys`);
+      continue;
+    }
     const toolName = metadata.name;
     const execute = async (params) => {
       console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
@@ -1670,7 +1684,8 @@ async function scanOrphanInputs(config) {
         }
       }
       window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
-      if (!config.autoSubmit) {
+      const shouldAutoSubmit = config.autoSubmit || !!submitBtn?.hasAttribute("toolautosubmit") || submitBtn instanceof HTMLElement && submitBtn.dataset["webmcpAutosubmit"] !== void 0 || container.hasAttribute("toolautosubmit") || container instanceof HTMLElement && container.dataset["webmcpAutosubmit"] !== void 0;
+      if (!shouldAutoSubmit) {
         console.log(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
         return { content: [{ type: "text", text: "Fields filled. Ready to submit." }] };
       }
@@ -1710,6 +1725,8 @@ async function scanOrphanInputs(config) {
         toolDef.annotations = metadata.annotations;
       }
       await navigator.modelContext.registerTool(toolDef);
+      const pendingBtns = window["__pendingSubmitBtns"] ??= {};
+      pendingBtns[metadata.name] = submitBtn;
       if (config.debug) {
         console.log(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
       }

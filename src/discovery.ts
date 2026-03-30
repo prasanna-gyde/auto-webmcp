@@ -70,6 +70,14 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
   registeredForms.add(form);
   registeredFormCount++;
 
+  // Expose the submit button reference so background.js can click it via
+  // direct DOM reference instead of relying on CSS selector matching.
+  const formSubmitBtn = form.querySelector<HTMLButtonElement | HTMLInputElement>(
+    '[type="submit"], button[data-variant="primary"], button:not([type])',
+  ) ?? null;
+  const pendingBtns = ((window as unknown as Record<string, unknown>)['__pendingSubmitBtns'] ??= {}) as Record<string, Element | null>;
+  pendingBtns[metadata.name] = formSubmitBtn;
+
   if (config.debug) {
     console.log(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
   }
@@ -231,14 +239,13 @@ const ORPHAN_EXCLUDED_TYPES = new Set([
 async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
   if (!isWebMCPSupported()) return;
 
-  const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button:not([type]):not([disabled])';
-  // Includes disabled buttons — used only to identify which container is the "form group".
-  // Many sites (GitHub, Twitter) start with the submit button disabled until fields are filled.
-  // Only [type="submit"] (even disabled) anchors grouping. Generic button:not([type]) was too
-  // broad — it matched tab buttons (e.g. GitHub's "Preview" tab) and split inputs that belong
-  // together into separate groups. Text-based fallback (SUBMIT_TEXT_RE) handles subscribe/send
-  // buttons that lack an explicit type.
-  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"]';
+  // Matches enabled submit buttons: traditional [type="submit"] plus primary-variant buttons
+  // used by React design systems (GitHub/Primer: data-variant="primary") that use type="button"
+  // with JavaScript click handlers instead of native form submission.
+  const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button[data-variant="primary"]:not([disabled])';
+  // Includes disabled variants — used only to identify which container is the "form group".
+  // Many sites (GitHub) start with the submit button disabled until fields are filled.
+  const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button[data-variant="primary"]';
   const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search/i;
 
   // Collect visible inputs that are not inside a <form>
@@ -303,16 +310,22 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     let submitBtn: HTMLButtonElement | HTMLInputElement | null =
       (allCandidates[allCandidates.length - 1] as HTMLButtonElement | HTMLInputElement) ?? null;
 
-    // Check for disabled submit buttons (for diagnostic logging)
-    const disabledCandidates = Array.from(
-      container.querySelectorAll<HTMLButtonElement | HTMLInputElement>(SUBMIT_BTN_GROUPING_SELECTOR),
-    ).filter((b) => (b as HTMLButtonElement).disabled);
-
-    if (!submitBtn && disabledCandidates.length > 0) {
-      console.log(`[auto-webmcp] orphan: no enabled submit button found in container — ${disabledCandidates.length} disabled button(s) present:`, disabledCandidates.map(b => b.textContent?.trim()));
+    // Fallback 1: disabled [type="submit"] buttons in the container.
+    // Many sites (GitHub new-issue form) start with the submit button disabled until
+    // required fields are filled. Use the disabled button as the reference for tool
+    // naming; the execute handler will poll for it to become enabled before clicking.
+    if (!submitBtn) {
+      const disabledCandidates = Array.from(
+        container.querySelectorAll<HTMLButtonElement | HTMLInputElement>(SUBMIT_BTN_GROUPING_SELECTOR),
+      ).filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && (b as HTMLButtonElement).disabled;
+      });
+      submitBtn = (disabledCandidates[disabledCandidates.length - 1] as HTMLButtonElement | HTMLInputElement) ?? null;
+      if (submitBtn) console.log(`[auto-webmcp] orphan: using disabled submit button as reference: "${submitBtn.textContent?.trim()}"`);
     }
 
-    // Fallback: nearest button with submit-like text anywhere on the page
+    // Fallback 2: nearest button with submit-like text anywhere on the page
     if (!submitBtn) {
       const pageBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(
         (b) => {
@@ -356,6 +369,11 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
 
     console.log(`[auto-webmcp] orphan: ${inputPairs.length}/${inputs.length} input(s) mapped to schema keys`);
 
+    if (inputPairs.length === 0) {
+      console.log(`[auto-webmcp] orphan: skipping group "${metadata.name}" — no inputs mapped to schema keys`);
+      continue;
+    }
+
     const toolName = metadata.name;
     const execute = async (params: Record<string, unknown>): Promise<{ content: Array<{ type: 'text'; text: string }> }> => {
       console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
@@ -372,7 +390,14 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       }
       window.dispatchEvent(new CustomEvent('toolactivated', { detail: { toolName } }));
 
-      if (!config.autoSubmit) {
+      const shouldAutoSubmit =
+        config.autoSubmit ||
+        !!submitBtn?.hasAttribute('toolautosubmit') ||
+        (submitBtn instanceof HTMLElement && submitBtn.dataset['webmcpAutosubmit'] !== undefined) ||
+        container.hasAttribute('toolautosubmit') ||
+        (container instanceof HTMLElement && container.dataset['webmcpAutosubmit'] !== undefined);
+
+      if (!shouldAutoSubmit) {
         console.log(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
         return { content: [{ type: 'text', text: 'Fields filled. Ready to submit.' }] };
       }
@@ -421,6 +446,11 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         toolDef.annotations = metadata.annotations;
       }
       await navigator.modelContext!.registerTool(toolDef);
+      // Expose the submit button reference so background.js can click it via CDP.
+      // GitHub and other React apps use type="button" (not type="submit"), so
+      // background.js cannot find the button by selector alone.
+      const pendingBtns = ((window as unknown as Record<string, unknown>)['__pendingSubmitBtns'] ??= {}) as Record<string, Element | null>;
+      pendingBtns[metadata.name] = submitBtn;
       if (config.debug) {
         console.log(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
       }
