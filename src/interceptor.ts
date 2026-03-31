@@ -29,14 +29,27 @@ export interface ExecuteResult {
 
 export interface FillWarning {
   field: string;
-  type: 'clamped' | 'not_filled' | 'missing_required' | 'type_mismatch';
+  type:
+    | 'clamped'
+    | 'not_filled'
+    | 'missing_required'
+    | 'type_mismatch'
+    | 'alias_resolved'
+    | 'blocked_submit'
+    | 'timeout';
   message: string;
   original?: unknown;
   actual?: unknown;
 }
 
 export interface StructuredExecuteData {
-  status: 'success' | 'partial' | 'error';
+  status:
+    | 'success'
+    | 'partial'
+    | 'error'
+    | 'awaiting_user_action'
+    | 'timed_out'
+    | 'blocked_invalid';
   filled_fields: Record<string, unknown>;
   skipped_fields: string[];
   missing_required: string[];
@@ -53,7 +66,7 @@ type Rejecter = (error: Error) => void;
 /** Per-form pending execute promises */
 const pendingExecutions = new WeakMap<
   HTMLFormElement,
-  { resolve: Resolver; reject: Rejecter }
+  { resolve: Resolver; reject: Rejecter; timeoutId?: ReturnType<typeof setTimeout> }
 >();
 
 /** Per-form last-used params (for serializing id-keyed fields not in FormData) */
@@ -84,6 +97,105 @@ const _textareaValueSetter: ((v: string) => void) | undefined =
   Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
 const _checkedSetter: ((v: boolean) => void) | undefined =
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.set;
+
+function normalizeAliasKey(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function addAlias(
+  index: Map<string, Set<string>>,
+  alias: string | null | undefined,
+  schemaKey: string,
+): void {
+  if (!alias) return;
+  const normalized = normalizeAliasKey(alias);
+  if (!normalized) return;
+  if (!index.has(normalized)) index.set(normalized, new Set<string>());
+  index.get(normalized)!.add(schemaKey);
+}
+
+function buildAliasIndex(
+  form: HTMLFormElement,
+  metadata: ToolMetadata | undefined,
+): Map<string, Set<string>> {
+  const index = new Map<string, Set<string>>();
+  const properties = metadata?.inputSchema?.properties ?? {};
+
+  for (const [schemaKey, prop] of Object.entries(properties)) {
+    addAlias(index, schemaKey, schemaKey);
+    addAlias(index, schemaKey.replace(/_/g, ' '), schemaKey);
+    addAlias(index, prop.title, schemaKey);
+
+    const nativeEl = findNativeField(form, schemaKey);
+    const mappedEl = metadata?.fieldElements?.get(schemaKey);
+    const el = nativeEl ?? mappedEl ?? null;
+    if (!el) continue;
+    const htmlEl = el as HTMLElement;
+    addAlias(index, htmlEl.getAttribute('id'), schemaKey);
+    addAlias(index, htmlEl.getAttribute('name'), schemaKey);
+    addAlias(index, htmlEl.getAttribute('aria-label'), schemaKey);
+    addAlias(index, htmlEl.getAttribute('placeholder'), schemaKey);
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+      for (const label of Array.from(el.labels ?? [])) {
+        addAlias(index, label.textContent?.trim(), schemaKey);
+      }
+    }
+  }
+  return index;
+}
+
+function resolveParamsForSchema(
+  form: HTMLFormElement,
+  params: Record<string, unknown>,
+  metadata: ToolMetadata | undefined,
+  config: ResolvedConfig,
+): { resolved: Record<string, unknown>; warnings: FillWarning[] } {
+  const resolved: Record<string, unknown> = {};
+  const warnings: FillWarning[] = [];
+  const properties = metadata?.inputSchema?.properties ?? {};
+  const aliasEnabled = config.paramBinding.enableAliasResolution;
+
+  for (const [key, value] of Object.entries(params)) {
+    if (key in properties) resolved[key] = value;
+  }
+  if (!aliasEnabled) return { resolved, warnings };
+
+  const aliasIndex = buildAliasIndex(form, metadata);
+  for (const [rawKey, value] of Object.entries(params)) {
+    if (rawKey in properties) continue;
+    const candidates = aliasIndex.get(normalizeAliasKey(rawKey));
+    if (!candidates || candidates.size !== 1) continue;
+    const target = Array.from(candidates)[0];
+    if (!target || target in resolved) continue;
+    resolved[target] = value;
+    warnings.push({
+      field: target,
+      type: 'alias_resolved',
+      original: rawKey,
+      message: `resolved "${rawKey}" to schema field "${target}"`,
+    });
+  }
+  return { resolved, warnings };
+}
+
+function collectInvalidFieldWarnings(form: HTMLFormElement): FillWarning[] {
+  const warnings: FillWarning[] = [];
+  const controls = Array.from(form.elements).filter(
+    (el): el is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement =>
+      el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement,
+  );
+  for (const control of controls) {
+    if (!control.willValidate) continue;
+    if (control.checkValidity()) continue;
+    const field = control.name || control.id || control.getAttribute('aria-label') || 'unknown_field';
+    warnings.push({
+      field,
+      type: 'blocked_submit',
+      message: control.validationMessage || `field "${field}" failed validation`,
+    });
+  }
+  return warnings;
+}
 
 /**
  * Build an `execute` function for a form tool.
@@ -128,18 +240,61 @@ export function buildExecuteHandler(
 
     pendingFillWarnings.set(form, []);
     pendingWarnings.delete(form);
-    fillFormFields(form, params);
+    const { resolved: resolvedParams, warnings: aliasWarnings } = resolveParamsForSchema(
+      form,
+      params,
+      metadata,
+      config,
+    );
+    if (aliasWarnings.length > 0) {
+      pendingFillWarnings.set(form, [...(pendingFillWarnings.get(form) ?? []), ...aliasWarnings]);
+    }
+    fillFormFields(form, resolvedParams);
 
     // Compute missing required fields now so they are available when the
     // form submits, regardless of whether autoSubmit is enabled.
-    const missingNow = getMissingRequired(metadata, params);
+    const missingNow = getMissingRequired(metadata, resolvedParams);
     if (missingNow.length > 0) pendingWarnings.set(form, missingNow);
 
     // Dispatch toolactivated event per spec
     window.dispatchEvent(new CustomEvent('toolactivated', { detail: { toolName } }));
 
     return new Promise<ExecuteResult>((resolve, reject) => {
-      pendingExecutions.set(form, { resolve, reject });
+      const timeoutMs = config.execution.timeoutMs;
+      const timeoutId = setTimeout(() => {
+        const pending = pendingExecutions.get(form);
+        if (!pending) return;
+        pendingExecutions.delete(form);
+        const timedOutState = (
+          config.autoSubmit ||
+          form.hasAttribute('toolautosubmit') ||
+          form.dataset['webmcpAutosubmit'] !== undefined
+        ) ? 'timed_out' : 'awaiting_user_action';
+        const warn: FillWarning = {
+          field: '__form__',
+          type: 'timeout',
+          message: timedOutState === 'timed_out'
+            ? `tool execution timed out after ${timeoutMs}ms`
+            : `waiting for user submit (timed out after ${timeoutMs}ms)`,
+        };
+        const structured: StructuredExecuteData = {
+          status: timedOutState,
+          filled_fields: serializeFormData(form, lastParams.get(form), formFieldElements.get(form)),
+          skipped_fields: [],
+          missing_required: pendingWarnings.get(form) ?? [],
+          warnings: [...(pendingFillWarnings.get(form) ?? []), warn],
+        };
+        pendingWarnings.delete(form);
+        pendingFillWarnings.delete(form);
+        lastFilledSnapshot.delete(form);
+        resolve({
+          content: [
+            { type: 'text', text: warn.message },
+            { type: 'text', text: JSON.stringify(structured) },
+          ],
+        });
+      }, timeoutMs);
+      pendingExecutions.set(form, { resolve, reject, timeoutId });
 
       if (
         config.autoSubmit ||
@@ -153,13 +308,13 @@ export function buildExecuteHandler(
         waitForDomStable(form).then(async () => {
           try {
             // Re-fill after framework has committed state updates.
-            fillFormFields(form, params);
+            fillFormFields(form, resolvedParams);
 
             // Retry up to 2 times if the framework reset any filled values.
             for (let attempt = 0; attempt < 2; attempt++) {
-              const reset = getResetFields(form, params, formFieldElements.get(form));
+              const reset = getResetFields(form, resolvedParams, formFieldElements.get(form));
               if (reset.length === 0) break;
-              fillFormFields(form, params);
+              fillFormFields(form, resolvedParams);
               await waitForDomStable(form, 400, 100);
             }
 
@@ -173,7 +328,11 @@ export function buildExecuteHandler(
               const found = liveBtn?.closest('form') as HTMLFormElement | null;
               if (found) {
                 submitForm = found;
-                pendingExecutions.set(submitForm, { resolve, reject });
+                const pending = pendingExecutions.get(form);
+                const nextPending = pending?.timeoutId
+                  ? { resolve, reject, timeoutId: pending.timeoutId }
+                  : { resolve, reject };
+                pendingExecutions.set(submitForm, nextPending);
                 attachSubmitInterceptor(submitForm, toolName);
               }
             }
@@ -182,6 +341,39 @@ export function buildExecuteHandler(
             if (submitForm !== form && pendingWarnings.has(form)) {
               pendingWarnings.set(submitForm, pendingWarnings.get(form)!);
               pendingWarnings.delete(form);
+            }
+
+            if (!submitForm.checkValidity()) {
+              const pending = pendingExecutions.get(submitForm) ?? pendingExecutions.get(form);
+              if (pending) {
+                if (pending.timeoutId) clearTimeout(pending.timeoutId);
+                pendingExecutions.delete(submitForm);
+                pendingExecutions.delete(form);
+                const warnings = [
+                  ...(pendingFillWarnings.get(submitForm) ?? pendingFillWarnings.get(form) ?? []),
+                  ...collectInvalidFieldWarnings(submitForm),
+                ];
+                pendingFillWarnings.delete(submitForm);
+                pendingFillWarnings.delete(form);
+                const structured: StructuredExecuteData = {
+                  status: 'blocked_invalid',
+                  filled_fields: serializeFormData(submitForm, lastParams.get(submitForm) ?? lastParams.get(form), formFieldElements.get(submitForm) ?? formFieldElements.get(form)),
+                  skipped_fields: [],
+                  missing_required: pendingWarnings.get(submitForm) ?? pendingWarnings.get(form) ?? [],
+                  warnings,
+                };
+                pendingWarnings.delete(submitForm);
+                pendingWarnings.delete(form);
+                lastFilledSnapshot.delete(submitForm);
+                lastFilledSnapshot.delete(form);
+                resolve({
+                  content: [
+                    { type: 'text', text: 'Form submission blocked by native validation.' },
+                    { type: 'text', text: JSON.stringify(structured) },
+                  ],
+                });
+              }
+              return;
             }
 
             submitForm.requestSubmit();
@@ -207,6 +399,7 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
 
     // Agent-invoked path
     const { resolve } = pending;
+    if (pending.timeoutId) clearTimeout(pending.timeoutId);
     pendingExecutions.delete(form);
 
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));

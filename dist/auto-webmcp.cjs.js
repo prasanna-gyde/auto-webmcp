@@ -26,9 +26,19 @@ module.exports = __toCommonJS(src_exports);
 
 // src/config.ts
 function resolveConfig(userConfig) {
+  const strict = userConfig?.paramBinding?.strict ?? false;
+  const enableAliasResolution = strict ? false : userConfig?.paramBinding?.enableAliasResolution ?? true;
   return {
     exclude: userConfig?.exclude ?? [],
     autoSubmit: userConfig?.autoSubmit ?? false,
+    declarativeMode: userConfig?.declarativeMode ?? "skip",
+    paramBinding: {
+      strict,
+      enableAliasResolution
+    },
+    execution: {
+      timeoutMs: Math.max(100, userConfig?.execution?.timeoutMs ?? 15e3)
+    },
     overrides: userConfig?.overrides ?? {},
     debug: userConfig?.debug ?? false
   };
@@ -1061,6 +1071,94 @@ var lastFilledSnapshot = /* @__PURE__ */ new WeakMap();
 var _inputValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 var _textareaValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
 var _checkedSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked")?.set;
+function normalizeAliasKey(raw) {
+  return raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+function addAlias(index, alias, schemaKey) {
+  if (!alias)
+    return;
+  const normalized = normalizeAliasKey(alias);
+  if (!normalized)
+    return;
+  if (!index.has(normalized))
+    index.set(normalized, /* @__PURE__ */ new Set());
+  index.get(normalized).add(schemaKey);
+}
+function buildAliasIndex(form, metadata) {
+  const index = /* @__PURE__ */ new Map();
+  const properties = metadata?.inputSchema?.properties ?? {};
+  for (const [schemaKey, prop] of Object.entries(properties)) {
+    addAlias(index, schemaKey, schemaKey);
+    addAlias(index, schemaKey.replace(/_/g, " "), schemaKey);
+    addAlias(index, prop.title, schemaKey);
+    const nativeEl = findNativeField(form, schemaKey);
+    const mappedEl = metadata?.fieldElements?.get(schemaKey);
+    const el = nativeEl ?? mappedEl ?? null;
+    if (!el)
+      continue;
+    const htmlEl = el;
+    addAlias(index, htmlEl.getAttribute("id"), schemaKey);
+    addAlias(index, htmlEl.getAttribute("name"), schemaKey);
+    addAlias(index, htmlEl.getAttribute("aria-label"), schemaKey);
+    addAlias(index, htmlEl.getAttribute("placeholder"), schemaKey);
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+      for (const label of Array.from(el.labels ?? [])) {
+        addAlias(index, label.textContent?.trim(), schemaKey);
+      }
+    }
+  }
+  return index;
+}
+function resolveParamsForSchema(form, params, metadata, config) {
+  const resolved = {};
+  const warnings = [];
+  const properties = metadata?.inputSchema?.properties ?? {};
+  const aliasEnabled = config.paramBinding.enableAliasResolution;
+  for (const [key, value] of Object.entries(params)) {
+    if (key in properties)
+      resolved[key] = value;
+  }
+  if (!aliasEnabled)
+    return { resolved, warnings };
+  const aliasIndex = buildAliasIndex(form, metadata);
+  for (const [rawKey, value] of Object.entries(params)) {
+    if (rawKey in properties)
+      continue;
+    const candidates = aliasIndex.get(normalizeAliasKey(rawKey));
+    if (!candidates || candidates.size !== 1)
+      continue;
+    const target = Array.from(candidates)[0];
+    if (!target || target in resolved)
+      continue;
+    resolved[target] = value;
+    warnings.push({
+      field: target,
+      type: "alias_resolved",
+      original: rawKey,
+      message: `resolved "${rawKey}" to schema field "${target}"`
+    });
+  }
+  return { resolved, warnings };
+}
+function collectInvalidFieldWarnings(form) {
+  const warnings = [];
+  const controls = Array.from(form.elements).filter(
+    (el) => el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement
+  );
+  for (const control of controls) {
+    if (!control.willValidate)
+      continue;
+    if (control.checkValidity())
+      continue;
+    const field = control.name || control.id || control.getAttribute("aria-label") || "unknown_field";
+    warnings.push({
+      field,
+      type: "blocked_submit",
+      message: control.validationMessage || `field "${field}" failed validation`
+    });
+  }
+  return warnings;
+}
 function buildExecuteHandler(form, config, toolName, metadata) {
   if (metadata?.fieldElements) {
     formFieldElements.set(form, metadata.fieldElements);
@@ -1082,22 +1180,60 @@ function buildExecuteHandler(form, config, toolName, metadata) {
     }
     pendingFillWarnings.set(form, []);
     pendingWarnings.delete(form);
-    fillFormFields(form, params);
-    const missingNow = getMissingRequired(metadata, params);
+    const { resolved: resolvedParams, warnings: aliasWarnings } = resolveParamsForSchema(
+      form,
+      params,
+      metadata,
+      config
+    );
+    if (aliasWarnings.length > 0) {
+      pendingFillWarnings.set(form, [...pendingFillWarnings.get(form) ?? [], ...aliasWarnings]);
+    }
+    fillFormFields(form, resolvedParams);
+    const missingNow = getMissingRequired(metadata, resolvedParams);
     if (missingNow.length > 0)
       pendingWarnings.set(form, missingNow);
     window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
     return new Promise((resolve, reject) => {
-      pendingExecutions.set(form, { resolve, reject });
+      const timeoutMs = config.execution.timeoutMs;
+      const timeoutId = setTimeout(() => {
+        const pending = pendingExecutions.get(form);
+        if (!pending)
+          return;
+        pendingExecutions.delete(form);
+        const timedOutState = config.autoSubmit || form.hasAttribute("toolautosubmit") || form.dataset["webmcpAutosubmit"] !== void 0 ? "timed_out" : "awaiting_user_action";
+        const warn = {
+          field: "__form__",
+          type: "timeout",
+          message: timedOutState === "timed_out" ? `tool execution timed out after ${timeoutMs}ms` : `waiting for user submit (timed out after ${timeoutMs}ms)`
+        };
+        const structured = {
+          status: timedOutState,
+          filled_fields: serializeFormData(form, lastParams.get(form), formFieldElements.get(form)),
+          skipped_fields: [],
+          missing_required: pendingWarnings.get(form) ?? [],
+          warnings: [...pendingFillWarnings.get(form) ?? [], warn]
+        };
+        pendingWarnings.delete(form);
+        pendingFillWarnings.delete(form);
+        lastFilledSnapshot.delete(form);
+        resolve({
+          content: [
+            { type: "text", text: warn.message },
+            { type: "text", text: JSON.stringify(structured) }
+          ]
+        });
+      }, timeoutMs);
+      pendingExecutions.set(form, { resolve, reject, timeoutId });
       if (config.autoSubmit || form.hasAttribute("toolautosubmit") || form.dataset["webmcpAutosubmit"] !== void 0) {
         waitForDomStable(form).then(async () => {
           try {
-            fillFormFields(form, params);
+            fillFormFields(form, resolvedParams);
             for (let attempt = 0; attempt < 2; attempt++) {
-              const reset = getResetFields(form, params, formFieldElements.get(form));
+              const reset = getResetFields(form, resolvedParams, formFieldElements.get(form));
               if (reset.length === 0)
                 break;
-              fillFormFields(form, params);
+              fillFormFields(form, resolvedParams);
               await waitForDomStable(form, 400, 100);
             }
             let submitForm = form;
@@ -1108,13 +1244,48 @@ function buildExecuteHandler(form, config, toolName, metadata) {
               const found = liveBtn?.closest("form");
               if (found) {
                 submitForm = found;
-                pendingExecutions.set(submitForm, { resolve, reject });
+                const pending = pendingExecutions.get(form);
+                const nextPending = pending?.timeoutId ? { resolve, reject, timeoutId: pending.timeoutId } : { resolve, reject };
+                pendingExecutions.set(submitForm, nextPending);
                 attachSubmitInterceptor(submitForm, toolName);
               }
             }
             if (submitForm !== form && pendingWarnings.has(form)) {
               pendingWarnings.set(submitForm, pendingWarnings.get(form));
               pendingWarnings.delete(form);
+            }
+            if (!submitForm.checkValidity()) {
+              const pending = pendingExecutions.get(submitForm) ?? pendingExecutions.get(form);
+              if (pending) {
+                if (pending.timeoutId)
+                  clearTimeout(pending.timeoutId);
+                pendingExecutions.delete(submitForm);
+                pendingExecutions.delete(form);
+                const warnings = [
+                  ...pendingFillWarnings.get(submitForm) ?? pendingFillWarnings.get(form) ?? [],
+                  ...collectInvalidFieldWarnings(submitForm)
+                ];
+                pendingFillWarnings.delete(submitForm);
+                pendingFillWarnings.delete(form);
+                const structured = {
+                  status: "blocked_invalid",
+                  filled_fields: serializeFormData(submitForm, lastParams.get(submitForm) ?? lastParams.get(form), formFieldElements.get(submitForm) ?? formFieldElements.get(form)),
+                  skipped_fields: [],
+                  missing_required: pendingWarnings.get(submitForm) ?? pendingWarnings.get(form) ?? [],
+                  warnings
+                };
+                pendingWarnings.delete(submitForm);
+                pendingWarnings.delete(form);
+                lastFilledSnapshot.delete(submitForm);
+                lastFilledSnapshot.delete(form);
+                resolve({
+                  content: [
+                    { type: "text", text: "Form submission blocked by native validation." },
+                    { type: "text", text: JSON.stringify(structured) }
+                  ]
+                });
+              }
+              return;
             }
             submitForm.requestSubmit();
           } catch (err) {
@@ -1134,6 +1305,8 @@ function attachSubmitInterceptor(form, toolName) {
     if (!pending)
       return;
     const { resolve } = pending;
+    if (pending.timeoutId)
+      clearTimeout(pending.timeoutId);
     pendingExecutions.delete(form);
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
     lastFilledSnapshot.delete(form);
@@ -1690,10 +1863,23 @@ function ensureUniqueToolName(baseName, excludeForm) {
   }
   return candidate;
 }
+function hasNativeDeclarativeTool(form) {
+  return form.getAttribute("toolname")?.trim().length ? true : false;
+}
 async function registerForm(form, config) {
   if (isExcluded(form, config))
     return;
   const previousName = getRegisteredToolName(form);
+  if (hasNativeDeclarativeTool(form) && config.declarativeMode !== "force") {
+    if (previousName) {
+      await unregisterFormTool(form);
+    }
+    if (config.debug) {
+      const mode = config.declarativeMode;
+      console.log(`[auto-webmcp] Skipping imperative registration for native declarative form (mode=${mode})`);
+    }
+    return;
+  }
   let override;
   for (const [selector, ovr] of Object.entries(config.overrides)) {
     try {

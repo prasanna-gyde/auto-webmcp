@@ -16,6 +16,39 @@ export interface AutoWebMCPConfig {
      */
     autoSubmit?: boolean;
     /**
+     * How to handle forms that already use native declarative WebMCP attributes.
+     * - skip: do not imperatively register forms with toolname
+     * - augment: reserved for future metadata-only enhancement (currently behaves like skip)
+     * - force: always register imperatively even when toolname exists
+     * Default: skip
+     */
+    declarativeMode?: 'skip' | 'augment' | 'force';
+    /**
+     * Parameter binding behavior for execute() input keys.
+     */
+    paramBinding?: {
+        /**
+         * If true, resolve semantically similar parameter keys to schema keys.
+         * Default: true
+         */
+        enableAliasResolution?: boolean;
+        /**
+         * If true, only exact schema keys are accepted (disables alias resolution).
+         * Default: false
+         */
+        strict?: boolean;
+    };
+    /**
+     * Execution behavior controls.
+     */
+    execution?: {
+        /**
+         * Max time to wait for submit/result before returning a deterministic timeout state.
+         * Default: 15000
+         */
+        timeoutMs?: number;
+    };
+    /**
      * Per-form name/description overrides keyed by CSS selector.
      */
     overrides?: Record<string, FormOverride>;
@@ -27,6 +60,14 @@ export interface AutoWebMCPConfig {
 export interface ResolvedConfig {
     exclude: string[];
     autoSubmit: boolean;
+    declarativeMode: 'skip' | 'augment' | 'force';
+    paramBinding: {
+        enableAliasResolution: boolean;
+        strict: boolean;
+    };
+    execution: {
+        timeoutMs: number;
+    };
     overrides: Record<string, FormOverride>;
     debug: boolean;
 }

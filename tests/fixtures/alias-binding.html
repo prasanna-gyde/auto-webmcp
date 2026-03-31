@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Alias Binding Form</title>
+</head>
+<body>
+  <h1>Create Repository</h1>
+
+  <form id="alias-form" action="/repo/create">
+    <label for="repository_name_input">Repository Name</label>
+    <input id="repository_name_input" name="repo" type="text" required>
+
+    <label for="visibility">Visibility</label>
+    <select id="visibility" name="visibility">
+      <option value="public">Public</option>
+      <option value="private">Private</option>
+    </select>
+
+    <button type="submit">Create</button>
+  </form>
+
+  <script type="module" src="../../dist/auto-webmcp.esm.js"></script>
+</body>
+</html>

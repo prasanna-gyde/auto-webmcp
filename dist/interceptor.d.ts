@@ -24,13 +24,13 @@ export interface ExecuteResult {
 }
 export interface FillWarning {
     field: string;
-    type: 'clamped' | 'not_filled' | 'missing_required' | 'type_mismatch';
+    type: 'clamped' | 'not_filled' | 'missing_required' | 'type_mismatch' | 'alias_resolved' | 'blocked_submit' | 'timeout';
     message: string;
     original?: unknown;
     actual?: unknown;
 }
 export interface StructuredExecuteData {
-    status: 'success' | 'partial' | 'error';
+    status: 'success' | 'partial' | 'error' | 'awaiting_user_action' | 'timed_out' | 'blocked_invalid';
     filled_fields: Record<string, unknown>;
     skipped_fields: string[];
     missing_required: string[];

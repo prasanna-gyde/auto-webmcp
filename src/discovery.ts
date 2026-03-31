@@ -74,9 +74,24 @@ function ensureUniqueToolName(baseName: string, excludeForm?: HTMLFormElement): 
   return candidate;
 }
 
+function hasNativeDeclarativeTool(form: HTMLFormElement): boolean {
+  return form.getAttribute('toolname')?.trim().length ? true : false;
+}
+
 async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Promise<void> {
   if (isExcluded(form, config)) return;
   const previousName = getRegisteredToolName(form);
+
+  if (hasNativeDeclarativeTool(form) && config.declarativeMode !== 'force') {
+    if (previousName) {
+      await unregisterFormTool(form);
+    }
+    if (config.debug) {
+      const mode = config.declarativeMode;
+      console.log(`[auto-webmcp] Skipping imperative registration for native declarative form (mode=${mode})`);
+    }
+    return;
+  }
 
   // Find matching override (first matching selector wins)
   let override;

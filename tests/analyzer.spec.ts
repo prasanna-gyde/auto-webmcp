@@ -26,6 +26,21 @@ async function getRegisteredTools(page: import('@playwright/test').Page) {
   return page.evaluate(() => (window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]);
 }
 
+async function initWithConfig(
+  page: import('@playwright/test').Page,
+  url: string,
+  config: Record<string, unknown>,
+) {
+  await page.addInitScript(() => {
+    (window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_NO_AUTOINIT'] = true;
+  });
+  await page.goto(url);
+  await page.evaluate(async (cfg) => {
+    const mod = await import('/dist/auto-webmcp.esm.js');
+    await mod.autoWebMCP(cfg);
+  }, config);
+}
+
 test.describe('Flight search form', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(MOCK_WEBMCP);
@@ -252,7 +267,7 @@ const MOCK_WEBMCP_WITH_EXECUTE = `
 test.describe('Native WebMCP attributes', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(MOCK_WEBMCP);
-    await page.goto('/tests/fixtures/native-attrs.html');
+    await initWithConfig(page, '/tests/fixtures/native-attrs.html', { declarativeMode: 'force' });
     await page.waitForFunction(
       () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
       { timeout: 5000 },
@@ -306,7 +321,7 @@ test.describe('Native WebMCP attributes', () => {
 test.describe('toolactivated and toolcancel events', () => {
   test('fires toolactivated event after agent invocation', async ({ page }) => {
     await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
-    await page.goto('/tests/fixtures/native-attrs.html');
+    await initWithConfig(page, '/tests/fixtures/native-attrs.html', { declarativeMode: 'force' });
     await page.waitForFunction(
       () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
       { timeout: 5000 },
@@ -340,7 +355,7 @@ test.describe('toolactivated and toolcancel events', () => {
 
   test('fires toolcancel event on form reset', async ({ page }) => {
     await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
-    await page.goto('/tests/fixtures/native-attrs.html');
+    await initWithConfig(page, '/tests/fixtures/native-attrs.html', { declarativeMode: 'force' });
     await page.waitForFunction(
       () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
       { timeout: 5000 },
@@ -1011,7 +1026,7 @@ test.describe('Structured ExecuteResult', () => {
 
   test('execute returns content[0] human-readable text and content[1] structured JSON', async ({ page }) => {
     await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
-    await page.goto('/tests/fixtures/native-attrs.html');
+    await initWithConfig(page, '/tests/fixtures/native-attrs.html', { declarativeMode: 'force' });
     await page.waitForFunction(
       () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
       { timeout: 5000 },
@@ -1042,7 +1057,7 @@ test.describe('Structured ExecuteResult', () => {
 
   test('status is success when all required fields provided', async ({ page }) => {
     await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
-    await page.goto('/tests/fixtures/native-attrs.html');
+    await initWithConfig(page, '/tests/fixtures/native-attrs.html', { declarativeMode: 'force' });
     await page.waitForFunction(
       () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
       { timeout: 5000 },
@@ -1066,7 +1081,7 @@ test.describe('Structured ExecuteResult', () => {
 
   test('status is partial when required field missing', async ({ page }) => {
     await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
-    await page.goto('/tests/fixtures/native-attrs.html');
+    await initWithConfig(page, '/tests/fixtures/native-attrs.html', { declarativeMode: 'force' });
     await page.waitForFunction(
       () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
       { timeout: 5000 },
@@ -1090,5 +1105,99 @@ test.describe('Structured ExecuteResult', () => {
     expect(structured.status).toBe('partial');
     expect(structured.missing_required).toContain('email');
     expect(structured.warnings.some((w: { type: string }) => w.type === 'missing_required')).toBe(true);
+  });
+});
+
+test.describe('Declarative mode behavior', () => {
+  test('default mode skips imperative registration for forms with toolname', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.goto('/tests/fixtures/native-attrs.html');
+    await page.waitForTimeout(300);
+    const tools = await getRegisteredTools(page);
+    expect(tools).toHaveLength(0);
+  });
+
+  test('force mode registers imperative tool for native declarative forms', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await initWithConfig(page, '/tests/fixtures/native-attrs.html', { declarativeMode: 'force' });
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    expect(tools[0]?.['name']).toBe('subscribe_newsletter');
+  });
+});
+
+test.describe('Semantic alias parameter binding', () => {
+  test('resolves alias keys and reports alias_resolved warning', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await page.goto('/tests/fixtures/alias-binding.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    const resultPromise = page.evaluate(async () => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      return handlers['create']?.({ repository_name: 'my_mcp_test', visibility: 'private' });
+    });
+
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      document.querySelector<HTMLFormElement>('form')?.requestSubmit();
+    });
+
+    const result = await resultPromise as { content: Array<{ text: string }> };
+    const structured = JSON.parse(result.content[1]!.text);
+    expect(structured.filled_fields.repo).toBe('my_mcp_test');
+    expect(
+      structured.warnings.some((w: { type: string; field: string }) =>
+        w.type === 'alias_resolved' && w.field === 'repo'),
+    ).toBe(true);
+  });
+});
+
+test.describe('Execution state machine', () => {
+  test('returns awaiting_user_action when manual submit times out', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await initWithConfig(page, '/tests/fixtures/search.html', {
+      execution: { timeoutMs: 250 },
+    });
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    const result = await page.evaluate(async () => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      return handlers['search_flights']?.({ origin: 'LON', destination: 'NYC', depart_date: '2026-06-10' });
+    }) as { content: Array<{ text: string }> };
+
+    const structured = JSON.parse(result.content[1]!.text);
+    expect(structured.status).toBe('awaiting_user_action');
+    expect(structured.warnings.some((w: { type: string }) => w.type === 'timeout')).toBe(true);
+  });
+
+  test('returns blocked_invalid when auto-submit is prevented by native validation', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+    await initWithConfig(page, '/tests/fixtures/native-attrs.html', {
+      declarativeMode: 'force',
+      autoSubmit: true,
+      execution: { timeoutMs: 1000 },
+    });
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length > 0,
+      { timeout: 5000 },
+    );
+
+    const result = await page.evaluate(async () => {
+      const handlers = (window as unknown as Record<string, unknown>)['__executeHandlers'] as Record<string, (p: Record<string, unknown>) => Promise<unknown>>;
+      return handlers['subscribe_newsletter']?.({ frequency: 'weekly' });
+    }) as { content: Array<{ text: string }> };
+
+    const structured = JSON.parse(result.content[1]!.text);
+    expect(structured.status).toBe('blocked_invalid');
+    expect(structured.warnings.some((w: { type: string }) => w.type === 'blocked_submit')).toBe(true);
   });
 });

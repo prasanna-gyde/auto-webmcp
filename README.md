@@ -57,6 +57,21 @@ await autoWebMCP({
   // Auto-submit when agent invokes (default: false — human must click submit)
   autoSubmit: false,
 
+  // Handling for forms already using native declarative WebMCP attributes:
+  // 'skip' (default), 'augment' (currently same as skip), or 'force'
+  declarativeMode: 'skip',
+
+  // Parameter binding behavior for execute payload keys
+  paramBinding: {
+    enableAliasResolution: true, // default
+    strict: false,               // if true, exact schema keys only
+  },
+
+  // Deterministic execute timeout state
+  execution: {
+    timeoutMs: 15000, // default
+  },
+
   // Per-form name / description overrides
   overrides: {
     '#checkout-form': {
