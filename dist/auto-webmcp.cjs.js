@@ -1331,6 +1331,14 @@ function fillAriaField(el, value) {
     return;
   }
   const htmlEl = el;
+  console.log("[auto-webmcp] fillAriaField", {
+    tag: el.tagName,
+    role,
+    isContentEditable: htmlEl.isContentEditable,
+    id: el.id,
+    ariaLabel: el.getAttribute("aria-label"),
+    textContentBefore: (htmlEl.textContent ?? "").slice(0, 80)
+  });
   if (htmlEl.isContentEditable) {
     htmlEl.focus();
     const range = document.createRange();
@@ -1338,23 +1346,61 @@ function fillAriaField(el, value) {
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
-    let handled = false;
+    const text = String(value ?? "");
+    console.log("[auto-webmcp] fillAriaField: text to insert:", JSON.stringify(text));
+    let inserted = false;
     try {
       const dt = new DataTransfer();
-      dt.setData("text/plain", String(value ?? ""));
-      const ev = new ClipboardEvent("paste", {
+      dt.setData("text/plain", text);
+      htmlEl.dispatchEvent(new ClipboardEvent("paste", {
         bubbles: true,
         cancelable: true,
         composed: true,
         clipboardData: dt
-      });
-      handled = !htmlEl.dispatchEvent(ev);
-    } catch {
+      }));
+      inserted = (htmlEl.textContent ?? "").trim().length > 0;
+      console.log("[auto-webmcp] fillAriaField: S1 paste result:", inserted, JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
+    } catch (e) {
+      console.log("[auto-webmcp] fillAriaField: S1 paste threw:", e);
     }
-    if (!handled) {
-      document.execCommand("insertText", false, String(value ?? ""));
+    if (!inserted) {
+      const ok = document.execCommand("insertText", false, text);
+      inserted = (htmlEl.textContent ?? "").trim().length > 0;
+      console.log("[auto-webmcp] fillAriaField: S2 execCommand result:", ok, "inserted:", inserted, JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
     }
+    if (!inserted) {
+      try {
+        htmlEl.dispatchEvent(new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          inputType: "insertText",
+          data: text
+        }));
+        inserted = (htmlEl.textContent ?? "").trim().length > 0;
+        console.log("[auto-webmcp] fillAriaField: S3 beforeinput result:", inserted, JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
+      } catch (e) {
+        console.log("[auto-webmcp] fillAriaField: S3 beforeinput threw:", e);
+      }
+    }
+    if (!inserted) {
+      htmlEl.textContent = text;
+      const r2 = document.createRange();
+      r2.selectNodeContents(htmlEl);
+      r2.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(r2);
+      console.log("[auto-webmcp] fillAriaField: S4 textContent assignment done, textContent:", JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
+    }
+    htmlEl.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      cancelable: true,
+      inputType: "insertText",
+      data: text
+    }));
+    console.log("[auto-webmcp] fillAriaField: done, final textContent:", JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
   } else {
+    console.log("[auto-webmcp] fillAriaField: not contentEditable, dispatching input/change only");
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
@@ -1699,6 +1745,31 @@ async function scanOrphanInputs(config) {
       submitBtn = containerBtns[containerBtns.length - 1] ?? null;
       if (submitBtn)
         console.log(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
+    }
+    if (!submitBtn) {
+      const dialog = container.closest('[role="dialog"], [aria-modal="true"]');
+      if (dialog) {
+        const allDialogBtns = Array.from(
+          dialog.querySelectorAll('button, [role="button"]')
+        ).filter((b) => {
+          const r = b.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && SUBMIT_TEXT_RE.test(b.textContent ?? "");
+        });
+        console.log(
+          `[auto-webmcp] orphan: dialog buttons matching submit text:`,
+          allDialogBtns.map((b) => `"${b.textContent?.trim().slice(0, 30)}" disabled=${b.disabled} aria-disabled=${b.getAttribute("aria-disabled")}`)
+        );
+        const disabledBtns = allDialogBtns.filter(
+          (b) => b.disabled || b.getAttribute("aria-disabled") === "true"
+        );
+        const enabledBtns = allDialogBtns.filter(
+          (b) => !b.disabled && b.getAttribute("aria-disabled") !== "true"
+        );
+        const dialogBtns = disabledBtns.length > 0 ? disabledBtns : enabledBtns;
+        submitBtn = dialogBtns[dialogBtns.length - 1] ?? null;
+        if (submitBtn)
+          console.log(`[auto-webmcp] orphan: using text-matched button in dialog: "${submitBtn.textContent?.trim().slice(0, 40)}" disabled=${submitBtn.disabled} aria-disabled=${submitBtn.getAttribute("aria-disabled")}`);
+      }
     }
     if (!submitBtn) {
       const pageBtns = Array.from(

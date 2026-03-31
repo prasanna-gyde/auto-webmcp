@@ -556,37 +556,91 @@ function fillAriaField(el: Element, value: unknown): void {
 
   // textbox, combobox, searchbox, spinbutton
   const htmlEl = el as HTMLElement;
+  console.log('[auto-webmcp] fillAriaField', {
+    tag: el.tagName, role, isContentEditable: htmlEl.isContentEditable,
+    id: el.id, ariaLabel: el.getAttribute('aria-label'),
+    textContentBefore: (htmlEl.textContent ?? '').slice(0, 80),
+  });
+
   if (htmlEl.isContentEditable) {
     htmlEl.focus();
-    // Select all existing content so it gets replaced.
+
+    // Select all content scoped to this element (not document.execCommand('selectAll')
+    // which can confuse Quill/ProseMirror by triggering their select-all handling).
     const range = document.createRange();
     range.selectNodeContents(htmlEl);
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
 
-    // Primary: paste simulation. Draft.js, Slate, ProseMirror all listen for
-    // 'paste' events and call preventDefault() when handled, which enables
-    // their submit buttons. execCommand('insertText') inserts text visually
-    // but these frameworks read clipboard data, not the raw DOM mutation.
-    let handled = false;
+    const text = String(value ?? '');
+    console.log('[auto-webmcp] fillAriaField: text to insert:', JSON.stringify(text));
+
+    // Strategy 1: paste simulation (Draft.js preferred path).
+    // Draft.js intercepts paste, reads clipboardData, updates EditorState, and
+    // enables submit buttons. We check whether text actually landed in the DOM
+    // after the event — if the editor handled paste but clipboardData was empty
+    // (a Chrome security edge-case for synthetic events) we fall through.
+    // NOTE: use .trim() — an empty Quill/ProseMirror editor may contain '<p><br></p>'
+    // whose textContent is '\n' (length 1), which would falsely indicate success.
+    let inserted = false;
     try {
       const dt = new DataTransfer();
-      dt.setData('text/plain', String(value ?? ''));
-      const ev = new ClipboardEvent('paste', {
+      dt.setData('text/plain', text);
+      htmlEl.dispatchEvent(new ClipboardEvent('paste', {
         bubbles: true, cancelable: true, composed: true, clipboardData: dt,
-      });
-      // dispatchEvent returns false when the event's default was prevented
-      // (i.e. a framework handler intercepted the paste and processed it).
-      handled = !htmlEl.dispatchEvent(ev);
-    } catch { /* DataTransfer/ClipboardEvent not available, fall through */ }
-
-    if (!handled) {
-      // Fallback for simpler contenteditable (Monaco, plain div editors):
-      // fires InputEvent that React's synthetic system listens to.
-      document.execCommand('insertText', false, String(value ?? ''));
+      }));
+      inserted = (htmlEl.textContent ?? '').trim().length > 0;
+      console.log('[auto-webmcp] fillAriaField: S1 paste result:', inserted, JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
+    } catch (e) {
+      console.log('[auto-webmcp] fillAriaField: S1 paste threw:', e);
     }
+
+    if (!inserted) {
+      // Strategy 2: execCommand insertText with the range selection active.
+      // The browser replaces the selected content with the new text and fires
+      // the native beforeinput + input events that Quill/ProseMirror listen to.
+      const ok = document.execCommand('insertText', false, text);
+      inserted = (htmlEl.textContent ?? '').trim().length > 0;
+      console.log('[auto-webmcp] fillAriaField: S2 execCommand result:', ok, 'inserted:', inserted, JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
+    }
+
+    if (!inserted) {
+      // Strategy 3: direct beforeinput InputEvent (ProseMirror / LinkedIn editor).
+      // Dispatching directly guarantees event.data === text; execCommand may fire
+      // beforeinput with data=null in some Chrome versions.
+      try {
+        htmlEl.dispatchEvent(new InputEvent('beforeinput', {
+          bubbles: true, cancelable: true, composed: true,
+          inputType: 'insertText', data: text,
+        }));
+        inserted = (htmlEl.textContent ?? '').trim().length > 0;
+        console.log('[auto-webmcp] fillAriaField: S3 beforeinput result:', inserted, JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
+      } catch (e) {
+        console.log('[auto-webmcp] fillAriaField: S3 beforeinput threw:', e);
+      }
+    }
+
+    if (!inserted) {
+      // Strategy 4: direct textContent assignment (MutationObserver-based editors).
+      // Sets content directly in the DOM; editors using MutationObserver (Quill,
+      // ProseMirror) will pick it up and sync their internal model.
+      htmlEl.textContent = text;
+      const r2 = document.createRange();
+      r2.selectNodeContents(htmlEl);
+      r2.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(r2);
+      console.log('[auto-webmcp] fillAriaField: S4 textContent assignment done, textContent:', JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
+    }
+
+    // Always dispatch input so any remaining framework listeners are notified.
+    htmlEl.dispatchEvent(new InputEvent('input', {
+      bubbles: true, cancelable: true, inputType: 'insertText', data: text,
+    }));
+    console.log('[auto-webmcp] fillAriaField: done, final textContent:', JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
   } else {
+    console.log('[auto-webmcp] fillAriaField: not contentEditable, dispatching input/change only');
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }

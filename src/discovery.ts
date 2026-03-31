@@ -349,7 +349,38 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       if (submitBtn) console.log(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
     }
 
-    // Fallback 3: nearest button with submit-like text anywhere on the page.
+    // Fallback 3: nearest dialog/modal ancestor — catches buttons like LinkedIn's
+    // "Post" that sit outside the input container but inside the same dialog.
+    // Two-pass: first try ANY disabled button (HTML disabled OR aria-disabled) that
+    // matches the submit keyword. Disabled buttons in compose dialogs are almost
+    // always the real submit button waiting for content, not settings/config buttons
+    // (which are always enabled). If no disabled ones, fall back to enabled buttons.
+    if (!submitBtn) {
+      const dialog = container.closest('[role="dialog"], [aria-modal="true"]');
+      if (dialog) {
+        const allDialogBtns = Array.from(
+          dialog.querySelectorAll<HTMLElement>('button, [role="button"]'),
+        ).filter((b) => {
+          const r = b.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && SUBMIT_TEXT_RE.test(b.textContent ?? '');
+        });
+        console.log(`[auto-webmcp] orphan: dialog buttons matching submit text:`,
+          allDialogBtns.map(b => `"${b.textContent?.trim().slice(0, 30)}" disabled=${(b as HTMLButtonElement).disabled} aria-disabled=${b.getAttribute('aria-disabled')}`));
+        // Pass 1: any form of disabled (HTML or ARIA) — real submit button waiting for input
+        const disabledBtns = allDialogBtns.filter(
+          (b) => (b as HTMLButtonElement).disabled || b.getAttribute('aria-disabled') === 'true',
+        );
+        // Pass 2: enabled buttons — settings/config buttons are always enabled
+        const enabledBtns = allDialogBtns.filter(
+          (b) => !(b as HTMLButtonElement).disabled && b.getAttribute('aria-disabled') !== 'true',
+        );
+        const dialogBtns = disabledBtns.length > 0 ? disabledBtns : enabledBtns;
+        submitBtn = (dialogBtns[dialogBtns.length - 1] as HTMLButtonElement | null) ?? null;
+        if (submitBtn) console.log(`[auto-webmcp] orphan: using text-matched button in dialog: "${submitBtn.textContent?.trim().slice(0, 40)}" disabled=${(submitBtn as HTMLButtonElement).disabled} aria-disabled=${submitBtn.getAttribute('aria-disabled')}`);
+      }
+    }
+
+    // Fallback 4: nearest button with submit-like text anywhere on the page.
     // Includes [role="button"] for div/span-based buttons (Gmail, Outlook, etc.).
     if (!submitBtn) {
       const pageBtns = Array.from(

@@ -6,6 +6,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.14] — 2026-03-31
+
+### Bug Fixes
+
+- **LinkedIn post now works end-to-end.** Two bugs fixed:
+  1. The AI sends the tool name as `"post: (8) Feed | LinkedIn"` (reading the `"name: description"` format from the navigate summary). Background.js now resolves this to the registered name `"post"` before looking up the execute handler and submit button reference.
+  2. An empty Quill/ProseMirror editor contains `<p><br></p>` whose `textContent` is `'\n'` (length 1). The paste-success check `textContent.length > 0` was falsely returning true, causing all real insertion strategies to be skipped. The check now uses `.trim().length > 0`.
+
+- **Three additional `fillAriaField` fallback strategies added.** After paste (Draft.js) and execCommand (React), two new fallbacks try: a direct `beforeinput` InputEvent with `inputType: 'insertText'` and `data` set (for ProseMirror-based editors), and a direct `textContent` assignment (for MutationObserver-based editors). This makes contenteditable fill more robust across all rich text editor frameworks.
+
+---
+
 ## [0.3.12] — 2026-03-30
 
 ### New Features
