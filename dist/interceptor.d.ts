@@ -56,14 +56,5 @@ export interface StructuredExecuteData {
  */
 export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string, metadata?: ToolMetadata): (params: Record<string, unknown>, client?: unknown) => Promise<ExecuteResult>;
 export declare function fillElement(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | Element, value: unknown): void;
-/**
- * Async fill for `<button role="combobox">` elements (Salesforce Lightning,
- * Atlaskit, and other JS-powered dropdowns). The pattern:
- *   1. Click the button to open the dropdown.
- *   2. Wait for a [role="listbox"] to appear (up to 1s).
- *   3. Click the option whose data-value, aria-label, or text matches `value`.
- *
- * Exported for use by the orphan execute handler in discovery.ts.
- */
 export declare function fillComboboxButton(el: Element, value: unknown): Promise<void>;
 //# sourceMappingURL=interceptor.d.ts.map

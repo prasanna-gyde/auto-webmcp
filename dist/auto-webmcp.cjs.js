@@ -1900,16 +1900,48 @@ function getMissingRequired(metadata, params) {
     return [];
   return metadata.inputSchema.required.filter((fieldKey) => !(fieldKey in params));
 }
+function queryShadowAll(root, selector) {
+  const results = [];
+  const hosts = Array.from(root.querySelectorAll?.("*") ?? []);
+  for (const host of hosts) {
+    const sr = host.shadowRoot;
+    if (!sr)
+      continue;
+    results.push(...Array.from(sr.querySelectorAll(selector)));
+    results.push(...queryShadowAll(sr, selector));
+  }
+  return results;
+}
 async function fillComboboxButton(el, value) {
   const text = String(value ?? "").trim();
   console.log("[auto-webmcp] fillComboboxButton: clicking button, value=", JSON.stringify(text));
+  el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+  el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
   el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  const ariaControlsId = el.getAttribute("aria-controls");
   const listbox = await new Promise((resolve) => {
     const deadline = Date.now() + 3e3;
     const poll = () => {
-      const candidate = document.querySelector('[role="listbox"]') ?? document.querySelector('[role="option"]')?.closest('[role="listbox"]') ?? null;
-      if (candidate) {
-        resolve(candidate);
+      if (ariaControlsId) {
+        const byId = document.getElementById(ariaControlsId);
+        if (byId) {
+          resolve(byId);
+          return;
+        }
+        const inShadow = queryShadowAll(document.body, `#${CSS.escape(ariaControlsId)}`)[0] ?? null;
+        if (inShadow) {
+          resolve(inShadow);
+          return;
+        }
+      }
+      const lightCandidate = document.querySelector('[role="listbox"]') ?? document.querySelector('[role="option"]')?.closest('[role="listbox"]') ?? null;
+      if (lightCandidate) {
+        resolve(lightCandidate);
+        return;
+      }
+      const shadowCandidate = queryShadowAll(document.body, '[role="listbox"]')[0] ?? null;
+      if (shadowCandidate) {
+        resolve(shadowCandidate);
         return;
       }
       if (Date.now() >= deadline) {
@@ -1921,11 +1953,13 @@ async function fillComboboxButton(el, value) {
     poll();
   });
   if (!listbox) {
-    console.warn("[auto-webmcp] fillComboboxButton: listbox did not appear after 1s");
+    console.warn("[auto-webmcp] fillComboboxButton: listbox did not appear after 3s");
     return;
   }
-  const options = Array.from(listbox.querySelectorAll('[role="option"]'));
-  console.log("[auto-webmcp] fillComboboxButton: listbox has", options.length, "options");
+  const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
+  const shadowOptions = queryShadowAll(listbox, '[role="option"]');
+  const options = lightOptions.length > 0 ? lightOptions : shadowOptions;
+  console.log("[auto-webmcp] fillComboboxButton: listbox has", options.length, "option(s)");
   const lowerValue = text.toLowerCase();
   const match = options.find((opt) => {
     const dataValue = (opt.getAttribute("data-value") ?? "").toLowerCase();
@@ -1934,14 +1968,16 @@ async function fillComboboxButton(el, value) {
     return dataValue === lowerValue || ariaLabel === lowerValue || optText === lowerValue;
   });
   if (match) {
-    console.log("[auto-webmcp] fillComboboxButton: clicking option", match.textContent?.trim());
+    console.log("[auto-webmcp] fillComboboxButton: selecting option", match.textContent?.trim());
+    match.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+    match.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   } else {
     console.warn(
       "[auto-webmcp] fillComboboxButton: no option matched",
       JSON.stringify(text),
       "available:",
-      options.map((o) => o.textContent?.trim())
+      options.map((o) => o.getAttribute("data-value") ?? o.textContent?.trim())
     );
   }
 }

@@ -1197,26 +1197,60 @@ function getMissingRequired(
  *
  * Exported for use by the orphan execute handler in discovery.ts.
  */
+/**
+ * Find all elements with a given selector inside all shadow roots reachable from root.
+ * Used by fillComboboxButton to locate listbox/option elements that Salesforce Lightning
+ * renders inside overlay shadow roots (lightning-overlay-container etc.).
+ */
+function queryShadowAll(root: Element | ShadowRoot | Document, selector: string): Element[] {
+  const results: Element[] = [];
+  const hosts = Array.from((root as Element | ShadowRoot).querySelectorAll?.('*') ?? []);
+  for (const host of hosts) {
+    const sr = (host as Element).shadowRoot;
+    if (!sr) continue;
+    results.push(...Array.from(sr.querySelectorAll(selector)));
+    results.push(...queryShadowAll(sr, selector));
+  }
+  return results;
+}
+
 export async function fillComboboxButton(el: Element, value: unknown): Promise<void> {
   const text = String(value ?? '').trim();
   console.log('[auto-webmcp] fillComboboxButton: clicking button, value=', JSON.stringify(text));
+
+  // Fire pointerdown + click. LWC event handlers often listen to pointerdown to
+  // manage focus/blur before click fires, so synthetic click alone is insufficient.
+  el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+  el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 
-  // Wait for a listbox to appear (dropdown opens asynchronously in most frameworks).
+  // Wait for a listbox to appear. Salesforce Lightning may render the dropdown in:
+  //   1. The main document (portal pattern — found by document.querySelector)
+  //   2. A shadow root of an overlay container (lightning-overlay-container etc.)
+  //   3. The same shadow root as the button, referenced via aria-controls
+  const ariaControlsId = el.getAttribute('aria-controls');
+
   const listbox = await new Promise<Element | null>((resolve) => {
     const deadline = Date.now() + 3000;
     const poll = (): void => {
-      // Search from the nearest overlay root or document body.
-      // Salesforce Lightning renders its dropdown portal in the main document body
-      // (not in shadow DOM), so document.querySelector() works once it is mounted.
-      const candidate =
+      // Priority 1: button's aria-controls points directly to the listbox element.
+      if (ariaControlsId) {
+        const byId = document.getElementById(ariaControlsId);
+        if (byId) { resolve(byId); return; }
+        // aria-controls target may be inside a shadow root (Salesforce overlay service).
+        const inShadow = queryShadowAll(document.body, `#${CSS.escape(ariaControlsId)}`)[0] ?? null;
+        if (inShadow) { resolve(inShadow); return; }
+      }
+      // Priority 2: any visible [role="listbox"] in the main document.
+      const lightCandidate =
         document.querySelector('[role="listbox"]') ??
         document.querySelector('[role="option"]')?.closest('[role="listbox"]') ??
         null;
-      if (candidate) {
-        resolve(candidate);
-        return;
-      }
+      if (lightCandidate) { resolve(lightCandidate); return; }
+      // Priority 3: [role="listbox"] inside any shadow root (overlay service pattern).
+      const shadowCandidate = queryShadowAll(document.body, '[role="listbox"]')[0] ?? null;
+      if (shadowCandidate) { resolve(shadowCandidate); return; }
+
       if (Date.now() >= deadline) { resolve(null); return; }
       setTimeout(poll, 50);
     };
@@ -1224,12 +1258,15 @@ export async function fillComboboxButton(el: Element, value: unknown): Promise<v
   });
 
   if (!listbox) {
-    console.warn('[auto-webmcp] fillComboboxButton: listbox did not appear after 1s');
+    console.warn('[auto-webmcp] fillComboboxButton: listbox did not appear after 3s');
     return;
   }
 
-  const options = Array.from(listbox.querySelectorAll('[role="option"]'));
-  console.log('[auto-webmcp] fillComboboxButton: listbox has', options.length, 'options');
+  // Collect options from the listbox, including those inside its shadow DOM.
+  const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
+  const shadowOptions = queryShadowAll(listbox, '[role="option"]');
+  const options = lightOptions.length > 0 ? lightOptions : shadowOptions;
+  console.log('[auto-webmcp] fillComboboxButton: listbox has', options.length, 'option(s)');
 
   const lowerValue = text.toLowerCase();
   const match = options.find((opt) => {
@@ -1240,10 +1277,13 @@ export async function fillComboboxButton(el: Element, value: unknown): Promise<v
   });
 
   if (match) {
-    console.log('[auto-webmcp] fillComboboxButton: clicking option', match.textContent?.trim());
+    console.log('[auto-webmcp] fillComboboxButton: selecting option', match.textContent?.trim());
+    // Fire the same sequence on the option for LWC: pointerdown + mousedown + click.
+    match.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    match.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   } else {
     console.warn('[auto-webmcp] fillComboboxButton: no option matched', JSON.stringify(text),
-      'available:', options.map((o) => o.textContent?.trim()));
+      'available:', options.map((o) => (o.getAttribute('data-value') ?? o.textContent?.trim())));
   }
 }
