@@ -181,6 +181,14 @@ const RE_ANALYSIS_DEBOUNCE_MS = 300;
 let orphanRescanTimer: ReturnType<typeof setTimeout> | null = null;
 const ORPHAN_RESCAN_DEBOUNCE_MS = 500;
 
+/**
+ * Secondary delayed rescan timer for complex SPAs (e.g. Salesforce Lightning)
+ * where custom elements render their shadow DOM asynchronously, meaning the
+ * 500ms debounce fires before all fields are ready.
+ */
+let orphanRescanDelayedTimer: ReturnType<typeof setTimeout> | null = null;
+const ORPHAN_RESCAN_DELAYED_MS = 2000;
+
 /** Names of already-registered orphan tools. Prevents double-registration when
  * the observer fires multiple times for the same modal opening. */
 const registeredOrphanToolNames = new Set<string>();
@@ -193,10 +201,27 @@ function scheduleOrphanRescan(config: ResolvedConfig): void {
   }, ORPHAN_RESCAN_DEBOUNCE_MS);
 }
 
+/**
+ * Schedule a second, longer-delayed orphan rescan for custom elements that
+ * render their shadow DOM asynchronously (e.g. Salesforce Lightning Web Components
+ * populate their shadow roots after connectedCallback, which can take 1-2s).
+ */
+function scheduleOrphanRescanDelayed(config: ResolvedConfig): void {
+  if (orphanRescanDelayedTimer) clearTimeout(orphanRescanDelayedTimer);
+  orphanRescanDelayedTimer = setTimeout(() => {
+    orphanRescanDelayedTimer = null;
+    void scanOrphanInputs(config);
+  }, ORPHAN_RESCAN_DELAYED_MS);
+}
+
 /** Returns true if node is (or contains) an input-like or ARIA-role element. */
 function isInterestingNode(node: Element): boolean {
   const tag = node.tagName.toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+  // Custom elements (e.g. Salesforce LWC: lightning-input, lightning-record-edit-form)
+  // render their inputs inside shadow DOM which querySelectorAll() cannot pierce.
+  // Treat any custom element as potentially interesting so we schedule a shadow rescan.
+  if (tag.includes('-')) return true;
   const role = node.getAttribute('role');
   if (role && (ARIA_ROLES_TO_SCAN as readonly string[]).includes(role)) return true;
   if (node.querySelector('input, textarea, select')) return true;
@@ -284,6 +309,12 @@ function startObserver(config: ResolvedConfig): void {
         // Lightning where a modal with inputs is injected after initial page load.
         if (isInterestingNode(node) && !node.closest('form')) {
           scheduleOrphanRescan(config);
+          // Custom elements (tag names with hyphens, e.g. lightning-record-edit-form)
+          // populate their shadow DOM asynchronously after connectedCallback.
+          // Fire a second scan at 2s to catch fields that weren't ready at 500ms.
+          if (node.tagName.toLowerCase().includes('-')) {
+            scheduleOrphanRescanDelayed(config);
+          }
         }
       }
 
@@ -355,6 +386,57 @@ const ORPHAN_EXCLUDED_TYPES = new Set([
 ]);
 
 /**
+ * Recursively collect input-like elements from shadow roots throughout the document.
+ * Returns an array of `{ el, shadowHost }` pairs where `shadowHost` is the outermost
+ * shadow-host element that lives in the regular (non-shadow) DOM. This is used as
+ * the anchor for grouping inputs by their nearest submit button.
+ *
+ * This covers Salesforce Lightning Web Components where fields like `lightning-input`
+ * render a native `<input>` inside nested shadow roots invisible to querySelectorAll().
+ */
+function collectShadowOrphanInputs(
+  root: Element | ShadowRoot,
+  outerHost: Element | null,
+  visited = new Set<Element | ShadowRoot>(),
+): Array<{ el: HTMLElement; shadowHost: Element }> {
+  if (visited.has(root)) return [];
+  visited.add(root);
+
+  const results: Array<{ el: HTMLElement; shadowHost: Element }> = [];
+
+  for (const el of Array.from(root.querySelectorAll('*'))) {
+    const sr = el.shadowRoot;
+    if (!sr) continue;
+
+    // The outermost host in the regular DOM is the first element that has a
+    // shadow root encountered while walking from the document root.
+    const host = outerHost ?? el;
+    results.push(...collectShadowOrphanInputs(sr, host, visited));
+  }
+
+  // Collect inputs directly inside this shadow root level.
+  if (root instanceof ShadowRoot) {
+    const selector =
+      'input, textarea, select, ' +
+      '[role="textbox"]:not(input):not(textarea), ' +
+      '[role="searchbox"]:not(input):not(textarea), ' +
+      'button[role="combobox"]';
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>(selector))) {
+      if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) continue;
+      // Skip if the element is inside a <form> within this shadow root.
+      if (el.closest('form')) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      if (outerHost) {
+        results.push({ el, shadowHost: outerHost });
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
  * Find all visible form controls that are NOT inside a <form> element,
  * group them by their nearest ancestor that also contains a submit button,
  * and register each group as a WebMCP tool.
@@ -400,8 +482,11 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     return true;
   });
 
-  console.log(`[auto-webmcp] orphan: found ${orphanInputs.length} visible orphan input(s)`);
-  if (orphanInputs.length === 0) return;
+  // Also collect inputs buried inside shadow DOM (e.g. Salesforce LWC lightning-input components).
+  const shadowOrphans = collectShadowOrphanInputs(document.body, null);
+  console.log(`[auto-webmcp] orphan: found ${orphanInputs.length} light-DOM + ${shadowOrphans.length} shadow-DOM orphan inputs`);
+
+  if (orphanInputs.length === 0 && shadowOrphans.length === 0) return;
 
   // Group inputs by the nearest ancestor that also contains a submit button.
   // Walk up from each input until we find a container with a submit-like button.
@@ -427,6 +512,29 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     console.log(`[auto-webmcp] orphan: input (name="${(input as HTMLElement & { name?: string }).name}" id="${input.id}") grouped into container`, foundContainer);
     if (!groups.has(foundContainer)) groups.set(foundContainer, []);
     groups.get(foundContainer)!.push(input);
+  }
+
+  // Group shadow DOM inputs by walking up from their outermost shadow host.
+  for (const { el, shadowHost } of shadowOrphans) {
+    let container: Element | null = shadowHost.parentElement;
+    let foundContainer: Element = shadowHost.parentElement ?? document.body;
+
+    while (container && container !== document.body) {
+      const hasSubmitBtn =
+        container.querySelector(SUBMIT_BTN_GROUPING_SELECTOR) !== null ||
+        Array.from(container.querySelectorAll('button')).some(
+          (b) => SUBMIT_TEXT_RE.test(b.textContent ?? ''),
+        );
+      if (hasSubmitBtn) {
+        foundContainer = container;
+        break;
+      }
+      container = container.parentElement;
+    }
+
+    console.log(`[auto-webmcp] orphan (shadow): input (id="${el.id}") via host <${shadowHost.tagName.toLowerCase()}> grouped into container`, foundContainer);
+    if (!groups.has(foundContainer)) groups.set(foundContainer, []);
+    groups.get(foundContainer)!.push(el);
   }
 
   console.log(`[auto-webmcp] orphan: ${groups.size} group(s) found`);

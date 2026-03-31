@@ -2025,6 +2025,8 @@ var reAnalysisTimers = /* @__PURE__ */ new Map();
 var RE_ANALYSIS_DEBOUNCE_MS = 300;
 var orphanRescanTimer = null;
 var ORPHAN_RESCAN_DEBOUNCE_MS = 500;
+var orphanRescanDelayedTimer = null;
+var ORPHAN_RESCAN_DELAYED_MS = 2e3;
 var registeredOrphanToolNames = /* @__PURE__ */ new Set();
 function scheduleOrphanRescan(config) {
   if (orphanRescanTimer)
@@ -2034,9 +2036,19 @@ function scheduleOrphanRescan(config) {
     void scanOrphanInputs(config);
   }, ORPHAN_RESCAN_DEBOUNCE_MS);
 }
+function scheduleOrphanRescanDelayed(config) {
+  if (orphanRescanDelayedTimer)
+    clearTimeout(orphanRescanDelayedTimer);
+  orphanRescanDelayedTimer = setTimeout(() => {
+    orphanRescanDelayedTimer = null;
+    void scanOrphanInputs(config);
+  }, ORPHAN_RESCAN_DELAYED_MS);
+}
 function isInterestingNode(node) {
   const tag = node.tagName.toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select")
+    return true;
+  if (tag.includes("-"))
     return true;
   const role = node.getAttribute("role");
   if (role && ARIA_ROLES_TO_SCAN.includes(role))
@@ -2118,6 +2130,9 @@ function startObserver(config) {
         }
         if (isInterestingNode(node) && !node.closest("form")) {
           scheduleOrphanRescan(config);
+          if (node.tagName.toLowerCase().includes("-")) {
+            scheduleOrphanRescanDelayed(config);
+          }
         }
       }
       for (const node of mutation.removedNodes) {
@@ -2166,6 +2181,35 @@ var ORPHAN_EXCLUDED_TYPES = /* @__PURE__ */ new Set([
   "button",
   "image"
 ]);
+function collectShadowOrphanInputs(root, outerHost, visited = /* @__PURE__ */ new Set()) {
+  if (visited.has(root))
+    return [];
+  visited.add(root);
+  const results = [];
+  for (const el of Array.from(root.querySelectorAll("*"))) {
+    const sr = el.shadowRoot;
+    if (!sr)
+      continue;
+    const host = outerHost ?? el;
+    results.push(...collectShadowOrphanInputs(sr, host, visited));
+  }
+  if (root instanceof ShadowRoot) {
+    const selector = 'input, textarea, select, [role="textbox"]:not(input):not(textarea), [role="searchbox"]:not(input):not(textarea), button[role="combobox"]';
+    for (const el of Array.from(root.querySelectorAll(selector))) {
+      if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase()))
+        continue;
+      if (el.closest("form"))
+        continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0)
+        continue;
+      if (outerHost) {
+        results.push({ el, shadowHost: outerHost });
+      }
+    }
+  }
+  return results;
+}
 async function scanOrphanInputs(config) {
   if (!isWebMCPSupported())
     return;
@@ -2188,8 +2232,9 @@ async function scanOrphanInputs(config) {
     }
     return true;
   });
-  console.log(`[auto-webmcp] orphan: found ${orphanInputs.length} visible orphan input(s)`);
-  if (orphanInputs.length === 0)
+  const shadowOrphans = collectShadowOrphanInputs(document.body, null);
+  console.log(`[auto-webmcp] orphan: found ${orphanInputs.length} light-DOM + ${shadowOrphans.length} shadow-DOM orphan inputs`);
+  if (orphanInputs.length === 0 && shadowOrphans.length === 0)
     return;
   const groups = /* @__PURE__ */ new Map();
   for (const input of orphanInputs) {
@@ -2209,6 +2254,24 @@ async function scanOrphanInputs(config) {
     if (!groups.has(foundContainer))
       groups.set(foundContainer, []);
     groups.get(foundContainer).push(input);
+  }
+  for (const { el, shadowHost } of shadowOrphans) {
+    let container = shadowHost.parentElement;
+    let foundContainer = shadowHost.parentElement ?? document.body;
+    while (container && container !== document.body) {
+      const hasSubmitBtn = container.querySelector(SUBMIT_BTN_GROUPING_SELECTOR) !== null || Array.from(container.querySelectorAll("button")).some(
+        (b) => SUBMIT_TEXT_RE.test(b.textContent ?? "")
+      );
+      if (hasSubmitBtn) {
+        foundContainer = container;
+        break;
+      }
+      container = container.parentElement;
+    }
+    console.log(`[auto-webmcp] orphan (shadow): input (id="${el.id}") via host <${shadowHost.tagName.toLowerCase()}> grouped into container`, foundContainer);
+    if (!groups.has(foundContainer))
+      groups.set(foundContainer, []);
+    groups.get(foundContainer).push(el);
   }
   console.log(`[auto-webmcp] orphan: ${groups.size} group(s) found`);
   for (const [container, inputs] of groups) {
