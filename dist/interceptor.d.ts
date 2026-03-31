@@ -55,10 +55,6 @@ export interface StructuredExecuteData {
  *  3. Resolves with structured form data once submitted
  */
 export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string, metadata?: ToolMetadata): (params: Record<string, unknown>, client?: unknown) => Promise<ExecuteResult>;
-/**
- * Fill a single form control or ARIA element with the given value.
- * Exported for use by orphan-input (formless) tool handlers in discovery.ts.
- */
 export declare function fillElement(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | Element, value: unknown): void;
 /**
  * Async fill for `<button role="combobox">` elements (Salesforce Lightning,

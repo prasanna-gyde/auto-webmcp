@@ -1820,6 +1820,18 @@ function serializeFormData(form, params, fieldEls) {
   }
   return result;
 }
+function maybeConvertIsoDate(value, el) {
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!isoMatch)
+    return value;
+  if (el instanceof HTMLInputElement && el.type === "date")
+    return value;
+  const fieldHint = (el.name ?? el.id ?? "").toLowerCase();
+  if (!/date/.test(fieldHint))
+    return value;
+  const [, year, month, day] = isoMatch;
+  return `${month}/${day}/${year}`;
+}
 function fillElement(el, value) {
   if (el instanceof HTMLInputElement) {
     const type = el.type.toLowerCase();
@@ -1834,7 +1846,7 @@ function fillElement(el, value) {
         el.dispatchEvent(new Event("change", { bubbles: true }));
       }
     } else {
-      setReactValue(el, String(value ?? ""));
+      setReactValue(el, maybeConvertIsoDate(String(value ?? ""), el));
     }
   } else if (el instanceof HTMLTextAreaElement) {
     setReactValue(el, String(value ?? ""));
@@ -1893,7 +1905,7 @@ async function fillComboboxButton(el, value) {
   console.log("[auto-webmcp] fillComboboxButton: clicking button, value=", JSON.stringify(text));
   el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   const listbox = await new Promise((resolve) => {
-    const deadline = Date.now() + 1e3;
+    const deadline = Date.now() + 3e3;
     const poll = () => {
       const candidate = document.querySelector('[role="listbox"]') ?? document.querySelector('[role="option"]')?.closest('[role="listbox"]') ?? null;
       if (candidate) {

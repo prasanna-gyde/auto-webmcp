@@ -1068,6 +1068,23 @@ function serializeFormData(
  * Fill a single form control or ARIA element with the given value.
  * Exported for use by orphan-input (formless) tool handlers in discovery.ts.
  */
+/**
+ * Convert ISO date strings (YYYY-MM-DD) to MM/DD/YYYY for text inputs that
+ * do not use type="date". Browsers handle ISO natively for type="date"; for
+ * type="text" date fields (Salesforce Lightning, many CRMs), the expected
+ * format is typically MM/DD/YYYY. Only converts when the field name or id
+ * contains "date" (case-insensitive) to avoid false positives.
+ */
+function maybeConvertIsoDate(value: string, el: HTMLElement): string {
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!isoMatch) return value;
+  if (el instanceof HTMLInputElement && el.type === 'date') return value;
+  const fieldHint = ((el as HTMLInputElement).name ?? el.id ?? '').toLowerCase();
+  if (!/date/.test(fieldHint)) return value;
+  const [, year, month, day] = isoMatch;
+  return `${month}/${day}/${year}`;
+}
+
 export function fillElement(
   el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | Element,
   value: unknown,
@@ -1083,7 +1100,7 @@ export function fillElement(
         el.dispatchEvent(new Event('change', { bubbles: true }));
       }
     } else {
-      setReactValue(el, String(value ?? ''));
+      setReactValue(el, maybeConvertIsoDate(String(value ?? ''), el));
     }
   } else if (el instanceof HTMLTextAreaElement) {
     setReactValue(el, String(value ?? ''));
@@ -1187,9 +1204,11 @@ export async function fillComboboxButton(el: Element, value: unknown): Promise<v
 
   // Wait for a listbox to appear (dropdown opens asynchronously in most frameworks).
   const listbox = await new Promise<Element | null>((resolve) => {
-    const deadline = Date.now() + 1000;
+    const deadline = Date.now() + 3000;
     const poll = (): void => {
       // Search from the nearest overlay root or document body.
+      // Salesforce Lightning renders its dropdown portal in the main document body
+      // (not in shadow DOM), so document.querySelector() works once it is mounted.
       const candidate =
         document.querySelector('[role="listbox"]') ??
         document.querySelector('[role="option"]')?.closest('[role="listbox"]') ??
