@@ -816,3 +816,61 @@ function getMissingRequired(
   return metadata.inputSchema.required.filter((fieldKey) => !(fieldKey in params));
 }
 
+/**
+ * Async fill for `<button role="combobox">` elements (Salesforce Lightning,
+ * Atlaskit, and other JS-powered dropdowns). The pattern:
+ *   1. Click the button to open the dropdown.
+ *   2. Wait for a [role="listbox"] to appear (up to 1s).
+ *   3. Click the option whose data-value, aria-label, or text matches `value`.
+ *
+ * Exported for use by the orphan execute handler in discovery.ts.
+ */
+export async function fillComboboxButton(el: Element, value: unknown): Promise<void> {
+  const text = String(value ?? '').trim();
+  console.log('[auto-webmcp] fillComboboxButton: clicking button, value=', JSON.stringify(text));
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+  // Wait for a listbox to appear (dropdown opens asynchronously in most frameworks).
+  const listbox = await new Promise<Element | null>((resolve) => {
+    const deadline = Date.now() + 1000;
+    const poll = (): void => {
+      // Search from the nearest overlay root or document body.
+      const candidate =
+        document.querySelector('[role="listbox"]') ??
+        document.querySelector('[role="option"]')?.closest('[role="listbox"]') ??
+        null;
+      if (candidate) {
+        resolve(candidate);
+        return;
+      }
+      if (Date.now() >= deadline) { resolve(null); return; }
+      setTimeout(poll, 50);
+    };
+    poll();
+  });
+
+  if (!listbox) {
+    console.warn('[auto-webmcp] fillComboboxButton: listbox did not appear after 1s');
+    return;
+  }
+
+  const options = Array.from(listbox.querySelectorAll('[role="option"]'));
+  console.log('[auto-webmcp] fillComboboxButton: listbox has', options.length, 'options');
+
+  const lowerValue = text.toLowerCase();
+  const match = options.find((opt) => {
+    const dataValue = (opt.getAttribute('data-value') ?? '').toLowerCase();
+    const ariaLabel = (opt.getAttribute('aria-label') ?? '').toLowerCase();
+    const optText = (opt.textContent ?? '').trim().toLowerCase();
+    return dataValue === lowerValue || ariaLabel === lowerValue || optText === lowerValue;
+  });
+
+  if (match) {
+    console.log('[auto-webmcp] fillComboboxButton: clicking option', match.textContent?.trim());
+    match.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  } else {
+    console.warn('[auto-webmcp] fillComboboxButton: no option matched', JSON.stringify(text),
+      'available:', options.map((o) => o.textContent?.trim()));
+  }
+}
+

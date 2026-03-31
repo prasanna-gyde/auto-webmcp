@@ -6,6 +6,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.15] — 2026-03-31
+
+### New Features
+
+- **Dynamic modal detection.** The MutationObserver now watches for DOM additions that contain orphan-eligible inputs (not inside any `<form>`). When such nodes are added (e.g. Salesforce Lightning "New Opportunity" modal, any SPA dialog), it schedules a debounced re-run of `scanOrphanInputs` so fields that appear after page load are discovered and registered automatically.
+
+- **`button[role="combobox"]` support.** JS-powered dropdowns (Salesforce Lightning Stage/Type/Lead Source, Atlaskit Select) use a `<button role="combobox">` that opens a listbox instead of a native `<select>`. These are now included in the orphan scanner and exposed as string schema fields. Filling them clicks the button to open the listbox, waits for options to render (up to 1s), and clicks the matching option by `data-value`, `aria-label`, or text content.
+
+- **"save" added to submit button recognition.** The SUBMIT_TEXT_RE now includes "save", covering Salesforce Lightning (`<button type="button">Save</button>`), CRMs, and any app that uses "Save" as the primary action label instead of "Submit".
+
+### Bug Fixes
+
+- **Always-enabled submit buttons now click immediately.** The orphan auto-submit logic previously polled for `[type="submit"]` (up to 2s), which always timed out for Salesforce-style `type="button"` save buttons. It now checks the captured `submitBtn` DOM reference first (enabled + visible = click now), then falls back to the typed-selector poll, then to a text-matched button search.
+
+- **Orphan tool double-registration prevented.** When the MutationObserver fires multiple times for the same modal opening, `scanOrphanInputs` is called multiple times. Tools already registered are now skipped, preventing duplicate `registerTool` calls.
+
+---
+
 ## [0.3.14] — 2026-03-31
 
 ### Bug Fixes

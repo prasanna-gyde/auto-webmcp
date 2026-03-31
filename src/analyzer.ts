@@ -280,14 +280,15 @@ function collectShadowControls(
   const results: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> = [];
   for (const el of Array.from(root.querySelectorAll('*'))) {
     if (el.shadowRoot) {
-      results.push(
-        ...Array.from(
-          el.shadowRoot.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-            'input, textarea, select',
-          ),
+      const found = Array.from(
+        el.shadowRoot.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+          'input, textarea, select',
         ),
-        ...collectShadowControls(el.shadowRoot, visited),
       );
+      if (found.length > 0) {
+        console.log(`[auto-webmcp] shadow: found ${found.length} control(s) in ${el.tagName.toLowerCase()} shadow root:`, found.map(f => `${f.tagName.toLowerCase()}[type=${f.type ?? '?'}][name="${(f as HTMLInputElement).name}"][id="${f.id}"]`));
+      }
+      results.push(...found, ...collectShadowControls(el.shadowRoot, visited));
     }
   }
   return results;
@@ -381,10 +382,25 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
       fieldElements.set(fieldKey, control);
     }
 
-    // Mark as required if the HTML attribute says so
-    if (control.required) {
-      required.push(fieldKey);
+    // Mark as required — check both the native attribute AND shadow host chain.
+    // Web Component wrappers (e.g. lightning-input-field[required]) set required on the
+    // host element, not on the inner <input>, so control.required may be false even when
+    // the field is logically required.
+    let isRequired = control.required;
+    if (!isRequired) {
+      let hostNode: Element = control;
+      while (true) {
+        const root = hostNode.getRootNode();
+        if (!(root instanceof ShadowRoot)) break;
+        const host = root.host;
+        if (host.hasAttribute('required') || host.getAttribute('aria-required') === 'true') {
+          isRequired = true;
+          break;
+        }
+        hostNode = host;
+      }
     }
+    if (isRequired) required.push(fieldKey);
   }
 
   // ARIA role-based controls (custom components not using native inputs)
@@ -444,9 +460,38 @@ function resolveNativeControlFallbackKey(
   ) {
     return sanitizeName(control.placeholder.trim());
   }
+  // Shadow host chain: Web Component wrappers (e.g. Salesforce lightning-input-field,
+  // lightning-input) carry the semantic field identifier on the host element, not on the
+  // inner <input>. Walk up through shadow roots to find field-name / label / name / aria-label.
+  const hostKey = resolveShadowHostKey(control);
+  if (hostKey) return hostKey;
   // Final fallback: input type for typed inputs without any text identifier.
   if (control instanceof HTMLInputElement && control.type !== 'text') {
     return control.type;
+  }
+  return null;
+}
+
+/**
+ * Walk up the shadow root host chain from a shadow DOM element and return the first
+ * meaningful field identifier found on a host element.
+ * Checks (in order): field-name, label, aria-label, name attributes.
+ * Covers Salesforce LWC (lightning-input-field[field-name]), generic Web Components,
+ * and any design system that wraps native inputs in custom elements.
+ */
+function resolveShadowHostKey(el: Element): string | null {
+  let node: Element = el;
+  while (true) {
+    const root = node.getRootNode();
+    if (!(root instanceof ShadowRoot)) break;
+    const host = root.host;
+    const fieldName = host.getAttribute('field-name');
+    if (fieldName) { console.log('[auto-webmcp] shadow host key: field-name=', fieldName); return sanitizeName(fieldName); }
+    const hostLabel = host.getAttribute('label') || host.getAttribute('aria-label');
+    if (hostLabel) { console.log('[auto-webmcp] shadow host key: label=', hostLabel); return sanitizeName(hostLabel); }
+    const hostName = host.getAttribute('name');
+    if (hostName) { console.log('[auto-webmcp] shadow host key: name=', hostName); return sanitizeName(hostName); }
+    node = host;
   }
   return null;
 }
@@ -643,7 +688,7 @@ function inferFieldDescription(
 function getAssociatedLabelText(
   control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
 ): string {
-  // 1. Labels collection (for/id association)
+  // 1a. Labels collection (for/id association) — light DOM
   if (control.id) {
     const label = document.querySelector<HTMLLabelElement>(`label[for="${CSS.escape(control.id)}"]`);
     if (label) {
@@ -652,11 +697,41 @@ function getAssociatedLabelText(
     }
   }
 
-  // 2. Wrapping <label>
+  // 1b. Same shadow root label search — Web Components render labels inside their own
+  // shadow root so document.querySelector() cannot find them. Search the same root node.
+  const ownRoot = control.getRootNode();
+  if (ownRoot instanceof ShadowRoot) {
+    if (control.id) {
+      const shadowLabel = ownRoot.querySelector<HTMLLabelElement>(`label[for="${CSS.escape(control.id)}"]`);
+      if (shadowLabel) {
+        const text = labelTextWithoutNested(shadowLabel);
+        if (text) return text;
+      }
+    }
+    // Also try: first <label> or element with slot="label" in same shadow root
+    const anyLabel = ownRoot.querySelector<HTMLLabelElement>('label');
+    if (anyLabel) {
+      const text = labelTextWithoutNested(anyLabel);
+      if (text) return text;
+    }
+  }
+
+  // 2. Wrapping <label> (works within the same shadow root via closest())
   const parent = control.closest('label');
   if (parent) {
     const text = labelTextWithoutNested(parent);
     if (text) return text;
+  }
+
+  // 3. label / aria-label on shadow host elements
+  let node: Element = control;
+  while (true) {
+    const root = node.getRootNode();
+    if (!(root instanceof ShadowRoot)) break;
+    const host = root.host;
+    const hostLabel = host.getAttribute('label') || host.getAttribute('aria-label');
+    if (hostLabel) return hostLabel;
+    node = host;
   }
 
   return '';

@@ -490,14 +490,15 @@ function collectShadowControls(root, visited = /* @__PURE__ */ new Set()) {
   const results = [];
   for (const el of Array.from(root.querySelectorAll("*"))) {
     if (el.shadowRoot) {
-      results.push(
-        ...Array.from(
-          el.shadowRoot.querySelectorAll(
-            "input, textarea, select"
-          )
-        ),
-        ...collectShadowControls(el.shadowRoot, visited)
+      const found = Array.from(
+        el.shadowRoot.querySelectorAll(
+          "input, textarea, select"
+        )
       );
+      if (found.length > 0) {
+        console.log(`[auto-webmcp] shadow: found ${found.length} control(s) in ${el.tagName.toLowerCase()} shadow root:`, found.map((f) => `${f.tagName.toLowerCase()}[type=${f.type ?? "?"}][name="${f.name}"][id="${f.id}"]`));
+      }
+      results.push(...found, ...collectShadowControls(el.shadowRoot, visited));
     }
   }
   return results;
@@ -581,9 +582,23 @@ function buildSchema(form) {
     if (!name) {
       fieldElements.set(fieldKey, control);
     }
-    if (control.required) {
-      required.push(fieldKey);
+    let isRequired = control.required;
+    if (!isRequired) {
+      let hostNode = control;
+      while (true) {
+        const root = hostNode.getRootNode();
+        if (!(root instanceof ShadowRoot))
+          break;
+        const host = root.host;
+        if (host.hasAttribute("required") || host.getAttribute("aria-required") === "true") {
+          isRequired = true;
+          break;
+        }
+        hostNode = host;
+      }
     }
+    if (isRequired)
+      required.push(fieldKey);
   }
   const ariaControls = collectAriaControls(form);
   const processedAriaRadioGroups = /* @__PURE__ */ new Set();
@@ -626,8 +641,37 @@ function resolveNativeControlFallbackKey(control) {
   if ((control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) && control.placeholder?.trim()) {
     return sanitizeName(control.placeholder.trim());
   }
+  const hostKey = resolveShadowHostKey(control);
+  if (hostKey)
+    return hostKey;
   if (control instanceof HTMLInputElement && control.type !== "text") {
     return control.type;
+  }
+  return null;
+}
+function resolveShadowHostKey(el) {
+  let node = el;
+  while (true) {
+    const root = node.getRootNode();
+    if (!(root instanceof ShadowRoot))
+      break;
+    const host = root.host;
+    const fieldName = host.getAttribute("field-name");
+    if (fieldName) {
+      console.log("[auto-webmcp] shadow host key: field-name=", fieldName);
+      return sanitizeName(fieldName);
+    }
+    const hostLabel = host.getAttribute("label") || host.getAttribute("aria-label");
+    if (hostLabel) {
+      console.log("[auto-webmcp] shadow host key: label=", hostLabel);
+      return sanitizeName(hostLabel);
+    }
+    const hostName = host.getAttribute("name");
+    if (hostName) {
+      console.log("[auto-webmcp] shadow host key: name=", hostName);
+      return sanitizeName(hostName);
+    }
+    node = host;
   }
   return null;
 }
@@ -792,11 +836,39 @@ function getAssociatedLabelText(control) {
         return text;
     }
   }
+  const ownRoot = control.getRootNode();
+  if (ownRoot instanceof ShadowRoot) {
+    if (control.id) {
+      const shadowLabel = ownRoot.querySelector(`label[for="${CSS.escape(control.id)}"]`);
+      if (shadowLabel) {
+        const text = labelTextWithoutNested(shadowLabel);
+        if (text)
+          return text;
+      }
+    }
+    const anyLabel = ownRoot.querySelector("label");
+    if (anyLabel) {
+      const text = labelTextWithoutNested(anyLabel);
+      if (text)
+        return text;
+    }
+  }
   const parent = control.closest("label");
   if (parent) {
     const text = labelTextWithoutNested(parent);
     if (text)
       return text;
+  }
+  let node = control;
+  while (true) {
+    const root = node.getRootNode();
+    if (!(root instanceof ShadowRoot))
+      break;
+    const host = root.host;
+    const hostLabel = host.getAttribute("label") || host.getAttribute("aria-label");
+    if (hostLabel)
+      return hostLabel;
+    node = host;
   }
   return "";
 }
@@ -1497,6 +1569,51 @@ function getMissingRequired(metadata, params) {
     return [];
   return metadata.inputSchema.required.filter((fieldKey) => !(fieldKey in params));
 }
+async function fillComboboxButton(el, value) {
+  const text = String(value ?? "").trim();
+  console.log("[auto-webmcp] fillComboboxButton: clicking button, value=", JSON.stringify(text));
+  el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  const listbox = await new Promise((resolve) => {
+    const deadline = Date.now() + 1e3;
+    const poll = () => {
+      const candidate = document.querySelector('[role="listbox"]') ?? document.querySelector('[role="option"]')?.closest('[role="listbox"]') ?? null;
+      if (candidate) {
+        resolve(candidate);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        resolve(null);
+        return;
+      }
+      setTimeout(poll, 50);
+    };
+    poll();
+  });
+  if (!listbox) {
+    console.warn("[auto-webmcp] fillComboboxButton: listbox did not appear after 1s");
+    return;
+  }
+  const options = Array.from(listbox.querySelectorAll('[role="option"]'));
+  console.log("[auto-webmcp] fillComboboxButton: listbox has", options.length, "options");
+  const lowerValue = text.toLowerCase();
+  const match = options.find((opt) => {
+    const dataValue = (opt.getAttribute("data-value") ?? "").toLowerCase();
+    const ariaLabel = (opt.getAttribute("aria-label") ?? "").toLowerCase();
+    const optText = (opt.textContent ?? "").trim().toLowerCase();
+    return dataValue === lowerValue || ariaLabel === lowerValue || optText === lowerValue;
+  });
+  if (match) {
+    console.log("[auto-webmcp] fillComboboxButton: clicking option", match.textContent?.trim());
+    match.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  } else {
+    console.warn(
+      "[auto-webmcp] fillComboboxButton: no option matched",
+      JSON.stringify(text),
+      "available:",
+      options.map((o) => o.textContent?.trim())
+    );
+  }
+}
 
 // src/discovery.ts
 function emit(type, form, toolName) {
@@ -1564,6 +1681,17 @@ var registeredForms = /* @__PURE__ */ new WeakSet();
 var registeredFormCount = 0;
 var reAnalysisTimers = /* @__PURE__ */ new Map();
 var RE_ANALYSIS_DEBOUNCE_MS = 300;
+var orphanRescanTimer = null;
+var ORPHAN_RESCAN_DEBOUNCE_MS = 500;
+var registeredOrphanToolNames = /* @__PURE__ */ new Set();
+function scheduleOrphanRescan(config) {
+  if (orphanRescanTimer)
+    clearTimeout(orphanRescanTimer);
+  orphanRescanTimer = setTimeout(() => {
+    orphanRescanTimer = null;
+    void scanOrphanInputs(config);
+  }, ORPHAN_RESCAN_DEBOUNCE_MS);
+}
 function isInterestingNode(node) {
   const tag = node.tagName.toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select")
@@ -1609,6 +1737,9 @@ function startObserver(config) {
         }
         for (const form of Array.from(node.querySelectorAll("form"))) {
           void registerForm(form, config);
+        }
+        if (isInterestingNode(node) && !node.closest("form")) {
+          scheduleOrphanRescan(config);
         }
       }
       for (const node of mutation.removedNodes) {
@@ -1657,10 +1788,10 @@ async function scanOrphanInputs(config) {
     return;
   const SUBMIT_BTN_SELECTOR = '[type="submit"]:not([disabled]), button[data-variant="primary"]:not([disabled])';
   const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button[data-variant="primary"]';
-  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search|post|tweet|publish/i;
+  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search|post|tweet|publish|save/i;
   const orphanInputs = Array.from(
     document.querySelectorAll(
-      'input:not(form input), textarea:not(form textarea), select:not(form select), [role="textbox"]:not(form [role="textbox"]):not(input):not(textarea), [role="searchbox"]:not(form [role="searchbox"]):not(input):not(textarea), [contenteditable="true"]:not(form [contenteditable="true"]):not(input):not(textarea)'
+      'input:not(form input), textarea:not(form textarea), select:not(form select), [role="textbox"]:not(form [role="textbox"]):not(input):not(textarea), [role="searchbox"]:not(form [role="searchbox"]):not(input):not(textarea), [contenteditable="true"]:not(form [contenteditable="true"]):not(input):not(textarea), button[role="combobox"]:not(form button[role="combobox"])'
     )
   ).filter((el) => {
     if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) {
@@ -1791,7 +1922,11 @@ async function scanOrphanInputs(config) {
       for (const { key, el } of inputPairs) {
         if (params[key] !== void 0) {
           console.log(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], "element=", el);
-          fillElement(el, params[key]);
+          if (el.getAttribute("role") === "combobox" && el.tagName.toLowerCase() === "button") {
+            await fillComboboxButton(el, params[key]);
+          } else {
+            fillElement(el, params[key]);
+          }
           console.log(`[auto-webmcp] orphan execute: after fill, element value=`, el.value);
         } else {
           console.log(`[auto-webmcp] orphan execute: key="${key}" not in params, skipping`);
@@ -1803,22 +1938,43 @@ async function scanOrphanInputs(config) {
         console.log(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
         return { content: [{ type: "text", text: "Fields filled. Ready to submit." }] };
       }
-      console.log(`[auto-webmcp] orphan execute: polling for enabled submit button (up to 2s)...`);
+      console.log(`[auto-webmcp] orphan execute: resolving submit button (up to 2s)...`);
       let btn = null;
-      const deadline = Date.now() + 2e3;
-      while (Date.now() < deadline) {
-        const candidates = Array.from(
-          container.querySelectorAll(SUBMIT_BTN_SELECTOR)
+      if (submitBtn && document.contains(submitBtn)) {
+        const isEnabled = !submitBtn.disabled && submitBtn.getAttribute("aria-disabled") !== "true";
+        const r = submitBtn.getBoundingClientRect();
+        if (isEnabled && r.width > 0 && r.height > 0) {
+          btn = submitBtn;
+          console.log(`[auto-webmcp] orphan execute: using captured submit button "${btn.textContent?.trim()}"`);
+        }
+      }
+      if (!btn) {
+        const deadline = Date.now() + 2e3;
+        while (Date.now() < deadline) {
+          const candidates = Array.from(
+            container.querySelectorAll(SUBMIT_BTN_SELECTOR)
+          ).filter((b) => {
+            const r = b.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          });
+          const last = candidates[candidates.length - 1] ?? null;
+          if (last) {
+            btn = last;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      if (!btn) {
+        const textBtns = Array.from(
+          (container !== document.body ? container : document).querySelectorAll('button, [role="button"]')
         ).filter((b) => {
           const r = b.getBoundingClientRect();
-          return r.width > 0 && r.height > 0;
+          return r.width > 0 && r.height > 0 && !b.disabled && b.getAttribute("aria-disabled") !== "true" && SUBMIT_TEXT_RE.test(b.textContent ?? "");
         });
-        const last = candidates[candidates.length - 1] ?? null;
-        if (last) {
-          btn = last;
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 100));
+        btn = textBtns[textBtns.length - 1] ?? null;
+        if (btn)
+          console.log(`[auto-webmcp] orphan execute: using text-matched fallback button "${btn.textContent?.trim()}"`);
       }
       if (!btn) {
         console.warn(`[auto-webmcp] orphan execute: submit button still disabled after 2s`);
@@ -1829,6 +1985,10 @@ async function scanOrphanInputs(config) {
       return { content: [{ type: "text", text: "Fields filled and form submitted." }] };
     };
     try {
+      if (registeredOrphanToolNames.has(metadata.name)) {
+        console.log(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
+        continue;
+      }
       const toolDef = {
         name: metadata.name,
         description: metadata.description,
@@ -1839,6 +1999,7 @@ async function scanOrphanInputs(config) {
         toolDef.annotations = metadata.annotations;
       }
       await navigator.modelContext.registerTool(toolDef);
+      registeredOrphanToolNames.add(metadata.name);
       const pendingBtns = window["__pendingSubmitBtns"] ??= {};
       pendingBtns[metadata.name] = submitBtn;
       if (config.debug) {
@@ -1866,6 +2027,7 @@ async function startDiscovery(config) {
     );
   }
   registeredFormCount = 0;
+  registeredOrphanToolNames.clear();
   startObserver(config);
   listenForRouteChanges(config);
   await scanForms(config);

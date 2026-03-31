@@ -5,7 +5,7 @@
 import { ResolvedConfig } from './config.js';
 import { analyzeForm, analyzeOrphanInputGroup, ToolAnnotations } from './analyzer.js';
 import { registerFormTool, unregisterFormTool, isWebMCPSupported } from './registry.js';
-import { buildExecuteHandler, fillElement } from './interceptor.js';
+import { buildExecuteHandler, fillElement, fillComboboxButton } from './interceptor.js';
 import { ARIA_ROLES_TO_SCAN, JsonSchema } from './schema.js';
 
 // ---------------------------------------------------------------------------
@@ -116,6 +116,26 @@ let registeredFormCount = 0;
 const reAnalysisTimers = new Map<HTMLFormElement, ReturnType<typeof setTimeout>>();
 const RE_ANALYSIS_DEBOUNCE_MS = 300;
 
+/**
+ * Debounce timer for re-running scanOrphanInputs when the DOM gains new
+ * orphan-eligible elements (e.g. Salesforce Lightning modals, SPA dialogs).
+ * Stored at module scope so the timer persists across observer callbacks.
+ */
+let orphanRescanTimer: ReturnType<typeof setTimeout> | null = null;
+const ORPHAN_RESCAN_DEBOUNCE_MS = 500;
+
+/** Names of already-registered orphan tools. Prevents double-registration when
+ * the observer fires multiple times for the same modal opening. */
+const registeredOrphanToolNames = new Set<string>();
+
+function scheduleOrphanRescan(config: ResolvedConfig): void {
+  if (orphanRescanTimer) clearTimeout(orphanRescanTimer);
+  orphanRescanTimer = setTimeout(() => {
+    orphanRescanTimer = null;
+    void scanOrphanInputs(config);
+  }, ORPHAN_RESCAN_DEBOUNCE_MS);
+}
+
 /** Returns true if node is (or contains) an input-like or ARIA-role element. */
 function isInterestingNode(node: Element): boolean {
   const tag = node.tagName.toLowerCase();
@@ -163,6 +183,13 @@ function startObserver(config: ResolvedConfig): void {
         // New forms nested inside the added subtree
         for (const form of Array.from(node.querySelectorAll<HTMLFormElement>('form'))) {
           void registerForm(form, config);
+        }
+
+        // If the added node contains inputs that are NOT inside any <form>,
+        // schedule a debounced orphan re-scan. This covers SPAs like Salesforce
+        // Lightning where a modal with inputs is injected after initial page load.
+        if (isInterestingNode(node) && !node.closest('form')) {
+          scheduleOrphanRescan(config);
         }
       }
 
@@ -246,7 +273,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
   // Includes disabled variants — used only to identify which container is the "form group".
   // Many sites (GitHub) start with the submit button disabled until fields are filled.
   const SUBMIT_BTN_GROUPING_SELECTOR = '[type="submit"], button[data-variant="primary"]';
-  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search|post|tweet|publish/i;
+  const SUBMIT_TEXT_RE = /subscribe|submit|sign[\s-]?up|send|join|go|search|post|tweet|publish|save/i;
 
   // Collect visible inputs that are not inside a <form>.
   // Includes native controls AND ARIA textbox/contenteditable elements (e.g. Twitter/X
@@ -256,7 +283,10 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       'input:not(form input), textarea:not(form textarea), select:not(form select), ' +
       '[role="textbox"]:not(form [role="textbox"]):not(input):not(textarea), ' +
       '[role="searchbox"]:not(form [role="searchbox"]):not(input):not(textarea), ' +
-      '[contenteditable="true"]:not(form [contenteditable="true"]):not(input):not(textarea)',
+      '[contenteditable="true"]:not(form [contenteditable="true"]):not(input):not(textarea), ' +
+      // button[role="combobox"] covers JS-powered dropdowns (Salesforce Lightning Stage/Type/Lead Source,
+      // Atlaskit Select) where a <button> opens a listbox instead of a native <select>.
+      'button[role="combobox"]:not(form button[role="combobox"])',
     ),
   ) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement>).filter((el) => {
     if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) {
@@ -443,7 +473,13 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       for (const { key, el } of inputPairs) {
         if (params[key] !== undefined) {
           console.log(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], 'element=', el);
-          fillElement(el, params[key]);
+          // button[role="combobox"] (Salesforce Lightning, Atlaskit) requires async fill:
+          // click to open listbox, wait for options to render, click the matching option.
+          if (el.getAttribute('role') === 'combobox' && el.tagName.toLowerCase() === 'button') {
+            await fillComboboxButton(el, params[key]);
+          } else {
+            fillElement(el, params[key]);
+          }
           console.log(`[auto-webmcp] orphan execute: after fill, element value=`, (el as HTMLInputElement).value);
         } else {
           console.log(`[auto-webmcp] orphan execute: key="${key}" not in params, skipping`);
@@ -463,21 +499,53 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         return { content: [{ type: 'text', text: 'Fields filled. Ready to submit.' }] };
       }
 
-      // Poll for the submit button to become enabled (handles React/Vue re-renders
-      // that enable the button after detecting field content).
-      console.log(`[auto-webmcp] orphan execute: polling for enabled submit button (up to 2s)...`);
-      let btn: HTMLButtonElement | HTMLInputElement | null = null;
-      const deadline = Date.now() + 2000;
-      while (Date.now() < deadline) {
-        const candidates = Array.from(
-          container.querySelectorAll<HTMLButtonElement | HTMLInputElement>(SUBMIT_BTN_SELECTOR),
+      // Find the enabled submit button to click.
+      // Priority: captured submitBtn reference (still in DOM + enabled) → selector poll (React/Vue
+      // enable-on-valid pattern) → text-matched button (Salesforce type="button" Save, Gmail Send).
+      console.log(`[auto-webmcp] orphan execute: resolving submit button (up to 2s)...`);
+      let btn: HTMLButtonElement | HTMLInputElement | HTMLElement | null = null;
+
+      // Check the captured reference first (avoids 2s timeout for always-enabled buttons like Salesforce Save).
+      if (submitBtn && document.contains(submitBtn)) {
+        const isEnabled = !(submitBtn as HTMLButtonElement).disabled &&
+          submitBtn.getAttribute('aria-disabled') !== 'true';
+        const r = submitBtn.getBoundingClientRect();
+        if (isEnabled && r.width > 0 && r.height > 0) {
+          btn = submitBtn;
+          console.log(`[auto-webmcp] orphan execute: using captured submit button "${btn.textContent?.trim()}"`);
+        }
+      }
+
+      if (!btn) {
+        // Poll for a [type="submit"] or primary-variant button to become enabled
+        // (handles React/Vue re-renders that enable the button after field validation).
+        const deadline = Date.now() + 2000;
+        while (Date.now() < deadline) {
+          const candidates = Array.from(
+            container.querySelectorAll<HTMLButtonElement | HTMLInputElement>(SUBMIT_BTN_SELECTOR),
+          ).filter((b) => {
+            const r = b.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          });
+          const last = candidates[candidates.length - 1] ?? null;
+          if (last) { btn = last; break; }
+          await new Promise<void>((r) => setTimeout(r, 100));
+        }
+      }
+
+      // Final fallback: any enabled text-matched button in the container or page.
+      if (!btn) {
+        const textBtns = Array.from(
+          (container !== document.body ? container : document).querySelectorAll<HTMLElement>('button, [role="button"]'),
         ).filter((b) => {
           const r = b.getBoundingClientRect();
-          return r.width > 0 && r.height > 0;
+          return r.width > 0 && r.height > 0 &&
+            !(b as HTMLButtonElement).disabled &&
+            b.getAttribute('aria-disabled') !== 'true' &&
+            SUBMIT_TEXT_RE.test(b.textContent ?? '');
         });
-        const last = candidates[candidates.length - 1] ?? null;
-        if (last) { btn = last; break; }
-        await new Promise<void>((r) => setTimeout(r, 100));
+        btn = textBtns[textBtns.length - 1] ?? null;
+        if (btn) console.log(`[auto-webmcp] orphan execute: using text-matched fallback button "${btn.textContent?.trim()}"`);
       }
 
       if (!btn) {
@@ -485,12 +553,19 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         return { content: [{ type: 'text', text: 'Fields filled but the submit button is still disabled. The page may require additional input before submitting.' }] };
       }
 
-      console.log(`[auto-webmcp] orphan execute: clicking submit button "${btn.textContent?.trim()}"`);
-      btn.click();
+      console.log(`[auto-webmcp] orphan execute: clicking submit button "${(btn as HTMLElement).textContent?.trim()}"`);
+      (btn as HTMLElement).click();
       return { content: [{ type: 'text', text: 'Fields filled and form submitted.' }] };
     };
 
     try {
+      // Skip tools that were already registered by a previous orphan scan
+      // (e.g. the same modal re-triggering the MutationObserver).
+      if (registeredOrphanToolNames.has(metadata.name)) {
+        console.log(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
+        continue;
+      }
+
       const toolDef: {
         name: string;
         description: string;
@@ -507,6 +582,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         toolDef.annotations = metadata.annotations;
       }
       await navigator.modelContext!.registerTool(toolDef);
+      registeredOrphanToolNames.add(metadata.name);
       // Expose the submit button reference so background.js can click it via CDP.
       // GitHub and other React apps use type="button" (not type="submit"), so
       // background.js cannot find the button by selector alone.
@@ -545,6 +621,7 @@ export async function startDiscovery(config: ResolvedConfig): Promise<void> {
   }
 
   registeredFormCount = 0;
+  registeredOrphanToolNames.clear();
   startObserver(config);
   listenForRouteChanges(config);
   await scanForms(config);
