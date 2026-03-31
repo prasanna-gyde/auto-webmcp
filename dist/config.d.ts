@@ -53,6 +53,12 @@ export interface AutoWebMCPConfig {
      */
     overrides?: Record<string, FormOverride>;
     /**
+     * When true, skip filling any form field that already has a non-empty value.
+     * Useful for forms with pre-populated defaults (e.g. Salesforce Lightning) where
+     * the agent should only fill blank fields. Default: false
+     */
+    preserveExisting?: boolean;
+    /**
      * Log registered tools to console on init. Default: false
      */
     debug?: boolean;
@@ -69,6 +75,7 @@ export interface ResolvedConfig {
         timeoutMs: number;
     };
     overrides: Record<string, FormOverride>;
+    preserveExisting: boolean;
     debug: boolean;
 }
 export declare function resolveConfig(userConfig?: AutoWebMCPConfig): ResolvedConfig;

@@ -14,6 +14,7 @@ function resolveConfig(userConfig) {
       timeoutMs: Math.max(100, userConfig?.execution?.timeoutMs ?? 15e3)
     },
     overrides: userConfig?.overrides ?? {},
+    preserveExisting: userConfig?.preserveExisting ?? false,
     debug: userConfig?.debug ?? false
   };
 }
@@ -973,6 +974,53 @@ function buildSchemaFromInputs(inputs) {
 }
 
 // src/registry.ts
+var EXECUTE_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    status: {
+      type: "string",
+      enum: ["success", "partial", "error", "awaiting_user_action", "timed_out", "blocked_invalid"],
+      description: "Outcome of the form execution."
+    },
+    filled_fields: {
+      type: "object",
+      description: "Field name to submitted value map."
+    },
+    skipped_fields: {
+      type: "array",
+      items: { type: "string" },
+      description: "Fields the agent provided but that could not be filled."
+    },
+    missing_required: {
+      type: "array",
+      items: { type: "string" },
+      description: "Required fields not supplied by the agent."
+    },
+    validation_errors: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          field: { type: "string" },
+          constraint: { type: "string", description: "HTML ValidityState key that failed." },
+          message: { type: "string" }
+        },
+        required: ["field", "constraint", "message"]
+      },
+      description: "Per-field HTML5 validation failures (present when status is blocked_invalid)."
+    },
+    existing_values: {
+      type: "object",
+      description: "Field values present in the form before the agent filled it."
+    },
+    warnings: {
+      type: "array",
+      items: { type: "object" },
+      description: "Non-fatal fill warnings (alias_resolved, clamped, not_filled, etc.)."
+    }
+  },
+  required: ["status", "filled_fields", "skipped_fields", "missing_required", "warnings"]
+};
 var registeredTools = /* @__PURE__ */ new Map();
 var registrationControllers = /* @__PURE__ */ new Map();
 function isWebMCPSupported() {
@@ -989,6 +1037,7 @@ async function registerFormTool(form, metadata, execute) {
     name: metadata.name,
     description: metadata.description,
     inputSchema: metadata.inputSchema,
+    outputSchema: EXECUTE_OUTPUT_SCHEMA,
     execute
   };
   if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
@@ -1042,6 +1091,7 @@ var formFieldElements = /* @__PURE__ */ new WeakMap();
 var pendingWarnings = /* @__PURE__ */ new WeakMap();
 var pendingFillWarnings = /* @__PURE__ */ new WeakMap();
 var lastFilledSnapshot = /* @__PURE__ */ new WeakMap();
+var preFillValues = /* @__PURE__ */ new WeakMap();
 var _inputValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 var _textareaValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
 var _checkedSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked")?.set;
@@ -1133,6 +1183,36 @@ function collectInvalidFieldWarnings(form) {
   }
   return warnings;
 }
+function captureCurrentValues(form) {
+  const result = {};
+  try {
+    const data = new FormData(form);
+    for (const [key, val] of data.entries()) {
+      if (result[key] !== void 0) {
+        const existing = result[key];
+        result[key] = Array.isArray(existing) ? [...existing, val] : [existing, val];
+      } else {
+        result[key] = val;
+      }
+    }
+  } catch {
+  }
+  return result;
+}
+function collectValidationErrors(form) {
+  const errors = [];
+  for (const control of Array.from(form.elements)) {
+    if (!(control instanceof HTMLInputElement) && !(control instanceof HTMLTextAreaElement) && !(control instanceof HTMLSelectElement))
+      continue;
+    if (!control.willValidate || control.checkValidity())
+      continue;
+    const field = control.name || control.id || control.getAttribute("aria-label") || "unknown_field";
+    const v = control.validity;
+    const constraint = v.valueMissing ? "valueMissing" : v.typeMismatch ? "typeMismatch" : v.patternMismatch ? "patternMismatch" : v.tooLong ? "tooLong" : v.tooShort ? "tooShort" : v.rangeUnderflow ? "rangeUnderflow" : v.rangeOverflow ? "rangeOverflow" : v.stepMismatch ? "stepMismatch" : v.customError ? "customError" : "badInput";
+    errors.push({ field, constraint, message: control.validationMessage || `field "${field}" failed validation` });
+  }
+  return errors;
+}
 function buildExecuteHandler(form, config, toolName, metadata) {
   if (metadata?.fieldElements) {
     formFieldElements.set(form, metadata.fieldElements);
@@ -1154,6 +1234,8 @@ function buildExecuteHandler(form, config, toolName, metadata) {
     }
     pendingFillWarnings.set(form, []);
     pendingWarnings.delete(form);
+    const existingSnapshot = captureCurrentValues(form);
+    preFillValues.set(form, existingSnapshot);
     const { resolved: resolvedParams, warnings: aliasWarnings } = resolveParamsForSchema(
       form,
       params,
@@ -1163,7 +1245,28 @@ function buildExecuteHandler(form, config, toolName, metadata) {
     if (aliasWarnings.length > 0) {
       pendingFillWarnings.set(form, [...pendingFillWarnings.get(form) ?? [], ...aliasWarnings]);
     }
-    fillFormFields(form, resolvedParams);
+    let paramsToFill = resolvedParams;
+    if (config.preserveExisting) {
+      const preserved = [];
+      paramsToFill = Object.fromEntries(
+        Object.entries(resolvedParams).filter(([key]) => {
+          const current = existingSnapshot[key];
+          const hasValue = current !== void 0 && current !== "" && current !== null;
+          if (hasValue) {
+            preserved.push({
+              field: key,
+              type: "not_filled",
+              message: `field "${key}" already has a value and preserveExisting is enabled`
+            });
+          }
+          return !hasValue;
+        })
+      );
+      if (preserved.length > 0) {
+        pendingFillWarnings.set(form, [...pendingFillWarnings.get(form) ?? [], ...preserved]);
+      }
+    }
+    fillFormFields(form, paramsToFill);
     const missingNow = getMissingRequired(metadata, resolvedParams);
     if (missingNow.length > 0)
       pendingWarnings.set(form, missingNow);
@@ -1181,16 +1284,19 @@ function buildExecuteHandler(form, config, toolName, metadata) {
           type: "timeout",
           message: timedOutState === "timed_out" ? `tool execution timed out after ${timeoutMs}ms` : `waiting for user submit (timed out after ${timeoutMs}ms)`
         };
+        const _existingValsTimeout = preFillValues.get(form);
         const structured = {
           status: timedOutState,
           filled_fields: serializeFormData(form, lastParams.get(form), formFieldElements.get(form)),
           skipped_fields: [],
           missing_required: pendingWarnings.get(form) ?? [],
-          warnings: [...pendingFillWarnings.get(form) ?? [], warn]
+          warnings: [...pendingFillWarnings.get(form) ?? [], warn],
+          ..._existingValsTimeout !== void 0 && { existing_values: _existingValsTimeout }
         };
         pendingWarnings.delete(form);
         pendingFillWarnings.delete(form);
         lastFilledSnapshot.delete(form);
+        preFillValues.delete(form);
         resolve({
           content: [
             { type: "text", text: warn.message },
@@ -1241,17 +1347,21 @@ function buildExecuteHandler(form, config, toolName, metadata) {
                 ];
                 pendingFillWarnings.delete(submitForm);
                 pendingFillWarnings.delete(form);
+                const _existingValsBlocked = preFillValues.get(form);
                 const structured = {
                   status: "blocked_invalid",
                   filled_fields: serializeFormData(submitForm, lastParams.get(submitForm) ?? lastParams.get(form), formFieldElements.get(submitForm) ?? formFieldElements.get(form)),
                   skipped_fields: [],
                   missing_required: pendingWarnings.get(submitForm) ?? pendingWarnings.get(form) ?? [],
-                  warnings
+                  warnings,
+                  validation_errors: collectValidationErrors(submitForm),
+                  ..._existingValsBlocked !== void 0 && { existing_values: _existingValsBlocked }
                 };
                 pendingWarnings.delete(submitForm);
                 pendingWarnings.delete(form);
                 lastFilledSnapshot.delete(submitForm);
                 lastFilledSnapshot.delete(form);
+                preFillValues.delete(form);
                 resolve({
                   content: [
                     { type: "text", text: "Form submission blocked by native validation." },
@@ -1283,7 +1393,9 @@ function attachSubmitInterceptor(form, toolName) {
       clearTimeout(pending.timeoutId);
     pendingExecutions.delete(form);
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
+    const existingVals = preFillValues.get(form);
     lastFilledSnapshot.delete(form);
+    preFillValues.delete(form);
     const missingRequired = pendingWarnings.get(form) ?? [];
     pendingWarnings.delete(form);
     const fillWarnings = pendingFillWarnings.get(form) ?? [];
@@ -1301,7 +1413,8 @@ function attachSubmitInterceptor(form, toolName) {
           message: `required field "${f}" was not provided`
         })),
         ...fillWarnings
-      ]
+      ],
+      ...existingVals !== void 0 && { existing_values: existingVals }
     };
     const allWarnMessages = [
       ...missingRequired.length ? [`required fields were not filled: ${missingRequired.join(", ")}`] : [],
@@ -1323,6 +1436,7 @@ function attachSubmitInterceptor(form, toolName) {
   });
   form.addEventListener("reset", () => {
     lastFilledSnapshot.delete(form);
+    preFillValues.delete(form);
     window.dispatchEvent(new CustomEvent("toolcancel", { detail: { toolName } }));
   });
 }

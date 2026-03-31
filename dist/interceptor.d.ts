@@ -29,12 +29,22 @@ export interface FillWarning {
     original?: unknown;
     actual?: unknown;
 }
+export interface ValidationError {
+    field: string;
+    /** HTML ValidityState key: valueMissing, typeMismatch, patternMismatch, tooLong, tooShort, rangeUnderflow, rangeOverflow, stepMismatch, customError, badInput */
+    constraint: string;
+    message: string;
+}
 export interface StructuredExecuteData {
     status: 'success' | 'partial' | 'error' | 'awaiting_user_action' | 'timed_out' | 'blocked_invalid';
     filled_fields: Record<string, unknown>;
     skipped_fields: string[];
     missing_required: string[];
     warnings: FillWarning[];
+    /** Structured per-field validation errors (populated on blocked_invalid status). */
+    validation_errors?: ValidationError[];
+    /** Field values captured from the form before the agent filled it. */
+    existing_values?: Record<string, unknown>;
 }
 /**
  * Build an `execute` function for a form tool.

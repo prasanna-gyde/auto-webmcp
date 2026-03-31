@@ -42,6 +42,13 @@ export interface FillWarning {
   actual?: unknown;
 }
 
+export interface ValidationError {
+  field: string;
+  /** HTML ValidityState key: valueMissing, typeMismatch, patternMismatch, tooLong, tooShort, rangeUnderflow, rangeOverflow, stepMismatch, customError, badInput */
+  constraint: string;
+  message: string;
+}
+
 export interface StructuredExecuteData {
   status:
     | 'success'
@@ -54,6 +61,10 @@ export interface StructuredExecuteData {
   skipped_fields: string[];
   missing_required: string[];
   warnings: FillWarning[];
+  /** Structured per-field validation errors (populated on blocked_invalid status). */
+  validation_errors?: ValidationError[];
+  /** Field values captured from the form before the agent filled it. */
+  existing_values?: Record<string, unknown>;
 }
 
 interface ModelContextClientLike {
@@ -88,6 +99,12 @@ const pendingFillWarnings = new WeakMap<HTMLFormElement, FillWarning[]>();
  * DOM (e.g. after a React reconciliation cycle resets field values).
  */
 const lastFilledSnapshot = new WeakMap<HTMLFormElement, Record<string, unknown>>();
+
+/**
+ * Per-form snapshot of field values captured BEFORE the agent fills the form.
+ * Returned in execute results so agents know what was already in the form.
+ */
+const preFillValues = new WeakMap<HTMLFormElement, Record<string, unknown>>();
 
 // React-compatible native prototype setters (retrieved once at module init).
 // Using these bypasses React's controlled-input tracking so onChange fires correctly.
@@ -198,6 +215,60 @@ function collectInvalidFieldWarnings(form: HTMLFormElement): FillWarning[] {
 }
 
 /**
+ * Capture all current form field values before the agent fills them.
+ * Uses FormData for named controls and falls back to direct property reads
+ * for elements not included in FormData (e.g. unchecked checkboxes).
+ */
+function captureCurrentValues(form: HTMLFormElement): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  try {
+    const data = new FormData(form);
+    for (const [key, val] of data.entries()) {
+      if (result[key] !== undefined) {
+        const existing = result[key];
+        result[key] = Array.isArray(existing) ? [...existing, val] : [existing, val];
+      } else {
+        result[key] = val;
+      }
+    }
+  } catch {
+    // FormData constructor can throw for detached forms — return what we have
+  }
+  return result;
+}
+
+/**
+ * Collect structured validation errors for all invalid form controls.
+ * Returns richer information than collectInvalidFieldWarnings by including
+ * the specific HTML ValidityState constraint that failed.
+ */
+function collectValidationErrors(form: HTMLFormElement): ValidationError[] {
+  const errors: ValidationError[] = [];
+  for (const control of Array.from(form.elements)) {
+    if (
+      !(control instanceof HTMLInputElement) &&
+      !(control instanceof HTMLTextAreaElement) &&
+      !(control instanceof HTMLSelectElement)
+    ) continue;
+    if (!control.willValidate || control.checkValidity()) continue;
+    const field = control.name || control.id || control.getAttribute('aria-label') || 'unknown_field';
+    const v = control.validity;
+    const constraint = v.valueMissing ? 'valueMissing'
+      : v.typeMismatch ? 'typeMismatch'
+      : v.patternMismatch ? 'patternMismatch'
+      : v.tooLong ? 'tooLong'
+      : v.tooShort ? 'tooShort'
+      : v.rangeUnderflow ? 'rangeUnderflow'
+      : v.rangeOverflow ? 'rangeOverflow'
+      : v.stepMismatch ? 'stepMismatch'
+      : v.customError ? 'customError'
+      : 'badInput';
+    errors.push({ field, constraint, message: control.validationMessage || `field "${field}" failed validation` });
+  }
+  return errors;
+}
+
+/**
  * Build an `execute` function for a form tool.
  *
  * When the agent calls execute(params):
@@ -240,6 +311,11 @@ export function buildExecuteHandler(
 
     pendingFillWarnings.set(form, []);
     pendingWarnings.delete(form);
+
+    // Snapshot existing field values before filling so agents can see prior state.
+    const existingSnapshot = captureCurrentValues(form);
+    preFillValues.set(form, existingSnapshot);
+
     const { resolved: resolvedParams, warnings: aliasWarnings } = resolveParamsForSchema(
       form,
       params,
@@ -249,7 +325,31 @@ export function buildExecuteHandler(
     if (aliasWarnings.length > 0) {
       pendingFillWarnings.set(form, [...(pendingFillWarnings.get(form) ?? []), ...aliasWarnings]);
     }
-    fillFormFields(form, resolvedParams);
+
+    // If preserveExisting is enabled, skip filling fields that already have a non-empty value.
+    let paramsToFill = resolvedParams;
+    if (config.preserveExisting) {
+      const preserved: FillWarning[] = [];
+      paramsToFill = Object.fromEntries(
+        Object.entries(resolvedParams).filter(([key]) => {
+          const current = existingSnapshot[key];
+          const hasValue = current !== undefined && current !== '' && current !== null;
+          if (hasValue) {
+            preserved.push({
+              field: key,
+              type: 'not_filled',
+              message: `field "${key}" already has a value and preserveExisting is enabled`,
+            });
+          }
+          return !hasValue;
+        }),
+      );
+      if (preserved.length > 0) {
+        pendingFillWarnings.set(form, [...(pendingFillWarnings.get(form) ?? []), ...preserved]);
+      }
+    }
+
+    fillFormFields(form, paramsToFill);
 
     // Compute missing required fields now so they are available when the
     // form submits, regardless of whether autoSubmit is enabled.
@@ -277,16 +377,19 @@ export function buildExecuteHandler(
             ? `tool execution timed out after ${timeoutMs}ms`
             : `waiting for user submit (timed out after ${timeoutMs}ms)`,
         };
+        const _existingValsTimeout = preFillValues.get(form);
         const structured: StructuredExecuteData = {
           status: timedOutState,
           filled_fields: serializeFormData(form, lastParams.get(form), formFieldElements.get(form)),
           skipped_fields: [],
           missing_required: pendingWarnings.get(form) ?? [],
           warnings: [...(pendingFillWarnings.get(form) ?? []), warn],
+          ...(_existingValsTimeout !== undefined && { existing_values: _existingValsTimeout }),
         };
         pendingWarnings.delete(form);
         pendingFillWarnings.delete(form);
         lastFilledSnapshot.delete(form);
+        preFillValues.delete(form);
         resolve({
           content: [
             { type: 'text', text: warn.message },
@@ -355,17 +458,21 @@ export function buildExecuteHandler(
                 ];
                 pendingFillWarnings.delete(submitForm);
                 pendingFillWarnings.delete(form);
+                const _existingValsBlocked = preFillValues.get(form);
                 const structured: StructuredExecuteData = {
                   status: 'blocked_invalid',
                   filled_fields: serializeFormData(submitForm, lastParams.get(submitForm) ?? lastParams.get(form), formFieldElements.get(submitForm) ?? formFieldElements.get(form)),
                   skipped_fields: [],
                   missing_required: pendingWarnings.get(submitForm) ?? pendingWarnings.get(form) ?? [],
                   warnings,
+                  validation_errors: collectValidationErrors(submitForm),
+                  ...(_existingValsBlocked !== undefined && { existing_values: _existingValsBlocked }),
                 };
                 pendingWarnings.delete(submitForm);
                 pendingWarnings.delete(form);
                 lastFilledSnapshot.delete(submitForm);
                 lastFilledSnapshot.delete(form);
+                preFillValues.delete(form);
                 resolve({
                   content: [
                     { type: 'text', text: 'Form submission blocked by native validation.' },
@@ -403,7 +510,9 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
     pendingExecutions.delete(form);
 
     const formData = serializeFormData(form, lastParams.get(form), formFieldElements.get(form));
+    const existingVals = preFillValues.get(form);
     lastFilledSnapshot.delete(form);
+    preFillValues.delete(form);
     const missingRequired = pendingWarnings.get(form) ?? [];
     pendingWarnings.delete(form);
     const fillWarnings = pendingFillWarnings.get(form) ?? [];
@@ -426,6 +535,7 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
         })),
         ...fillWarnings,
       ],
+      ...(existingVals !== undefined && { existing_values: existingVals }),
     };
 
     const allWarnMessages = [
@@ -452,6 +562,7 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
   // Dispatch toolcancel when form is reset
   form.addEventListener('reset', () => {
     lastFilledSnapshot.delete(form);
+    preFillValues.delete(form);
     window.dispatchEvent(new CustomEvent('toolcancel', { detail: { toolName } }));
   });
 }

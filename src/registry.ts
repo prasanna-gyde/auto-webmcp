@@ -12,6 +12,7 @@ export interface WebMCPTool {
   name: string;
   description: string;
   inputSchema: object;
+  outputSchema?: object;
   annotations?: {
     readOnlyHint?: boolean;
     destructiveHint?: boolean;
@@ -20,6 +21,58 @@ export interface WebMCPTool {
   };
   execute: (params: Record<string, unknown>, client?: unknown) => Promise<unknown>;
 }
+
+/**
+ * Describes the structured JSON object returned by every auto-webmcp execute handler.
+ * Declared as outputSchema on tool registration so agents can parse results reliably.
+ */
+const EXECUTE_OUTPUT_SCHEMA: object = {
+  type: 'object',
+  properties: {
+    status: {
+      type: 'string',
+      enum: ['success', 'partial', 'error', 'awaiting_user_action', 'timed_out', 'blocked_invalid'],
+      description: 'Outcome of the form execution.',
+    },
+    filled_fields: {
+      type: 'object',
+      description: 'Field name to submitted value map.',
+    },
+    skipped_fields: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Fields the agent provided but that could not be filled.',
+    },
+    missing_required: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Required fields not supplied by the agent.',
+    },
+    validation_errors: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          field: { type: 'string' },
+          constraint: { type: 'string', description: 'HTML ValidityState key that failed.' },
+          message: { type: 'string' },
+        },
+        required: ['field', 'constraint', 'message'],
+      },
+      description: 'Per-field HTML5 validation failures (present when status is blocked_invalid).',
+    },
+    existing_values: {
+      type: 'object',
+      description: 'Field values present in the form before the agent filled it.',
+    },
+    warnings: {
+      type: 'array',
+      items: { type: 'object' },
+      description: 'Non-fatal fill warnings (alias_resolved, clamped, not_filled, etc.).',
+    },
+  },
+  required: ['status', 'filled_fields', 'skipped_fields', 'missing_required', 'warnings'],
+};
 
 interface ModelContextRegisterOptions {
   signal?: AbortSignal;
@@ -69,6 +122,7 @@ export async function registerFormTool(
     name: metadata.name,
     description: metadata.description,
     inputSchema: metadata.inputSchema,
+    outputSchema: EXECUTE_OUTPUT_SCHEMA,
     execute,
   };
   if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {

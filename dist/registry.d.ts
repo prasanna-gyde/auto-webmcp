@@ -6,6 +6,7 @@ export interface WebMCPTool {
     name: string;
     description: string;
     inputSchema: object;
+    outputSchema?: object;
     annotations?: {
         readOnlyHint?: boolean;
         destructiveHint?: boolean;
