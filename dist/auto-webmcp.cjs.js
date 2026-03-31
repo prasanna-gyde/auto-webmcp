@@ -3,9 +3,6 @@ var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __esm = (fn, res) => function __init() {
-  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
-};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -19,76 +16,6 @@ var __copyProps = (to, from, except, desc) => {
   return to;
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// src/registry.ts
-var registry_exports = {};
-__export(registry_exports, {
-  getAllRegisteredTools: () => getAllRegisteredTools,
-  getRegisteredToolName: () => getRegisteredToolName,
-  isWebMCPSupported: () => isWebMCPSupported,
-  registerFormTool: () => registerFormTool,
-  unregisterAll: () => unregisterAll,
-  unregisterFormTool: () => unregisterFormTool
-});
-function isWebMCPSupported() {
-  return typeof navigator !== "undefined" && typeof navigator.modelContext !== "undefined";
-}
-async function registerFormTool(form, metadata, execute) {
-  if (!isWebMCPSupported())
-    return;
-  const existing = registeredTools.get(form);
-  if (existing) {
-    await unregisterFormTool(form);
-  }
-  const toolDef = {
-    name: metadata.name,
-    description: metadata.description,
-    inputSchema: metadata.inputSchema,
-    execute
-  };
-  if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
-    toolDef.annotations = metadata.annotations;
-  }
-  try {
-    await navigator.modelContext.registerTool(toolDef);
-  } catch {
-    try {
-      await navigator.modelContext.unregisterTool(metadata.name);
-      await navigator.modelContext.registerTool(toolDef);
-    } catch {
-    }
-  }
-  registeredTools.set(form, metadata.name);
-}
-async function unregisterFormTool(form) {
-  if (!isWebMCPSupported())
-    return;
-  const name = registeredTools.get(form);
-  if (!name)
-    return;
-  try {
-    await navigator.modelContext.unregisterTool(name);
-  } catch {
-  }
-  registeredTools.delete(form);
-}
-function getRegisteredToolName(form) {
-  return registeredTools.get(form);
-}
-function getAllRegisteredTools() {
-  return Array.from(registeredTools.entries()).map(([form, name]) => ({ form, name }));
-}
-async function unregisterAll() {
-  const entries = Array.from(registeredTools.entries());
-  await Promise.all(entries.map(([form]) => unregisterFormTool(form)));
-}
-var registeredTools;
-var init_registry = __esm({
-  "src/registry.ts"() {
-    "use strict";
-    registeredTools = /* @__PURE__ */ new Map();
-  }
-});
 
 // src/index.ts
 var src_exports = {};
@@ -250,19 +177,19 @@ function mapSelectElement(select) {
   return { type: "string", enum: enumValues, oneOf };
 }
 function collectCheckboxEnum(form, name) {
-  return Array.from(
-    form.querySelectorAll(`input[type="checkbox"][name="${CSS.escape(name)}"]`)
+  return Array.from(form.elements).filter(
+    (el) => el instanceof HTMLInputElement && el.type === "checkbox" && el.name === name
   ).map((cb) => cb.value).filter((v) => v !== "" && v !== "on");
 }
 function collectRadioEnum(form, name) {
-  const radios = Array.from(
-    form.querySelectorAll(`input[type="radio"][name="${CSS.escape(name)}"]`)
+  const radios = Array.from(form.elements).filter(
+    (el) => el instanceof HTMLInputElement && el.type === "radio" && el.name === name
   );
   return radios.map((r) => r.value).filter((v) => v !== "");
 }
 function collectRadioOneOf(form, name) {
-  const radios = Array.from(
-    form.querySelectorAll(`input[type="radio"][name="${CSS.escape(name)}"]`)
+  const radios = Array.from(form.elements).filter(
+    (el) => el instanceof HTMLInputElement && el.type === "radio" && el.name === name
   ).filter((r) => r.value !== "");
   return radios.map((r) => {
     const title = getRadioLabelText(r);
@@ -522,20 +449,26 @@ function collectShadowControls(root, visited = /* @__PURE__ */ new Set()) {
   }
   return results;
 }
+function collectFormAssociatedControls(form) {
+  const controls = Array.from(form.elements).filter(
+    (el) => el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement
+  );
+  const seen = new Set(controls);
+  for (const shadowControl of collectShadowControls(form)) {
+    if (!seen.has(shadowControl)) {
+      controls.push(shadowControl);
+      seen.add(shadowControl);
+    }
+  }
+  return controls;
+}
 function buildSchema(form) {
   const properties = {};
   const required = [];
   const fieldElements = /* @__PURE__ */ new Map();
   const processedRadioGroups = /* @__PURE__ */ new Set();
   const processedCheckboxGroups = /* @__PURE__ */ new Set();
-  const controls = [
-    ...Array.from(
-      form.querySelectorAll(
-        "input, textarea, select"
-      )
-    ),
-    ...collectShadowControls(form)
-  ];
+  const controls = collectFormAssociatedControls(form);
   for (const control of controls) {
     const name = control.name;
     const fieldKey = name || resolveNativeControlFallbackKey(control);
@@ -568,8 +501,8 @@ function buildSchema(form) {
       const radioOneOf = collectRadioOneOf(form, fieldKey);
       if (radioOneOf.length > 0)
         schemaProp.oneOf = radioOneOf;
-      const checkedRadio = form.querySelector(
-        `input[type="radio"][name="${CSS.escape(fieldKey)}"]:checked`
+      const checkedRadio = Array.from(form.elements).find(
+        (el) => el instanceof HTMLInputElement && el.type === "radio" && el.name === fieldKey && el.checked
       );
       if (checkedRadio?.value)
         schemaProp.default = checkedRadio.value;
@@ -584,10 +517,8 @@ function buildSchema(form) {
         };
         if (schemaProp.description)
           arrayProp.description = schemaProp.description;
-        const checkedBoxes = Array.from(
-          form.querySelectorAll(
-            `input[type="checkbox"][name="${CSS.escape(fieldKey)}"]:checked`
-          )
+        const checkedBoxes = Array.from(form.elements).filter(
+          (el) => el instanceof HTMLInputElement && el.type === "checkbox" && el.name === fieldKey && el.checked
         ).map((b) => b.value);
         if (checkedBoxes.length > 0)
           arrayProp.default = checkedBoxes;
@@ -1057,8 +988,68 @@ function buildSchemaFromInputs(inputs) {
   return { schema: { "$schema": "https://json-schema.org/draft/2020-12/schema", type: "object", properties, required }, fieldElements };
 }
 
-// src/discovery.ts
-init_registry();
+// src/registry.ts
+var registeredTools = /* @__PURE__ */ new Map();
+var registrationControllers = /* @__PURE__ */ new Map();
+function isWebMCPSupported() {
+  return typeof navigator !== "undefined" && typeof navigator.modelContext !== "undefined";
+}
+async function registerFormTool(form, metadata, execute) {
+  if (!isWebMCPSupported())
+    return;
+  const existing = registeredTools.get(form);
+  if (existing) {
+    await unregisterFormTool(form);
+  }
+  const toolDef = {
+    name: metadata.name,
+    description: metadata.description,
+    inputSchema: metadata.inputSchema,
+    execute
+  };
+  if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
+    toolDef.annotations = metadata.annotations;
+  }
+  const controller = new AbortController();
+  registrationControllers.set(form, controller);
+  try {
+    await navigator.modelContext.registerTool(toolDef, { signal: controller.signal });
+  } catch {
+    try {
+      await navigator.modelContext.unregisterTool?.(metadata.name);
+      await navigator.modelContext.registerTool(toolDef, { signal: controller.signal });
+    } catch {
+    }
+  }
+  registeredTools.set(form, metadata.name);
+}
+async function unregisterFormTool(form) {
+  if (!isWebMCPSupported())
+    return;
+  const name = registeredTools.get(form);
+  if (!name)
+    return;
+  const controller = registrationControllers.get(form);
+  if (controller) {
+    controller.abort();
+    registrationControllers.delete(form);
+  }
+  try {
+    await navigator.modelContext.unregisterTool?.(name);
+  } catch {
+  }
+  registeredTools.delete(form);
+}
+function getRegisteredToolName(form) {
+  return registeredTools.get(form);
+}
+function getAllRegisteredTools() {
+  return Array.from(registeredTools.entries()).map(([form, name]) => ({ form, name }));
+}
+async function unregisterAll() {
+  const entries = Array.from(registeredTools.entries());
+  await Promise.all(entries.map(([form]) => unregisterFormTool(form)));
+}
 
 // src/interceptor.ts
 var pendingExecutions = /* @__PURE__ */ new WeakMap();
@@ -1075,7 +1066,20 @@ function buildExecuteHandler(form, config, toolName, metadata) {
     formFieldElements.set(form, metadata.fieldElements);
   }
   attachSubmitInterceptor(form, toolName);
-  return async (params) => {
+  return async (params, client) => {
+    const modelContextClient = client;
+    if (config.autoSubmit && metadata?.annotations?.destructiveHint === true && typeof modelContextClient?.requestUserInteraction === "function") {
+      const approved = await modelContextClient.requestUserInteraction(async () => {
+        return new Promise((resolve) => {
+          const ok = window.confirm(`Agent requested a destructive action via "${toolName}". Continue?`);
+          resolve(ok);
+        });
+      });
+      if (!approved) {
+        window.dispatchEvent(new CustomEvent("toolcancel", { detail: { toolName } }));
+        return { content: [{ type: "text", text: `Cancelled "${toolName}" by user.` }] };
+      }
+    }
     pendingFillWarnings.set(form, []);
     pendingWarnings.delete(form);
     fillFormFields(form, params);
@@ -1212,7 +1216,23 @@ function findInShadowRoots(root, selector) {
   }
   return null;
 }
+function getAssociatedInputsByName(form, type, name) {
+  return Array.from(form.elements).filter(
+    (el) => el instanceof HTMLInputElement && el.type === type && el.name === name
+  );
+}
 function findNativeField(form, key) {
+  const named = form.elements.namedItem(key);
+  if (typeof named === "object" && named !== null && (named instanceof HTMLInputElement || named instanceof HTMLTextAreaElement || named instanceof HTMLSelectElement)) {
+    return named;
+  }
+  if (named instanceof RadioNodeList) {
+    const first = named[0];
+    const firstObj = first;
+    if (firstObj instanceof HTMLInputElement || firstObj instanceof HTMLTextAreaElement || firstObj instanceof HTMLSelectElement) {
+      return firstObj;
+    }
+  }
   const esc = CSS.escape(key);
   const light = form.querySelector(`[name="${esc}"]`) ?? form.querySelector(
     `input#${esc}, textarea#${esc}, select#${esc}`
@@ -1232,10 +1252,7 @@ function fillFormFields(form, params) {
         fillInput(input, form, key, value);
         if (input.type === "checkbox") {
           if (Array.isArray(value)) {
-            const esc = CSS.escape(key);
-            snapshot[key] = Array.from(
-              form.querySelectorAll(`input[type="checkbox"][name="${esc}"]`)
-            ).filter((b) => b.checked).map((b) => b.value);
+            snapshot[key] = getAssociatedInputsByName(form, "checkbox", key).filter((b) => b.checked).map((b) => b.value);
           } else {
             snapshot[key] = input.checked;
           }
@@ -1284,8 +1301,7 @@ function fillInput(input, form, key, value) {
   const type = input.type.toLowerCase();
   if (type === "checkbox") {
     if (Array.isArray(value)) {
-      const esc = CSS.escape(key);
-      const allBoxes = form.querySelectorAll(`input[type="checkbox"][name="${esc}"]`);
+      const allBoxes = getAssociatedInputsByName(form, "checkbox", key);
       for (const box of allBoxes) {
         setReactChecked(box, value.map(String).includes(box.value));
       }
@@ -1326,10 +1342,7 @@ function fillInput(input, form, key, value) {
     return;
   }
   if (type === "radio") {
-    const esc = CSS.escape(key);
-    const radios = form.querySelectorAll(
-      `input[type="radio"][name="${esc}"]`
-    );
+    const radios = getAssociatedInputsByName(form, "radio", key);
     for (const radio of radios) {
       if (radio.value === String(value)) {
         if (_checkedSetter) {
@@ -1652,9 +1665,35 @@ function isExcluded(form, config) {
   }
   return false;
 }
+function withNumericSuffix(baseName, n) {
+  const suffix = `_${n}`;
+  return `${baseName.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`;
+}
+function getUsedToolNames(excludeForm) {
+  const names = new Set(registeredOrphanToolNames);
+  for (const { form, name } of getAllRegisteredTools()) {
+    if (excludeForm && form === excludeForm)
+      continue;
+    names.add(name);
+  }
+  return names;
+}
+function ensureUniqueToolName(baseName, excludeForm) {
+  const used = getUsedToolNames(excludeForm);
+  if (!used.has(baseName))
+    return baseName;
+  let i = 2;
+  let candidate = withNumericSuffix(baseName, i);
+  while (used.has(candidate)) {
+    i++;
+    candidate = withNumericSuffix(baseName, i);
+  }
+  return candidate;
+}
 async function registerForm(form, config) {
   if (isExcluded(form, config))
     return;
+  const previousName = getRegisteredToolName(form);
   let override;
   for (const [selector, ovr] of Object.entries(config.overrides)) {
     try {
@@ -1666,6 +1705,11 @@ async function registerForm(form, config) {
     }
   }
   const metadata = analyzeForm(form, override);
+  const resolvedName = ensureUniqueToolName(metadata.name, form);
+  if (resolvedName !== metadata.name && config.debug) {
+    console.warn(`[auto-webmcp] tool name collision: "${metadata.name}" renamed to "${resolvedName}"`);
+  }
+  metadata.name = resolvedName;
   if (config.debug) {
     warnToolQuality(metadata.name, metadata.description);
   }
@@ -1677,6 +1721,9 @@ async function registerForm(form, config) {
     '[type="submit"], button[data-variant="primary"], button:not([type])'
   ) ?? null;
   const pendingBtns = window["__pendingSubmitBtns"] ??= {};
+  if (previousName && previousName !== metadata.name) {
+    delete pendingBtns[previousName];
+  }
   pendingBtns[metadata.name] = formSubmitBtn;
   if (config.debug) {
     console.log(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
@@ -1684,12 +1731,14 @@ async function registerForm(form, config) {
   emit("form:registered", form, metadata.name);
 }
 async function unregisterForm(form, config) {
-  const { getRegisteredToolName: getRegisteredToolName2 } = await Promise.resolve().then(() => (init_registry(), registry_exports));
-  const name = getRegisteredToolName2(form);
+  const name = getRegisteredToolName(form);
   if (!name)
     return;
   await unregisterFormTool(form);
   registeredForms.delete(form);
+  const pendingBtns = window["__pendingSubmitBtns"];
+  if (pendingBtns)
+    delete pendingBtns[name];
   if (config.debug) {
     console.log(`[auto-webmcp] Unregistered: ${name}`);
   }
@@ -1738,11 +1787,47 @@ function scheduleReAnalysis(form, config) {
     }, RE_ANALYSIS_DEBOUNCE_MS)
   );
 }
+function scheduleFormReAnalysisById(formId, config) {
+  const owner = document.getElementById(formId);
+  if (owner instanceof HTMLFormElement && registeredForms.has(owner)) {
+    scheduleReAnalysis(owner, config);
+  }
+}
+function resolveOwnerForm(el) {
+  const closest = el.closest("form");
+  if (closest instanceof HTMLFormElement)
+    return closest;
+  const explicitOwner = el.form;
+  if (explicitOwner instanceof HTMLFormElement)
+    return explicitOwner;
+  const formId = el.getAttribute("form");
+  if (formId) {
+    const byId = document.getElementById(formId);
+    if (byId instanceof HTMLFormElement)
+      return byId;
+  }
+  return null;
+}
 function startObserver(config) {
   if (observer)
     return;
   observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
+      if (mutation.type === "attributes" && mutation.target instanceof Element) {
+        const target = mutation.target;
+        const ownerForm = resolveOwnerForm(target);
+        if (ownerForm && registeredForms.has(ownerForm)) {
+          scheduleReAnalysis(ownerForm, config);
+        } else if (target instanceof HTMLFormElement) {
+          void registerForm(target, config);
+        } else if (isInterestingNode(target) && !target.closest("form")) {
+          scheduleOrphanRescan(config);
+        }
+        if (mutation.attributeName === "form" && mutation.oldValue) {
+          scheduleFormReAnalysisById(mutation.oldValue, config);
+        }
+        continue;
+      }
       for (const node of mutation.addedNodes) {
         if (!(node instanceof Element))
           continue;
@@ -1771,7 +1856,12 @@ function startObserver(config) {
       }
     }
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeOldValue: true
+  });
 }
 function listenForRouteChanges(config) {
   window.addEventListener("hashchange", () => scanForms(config));
@@ -1915,6 +2005,15 @@ async function scanOrphanInputs(config) {
     }
     console.log(`[auto-webmcp] orphan: submit button for group:`, submitBtn ? `"${submitBtn.textContent?.trim()}" disabled=${submitBtn.disabled}` : "none");
     const metadata = analyzeOrphanInputGroup(container, inputs, submitBtn);
+    if (registeredOrphanToolNames.has(metadata.name)) {
+      console.log(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
+      continue;
+    }
+    const orphanName = ensureUniqueToolName(metadata.name);
+    if (orphanName !== metadata.name && config.debug) {
+      console.warn(`[auto-webmcp] orphan tool name collision: "${metadata.name}" renamed to "${orphanName}"`);
+    }
+    metadata.name = orphanName;
     console.log(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
     const inputPairs = [];
     const schemaProps = metadata.inputSchema.properties;
@@ -1935,7 +2034,7 @@ async function scanOrphanInputs(config) {
       continue;
     }
     const toolName = metadata.name;
-    const execute = async (params) => {
+    const execute = async (params, _client) => {
       console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
       console.log(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map((p) => p.key));
       for (const { key, el } of inputPairs) {
@@ -2004,10 +2103,6 @@ async function scanOrphanInputs(config) {
       return { content: [{ type: "text", text: "Fields filled and form submitted." }] };
     };
     try {
-      if (registeredOrphanToolNames.has(metadata.name)) {
-        console.log(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
-        continue;
-      }
       const toolDef = {
         name: metadata.name,
         description: metadata.description,
@@ -2058,7 +2153,6 @@ function stopDiscovery() {
 }
 
 // src/index.ts
-init_registry();
 async function autoWebMCP(config) {
   const resolved = resolveConfig(config);
   if (resolved.debug) {

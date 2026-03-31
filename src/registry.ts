@@ -21,11 +21,15 @@ export interface WebMCPTool {
   execute: (params: Record<string, unknown>, client?: unknown) => Promise<unknown>;
 }
 
+interface ModelContextRegisterOptions {
+  signal?: AbortSignal;
+}
+
 declare global {
   interface Navigator {
     modelContext?: {
-      registerTool(tool: WebMCPTool): Promise<void>;
-      unregisterTool(name: string): Promise<void>;
+      registerTool(tool: WebMCPTool, options?: ModelContextRegisterOptions): Promise<void> | void;
+      unregisterTool?(name: string): Promise<void> | void;
     };
   }
 }
@@ -36,6 +40,8 @@ declare global {
 
 /** Tracks registered tools: form element → tool name */
 const registeredTools = new Map<HTMLFormElement, string>();
+/** Tracks abort controllers for registrations, enabling signal-based unregister */
+const registrationControllers = new Map<HTMLFormElement, AbortController>();
 
 /** True if the browser supports navigator.modelContext */
 export function isWebMCPSupported(): boolean {
@@ -49,7 +55,7 @@ export function isWebMCPSupported(): boolean {
 export async function registerFormTool(
   form: HTMLFormElement,
   metadata: ToolMetadata,
-  execute: (params: Record<string, unknown>) => Promise<unknown>,
+  execute: (params: Record<string, unknown>, client?: unknown) => Promise<unknown>,
 ): Promise<void> {
   if (!isWebMCPSupported()) return;
 
@@ -69,14 +75,17 @@ export async function registerFormTool(
     toolDef.annotations = metadata.annotations;
   }
 
+  const controller = new AbortController();
+  registrationControllers.set(form, controller);
+
   try {
-    await navigator.modelContext!.registerTool(toolDef);
+    await navigator.modelContext!.registerTool(toolDef, { signal: controller.signal });
   } catch {
     // Chrome may hold a stale registration from a previous page load.
     // Unregister by name and retry once.
     try {
-      await navigator.modelContext!.unregisterTool(metadata.name);
-      await navigator.modelContext!.registerTool(toolDef);
+      await navigator.modelContext!.unregisterTool?.(metadata.name);
+      await navigator.modelContext!.registerTool(toolDef, { signal: controller.signal });
     } catch {
       // Give up Chrome registration — local handlers and form:registered still work.
     }
@@ -95,8 +104,14 @@ export async function unregisterFormTool(form: HTMLFormElement): Promise<void> {
   const name = registeredTools.get(form);
   if (!name) return;
 
+  const controller = registrationControllers.get(form);
+  if (controller) {
+    controller.abort();
+    registrationControllers.delete(form);
+  }
+
   try {
-    await navigator.modelContext!.unregisterTool(name);
+    await navigator.modelContext!.unregisterTool?.(name);
   } catch {
     // Tool may have already been removed — ignore
   }

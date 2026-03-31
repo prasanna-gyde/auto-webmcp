@@ -43,6 +43,10 @@ export interface StructuredExecuteData {
   warnings: FillWarning[];
 }
 
+interface ModelContextClientLike {
+  requestUserInteraction?: <T>(callback: () => Promise<T>) => Promise<T>;
+}
+
 type Resolver = (result: ExecuteResult) => void;
 type Rejecter = (error: Error) => void;
 
@@ -94,7 +98,7 @@ export function buildExecuteHandler(
   config: ResolvedConfig,
   toolName: string,
   metadata?: ToolMetadata,
-): (params: Record<string, unknown>) => Promise<ExecuteResult> {
+): (params: Record<string, unknown>, client?: unknown) => Promise<ExecuteResult> {
   // Store field element map for this form
   if (metadata?.fieldElements) {
     formFieldElements.set(form, metadata.fieldElements);
@@ -103,7 +107,25 @@ export function buildExecuteHandler(
   // Attach submit/reset listeners once per form
   attachSubmitInterceptor(form, toolName);
 
-  return async (params: Record<string, unknown>): Promise<ExecuteResult> => {
+  return async (params: Record<string, unknown>, client?: unknown): Promise<ExecuteResult> => {
+    const modelContextClient = client as ModelContextClientLike | undefined;
+    if (
+      config.autoSubmit &&
+      metadata?.annotations?.destructiveHint === true &&
+      typeof modelContextClient?.requestUserInteraction === 'function'
+    ) {
+      const approved = await modelContextClient.requestUserInteraction(async () => {
+        return new Promise<boolean>((resolve) => {
+          const ok = window.confirm(`Agent requested a destructive action via "${toolName}". Continue?`);
+          resolve(ok);
+        });
+      });
+      if (!approved) {
+        window.dispatchEvent(new CustomEvent('toolcancel', { detail: { toolName } }));
+        return { content: [{ type: 'text', text: `Cancelled "${toolName}" by user.` }] };
+      }
+    }
+
     pendingFillWarnings.set(form, []);
     pendingWarnings.delete(form);
     fillFormFields(form, params);
@@ -299,11 +321,45 @@ function findInShadowRoots(
   return null;
 }
 
+function getAssociatedInputsByName(
+  form: HTMLFormElement,
+  type: 'checkbox' | 'radio',
+  name: string,
+): HTMLInputElement[] {
+  return Array.from(form.elements).filter(
+    (el): el is HTMLInputElement =>
+      el instanceof HTMLInputElement &&
+      el.type === type &&
+      el.name === name,
+  );
+}
+
 /** Find a native form control by name or id, including inside shadow DOM. */
 function findNativeField(
   form: HTMLFormElement,
   key: string,
 ): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null {
+  // Includes out-of-tree controls linked with form="...".
+  const named = form.elements.namedItem(key);
+  if (
+    typeof named === 'object' &&
+    named !== null &&
+    (named instanceof HTMLInputElement || named instanceof HTMLTextAreaElement || named instanceof HTMLSelectElement)
+  ) {
+    return named;
+  }
+  if (named instanceof RadioNodeList) {
+    const first = named[0];
+    const firstObj = first as unknown;
+    if (
+      firstObj instanceof HTMLInputElement ||
+      firstObj instanceof HTMLTextAreaElement ||
+      firstObj instanceof HTMLSelectElement
+    ) {
+      return firstObj;
+    }
+  }
+
   const esc = CSS.escape(key);
   // Light DOM first (fast path)
   const light =
@@ -332,10 +388,9 @@ function fillFormFields(form: HTMLFormElement, params: Record<string, unknown>):
         fillInput(input, form, key, value);
         if (input.type === 'checkbox') {
           if (Array.isArray(value)) {
-            const esc = CSS.escape(key);
-            snapshot[key] = Array.from(
-              form.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][name="${esc}"]`),
-            ).filter((b) => b.checked).map((b) => b.value);
+            snapshot[key] = getAssociatedInputsByName(form, 'checkbox', key)
+              .filter((b) => b.checked)
+              .map((b) => b.value);
           } else {
             snapshot[key] = input.checked;
           }
@@ -408,8 +463,7 @@ function fillInput(
   if (type === 'checkbox') {
     // Agent may pass an array for checkbox groups (multiple checkboxes with same name)
     if (Array.isArray(value)) {
-      const esc = CSS.escape(key);
-      const allBoxes = form.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][name="${esc}"]`);
+      const allBoxes = getAssociatedInputsByName(form, 'checkbox', key);
       for (const box of allBoxes) {
         setReactChecked(box, (value as unknown[]).map(String).includes(box.value));
       }
@@ -452,10 +506,7 @@ function fillInput(
   }
 
   if (type === 'radio') {
-    const esc = CSS.escape(key);
-    const radios = form.querySelectorAll<HTMLInputElement>(
-      `input[type="radio"][name="${esc}"]`,
-    );
+    const radios = getAssociatedInputsByName(form, 'radio', key);
     for (const radio of radios) {
       if (radio.value === String(value)) {
         if (_checkedSetter) {
@@ -873,4 +924,3 @@ export async function fillComboboxButton(el: Element, value: unknown): Promise<v
       'available:', options.map((o) => o.textContent?.trim()));
   }
 }
-

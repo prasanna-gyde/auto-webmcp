@@ -44,7 +44,7 @@ export interface StructuredExecuteData {
  *  2. Fires a submit event (or auto-submits if configured)
  *  3. Resolves with structured form data once submitted
  */
-export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string, metadata?: ToolMetadata): (params: Record<string, unknown>) => Promise<ExecuteResult>;
+export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string, metadata?: ToolMetadata): (params: Record<string, unknown>, client?: unknown) => Promise<ExecuteResult>;
 /**
  * Fill a single form control or ARIA element with the given value.
  * Exported for use by orphan-input (formless) tool handlers in discovery.ts.

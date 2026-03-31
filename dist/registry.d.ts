@@ -14,11 +14,14 @@ export interface WebMCPTool {
     };
     execute: (params: Record<string, unknown>, client?: unknown) => Promise<unknown>;
 }
+interface ModelContextRegisterOptions {
+    signal?: AbortSignal;
+}
 declare global {
     interface Navigator {
         modelContext?: {
-            registerTool(tool: WebMCPTool): Promise<void>;
-            unregisterTool(name: string): Promise<void>;
+            registerTool(tool: WebMCPTool, options?: ModelContextRegisterOptions): Promise<void> | void;
+            unregisterTool?(name: string): Promise<void> | void;
         };
     }
 }
@@ -28,7 +31,7 @@ export declare function isWebMCPSupported(): boolean;
  * Register a form as a WebMCP tool.
  * Silently no-ops if WebMCP is not supported.
  */
-export declare function registerFormTool(form: HTMLFormElement, metadata: ToolMetadata, execute: (params: Record<string, unknown>) => Promise<unknown>): Promise<void>;
+export declare function registerFormTool(form: HTMLFormElement, metadata: ToolMetadata, execute: (params: Record<string, unknown>, client?: unknown) => Promise<unknown>): Promise<void>;
 /**
  * Unregister the WebMCP tool associated with a form element.
  * Silently no-ops if not registered or WebMCP not supported.
@@ -43,4 +46,5 @@ export declare function getAllRegisteredTools(): Array<{
 }>;
 /** Unregister all tools (e.g. on teardown) */
 export declare function unregisterAll(): Promise<void>;
+export {};
 //# sourceMappingURL=registry.d.ts.map

@@ -294,6 +294,32 @@ function collectShadowControls(
   return results;
 }
 
+/**
+ * Collect native controls associated with a form.
+ * Uses form.elements to include controls outside the form subtree that point
+ * to this form via the HTML `form` attribute.
+ */
+function collectFormAssociatedControls(
+  form: HTMLFormElement,
+): Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> {
+  const controls = Array.from(form.elements).filter(
+    (el): el is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement =>
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement,
+  );
+
+  const seen = new Set<Element>(controls);
+  for (const shadowControl of collectShadowControls(form)) {
+    if (!seen.has(shadowControl)) {
+      controls.push(shadowControl);
+      seen.add(shadowControl);
+    }
+  }
+
+  return controls;
+}
+
 function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements: Map<string, Element> } {
   const properties: Record<string, JsonSchemaProperty> = {};
   const required: string[] = [];
@@ -303,14 +329,7 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
   const processedRadioGroups = new Set<string>();
   const processedCheckboxGroups = new Set<string>();
 
-  const controls = [
-    ...Array.from(
-      form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-        'input, textarea, select',
-      ),
-    ),
-    ...collectShadowControls(form),
-  ];
+  const controls = collectFormAssociatedControls(form);
 
   for (const control of controls) {
     const name = control.name;
@@ -347,8 +366,12 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
       schemaProp.enum = collectRadioEnum(form, fieldKey);
       const radioOneOf = collectRadioOneOf(form, fieldKey);
       if (radioOneOf.length > 0) schemaProp.oneOf = radioOneOf;
-      const checkedRadio = form.querySelector<HTMLInputElement>(
-        `input[type="radio"][name="${CSS.escape(fieldKey)}"]:checked`,
+      const checkedRadio = Array.from(form.elements).find(
+        (el): el is HTMLInputElement =>
+          el instanceof HTMLInputElement &&
+          el.type === 'radio' &&
+          el.name === fieldKey &&
+          el.checked,
       );
       if (checkedRadio?.value) schemaProp.default = checkedRadio.value;
     }
@@ -363,11 +386,15 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
           title: schemaProp.title,
         };
         if (schemaProp.description) arrayProp.description = schemaProp.description;
-        const checkedBoxes = Array.from(
-          form.querySelectorAll<HTMLInputElement>(
-            `input[type="checkbox"][name="${CSS.escape(fieldKey)}"]:checked`,
-          ),
-        ).map((b) => b.value);
+        const checkedBoxes = Array.from(form.elements)
+          .filter(
+            (el): el is HTMLInputElement =>
+              el instanceof HTMLInputElement &&
+              el.type === 'checkbox' &&
+              el.name === fieldKey &&
+              el.checked,
+          )
+          .map((b) => b.value);
         if (checkedBoxes.length > 0) arrayProp.default = checkedBoxes;
         properties[fieldKey] = arrayProp;
         if (control.required) required.push(fieldKey);

@@ -202,17 +202,24 @@ function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
 
 /** Collect all checkbox values for a given name within a form (for checkbox groups) */
 export function collectCheckboxEnum(form: HTMLFormElement, name: string): string[] {
-  return Array.from(
-    form.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][name="${CSS.escape(name)}"]`),
-  )
+  return Array.from(form.elements)
+    .filter(
+      (el): el is HTMLInputElement =>
+        el instanceof HTMLInputElement &&
+        el.type === 'checkbox' &&
+        el.name === name,
+    )
     .map((cb) => cb.value)
     .filter((v) => v !== '' && v !== 'on'); // 'on' is the browser default when no value attr is set
 }
 
 /** Collect all radio button values for a given name within a form */
 export function collectRadioEnum(form: HTMLFormElement, name: string): string[] {
-  const radios = Array.from(
-    form.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${CSS.escape(name)}"]`),
+  const radios = Array.from(form.elements).filter(
+    (el): el is HTMLInputElement =>
+      el instanceof HTMLInputElement &&
+      el.type === 'radio' &&
+      el.name === name,
   );
   return radios.map((r) => r.value).filter((v) => v !== '');
 }
@@ -222,9 +229,14 @@ export function collectRadioOneOf(
   form: HTMLFormElement,
   name: string,
 ): Array<{ const: string; title: string }> {
-  const radios = Array.from(
-    form.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${CSS.escape(name)}"]`),
-  ).filter((r) => r.value !== '');
+  const radios = Array.from(form.elements)
+    .filter(
+      (el): el is HTMLInputElement =>
+        el instanceof HTMLInputElement &&
+        el.type === 'radio' &&
+        el.name === name,
+    )
+    .filter((r) => r.value !== '');
 
   return radios.map((r) => {
     const title = getRadioLabelText(r);

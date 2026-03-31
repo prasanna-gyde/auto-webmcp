@@ -4,7 +4,13 @@
 
 import { ResolvedConfig } from './config.js';
 import { analyzeForm, analyzeOrphanInputGroup, ToolAnnotations } from './analyzer.js';
-import { registerFormTool, unregisterFormTool, isWebMCPSupported } from './registry.js';
+import {
+  registerFormTool,
+  unregisterFormTool,
+  isWebMCPSupported,
+  getAllRegisteredTools,
+  getRegisteredToolName,
+} from './registry.js';
 import { buildExecuteHandler, fillElement, fillComboboxButton } from './interceptor.js';
 import { ARIA_ROLES_TO_SCAN, JsonSchema } from './schema.js';
 
@@ -42,8 +48,35 @@ function isExcluded(form: HTMLFormElement, config: ResolvedConfig): boolean {
   return false;
 }
 
+function withNumericSuffix(baseName: string, n: number): string {
+  const suffix = `_${n}`;
+  return `${baseName.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`;
+}
+
+function getUsedToolNames(excludeForm?: HTMLFormElement): Set<string> {
+  const names = new Set<string>(registeredOrphanToolNames);
+  for (const { form, name } of getAllRegisteredTools()) {
+    if (excludeForm && form === excludeForm) continue;
+    names.add(name);
+  }
+  return names;
+}
+
+function ensureUniqueToolName(baseName: string, excludeForm?: HTMLFormElement): string {
+  const used = getUsedToolNames(excludeForm);
+  if (!used.has(baseName)) return baseName;
+  let i = 2;
+  let candidate = withNumericSuffix(baseName, i);
+  while (used.has(candidate)) {
+    i++;
+    candidate = withNumericSuffix(baseName, i);
+  }
+  return candidate;
+}
+
 async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Promise<void> {
   if (isExcluded(form, config)) return;
+  const previousName = getRegisteredToolName(form);
 
   // Find matching override (first matching selector wins)
   let override;
@@ -59,6 +92,11 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
   }
 
   const metadata = analyzeForm(form, override);
+  const resolvedName = ensureUniqueToolName(metadata.name, form);
+  if (resolvedName !== metadata.name && config.debug) {
+    console.warn(`[auto-webmcp] tool name collision: "${metadata.name}" renamed to "${resolvedName}"`);
+  }
+  metadata.name = resolvedName;
 
   if (config.debug) {
     warnToolQuality(metadata.name, metadata.description);
@@ -76,6 +114,9 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
     '[type="submit"], button[data-variant="primary"], button:not([type])',
   ) ?? null;
   const pendingBtns = ((window as unknown as Record<string, unknown>)['__pendingSubmitBtns'] ??= {}) as Record<string, Element | null>;
+  if (previousName && previousName !== metadata.name) {
+    delete pendingBtns[previousName];
+  }
   pendingBtns[metadata.name] = formSubmitBtn;
 
   if (config.debug) {
@@ -86,12 +127,13 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
 }
 
 async function unregisterForm(form: HTMLFormElement, config: ResolvedConfig): Promise<void> {
-  const { getRegisteredToolName } = await import('./registry.js');
   const name = getRegisteredToolName(form);
   if (!name) return;
 
   await unregisterFormTool(form);
   registeredForms.delete(form);
+  const pendingBtns = (window as unknown as Record<string, unknown>)['__pendingSubmitBtns'] as Record<string, Element | null> | undefined;
+  if (pendingBtns) delete pendingBtns[name];
 
   if (config.debug) {
     console.log(`[auto-webmcp] Unregistered: ${name}`);
@@ -161,11 +203,48 @@ function scheduleReAnalysis(form: HTMLFormElement, config: ResolvedConfig): void
   );
 }
 
+function scheduleFormReAnalysisById(formId: string, config: ResolvedConfig): void {
+  const owner = document.getElementById(formId);
+  if (owner instanceof HTMLFormElement && registeredForms.has(owner)) {
+    scheduleReAnalysis(owner, config);
+  }
+}
+
+function resolveOwnerForm(el: Element): HTMLFormElement | null {
+  const closest = el.closest('form');
+  if (closest instanceof HTMLFormElement) return closest;
+  const explicitOwner = (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement).form;
+  if (explicitOwner instanceof HTMLFormElement) return explicitOwner;
+  const formId = el.getAttribute('form');
+  if (formId) {
+    const byId = document.getElementById(formId);
+    if (byId instanceof HTMLFormElement) return byId;
+  }
+  return null;
+}
+
 function startObserver(config: ResolvedConfig): void {
   if (observer) return;
 
   observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
+      if (mutation.type === 'attributes' && mutation.target instanceof Element) {
+        const target = mutation.target;
+        const ownerForm = resolveOwnerForm(target);
+        if (ownerForm && registeredForms.has(ownerForm)) {
+          scheduleReAnalysis(ownerForm, config);
+        } else if (target instanceof HTMLFormElement) {
+          void registerForm(target, config);
+        } else if (isInterestingNode(target) && !target.closest('form')) {
+          scheduleOrphanRescan(config);
+        }
+
+        if (mutation.attributeName === 'form' && mutation.oldValue) {
+          scheduleFormReAnalysisById(mutation.oldValue, config);
+        }
+        continue;
+      }
+
       for (const node of mutation.addedNodes) {
         if (!(node instanceof Element)) continue;
 
@@ -207,7 +286,12 @@ function startObserver(config: ResolvedConfig): void {
     }
   });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeOldValue: true,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -428,6 +512,16 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     console.log(`[auto-webmcp] orphan: submit button for group:`, submitBtn ? `"${submitBtn.textContent?.trim()}" disabled=${(submitBtn as HTMLButtonElement).disabled}` : 'none');
 
     const metadata = analyzeOrphanInputGroup(container, inputs, submitBtn);
+    // Same orphan group can be discovered repeatedly; skip duplicates by base name.
+    if (registeredOrphanToolNames.has(metadata.name)) {
+      console.log(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
+      continue;
+    }
+    const orphanName = ensureUniqueToolName(metadata.name);
+    if (orphanName !== metadata.name && config.debug) {
+      console.warn(`[auto-webmcp] orphan tool name collision: "${metadata.name}" renamed to "${orphanName}"`);
+    }
+    metadata.name = orphanName;
     console.log(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
 
     // Build key → element pairs for the execute handler
@@ -466,7 +560,10 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     }
 
     const toolName = metadata.name;
-    const execute = async (params: Record<string, unknown>): Promise<{ content: Array<{ type: 'text'; text: string }> }> => {
+    const execute = async (
+      params: Record<string, unknown>,
+      _client?: unknown,
+    ): Promise<{ content: Array<{ type: 'text'; text: string }> }> => {
       console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
       console.log(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map(p => p.key));
 
@@ -559,19 +656,15 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     };
 
     try {
-      // Skip tools that were already registered by a previous orphan scan
-      // (e.g. the same modal re-triggering the MutationObserver).
-      if (registeredOrphanToolNames.has(metadata.name)) {
-        console.log(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
-        continue;
-      }
-
       const toolDef: {
         name: string;
         description: string;
         inputSchema: JsonSchema;
         annotations?: ToolAnnotations;
-        execute: (params: Record<string, unknown>) => Promise<{ content: Array<{ type: 'text'; text: string }> }>;
+        execute: (
+          params: Record<string, unknown>,
+          client?: unknown,
+        ) => Promise<{ content: Array<{ type: 'text'; text: string }> }>;
       } = {
         name: metadata.name,
         description: metadata.description,

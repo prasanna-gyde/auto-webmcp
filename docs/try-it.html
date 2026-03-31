@@ -403,7 +403,7 @@
       <div class="note-box">
         <strong>CSP restriction:</strong> Sites marked <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> block loading scripts from external domains like unpkg.
         For those, download the IIFE locally first:
-        <code class="inline">curl -o awmcp.js https://unpkg.com/auto-webmcp@0.3.15/dist/auto-webmcp.iife.js</code>
+        <code class="inline">curl -o awmcp.js https://unpkg.com/auto-webmcp@0.3.16/dist/auto-webmcp.iife.js</code>
         Then open DevTools → Sources → drag the file in, or use the
         <a href="https://developer.chrome.com/docs/devtools/snippets" target="_blank" rel="noopener" style="color:var(--dark-green);text-decoration:underline;text-decoration-color:rgba(101,130,0,0.3)">Snippets</a>
         panel to paste and run a self-contained version.
@@ -458,7 +458,7 @@
       '    return h(params).then(function (r) { console.log("[awmcp result]", r); return r; });',
       '  };',
       '  function _load(src, cb) { var s = document.createElement("script"); s.src = src; if (cb) s.onload = cb; document.head.appendChild(s); }',
-      '  _load("https://unpkg.com/auto-webmcp@0.3.15/dist/auto-webmcp.iife.js", function () {',
+      '  _load("https://unpkg.com/auto-webmcp@0.3.16/dist/auto-webmcp.iife.js", function () {',
       '    _load("https://autowebmcp.dev/awmcp-panel.js");',
       '  });',
       '})();'
