@@ -1388,9 +1388,11 @@ function buildExecuteHandler(form, config, toolName, metadata) {
                 lastFilledSnapshot.delete(submitForm);
                 lastFilledSnapshot.delete(form);
                 preFillValues.delete(form);
+                const valErrors = structured.validation_errors ?? [];
+                const valSummary = valErrors.length > 0 ? ` Fix: ${valErrors.map((e) => `"${e.field}" (${e.message})`).join("; ")}.` : "";
                 resolve({
                   content: [
-                    { type: "text", text: "Form submission blocked by native validation." },
+                    { type: "text", text: `Form blocked by validation.${valSummary}` },
                     { type: "text", text: JSON.stringify(structured) }
                   ]
                 });
@@ -1442,12 +1444,20 @@ function attachSubmitInterceptor(form, toolName) {
       ],
       ...existingVals !== void 0 && { existing_values: existingVals }
     };
+    const notFilledFields = fillWarnings.filter((w) => w.type === "not_filled").map((w) => w.field);
+    const totalParams = Object.keys(lastParams.get(form) ?? {}).length;
+    const filledCount = Object.keys(formData).length;
     const allWarnMessages = [
-      ...missingRequired.length ? [`required fields were not filled: ${missingRequired.join(", ")}`] : [],
-      ...fillWarnings.map((w) => w.message)
+      ...missingRequired.length ? [`required fields not provided: ${missingRequired.join(", ")}`] : [],
+      ...notFilledFields.map((f) => {
+        const w = fillWarnings.find((fw) => fw.field === f);
+        return `"${f}" could not be filled (${w?.message ?? "no matching option"})`;
+      }),
+      ...fillWarnings.filter((w) => w.type !== "not_filled").map((w) => w.message)
     ];
-    const warningText = allWarnMessages.length ? ` Note: ${allWarnMessages.join("; ")}.` : "";
-    const text = `Form submitted. Fields: ${JSON.stringify(formData)}${warningText}`;
+    const warningText = allWarnMessages.length ? ` Issues: ${allWarnMessages.join("; ")}.` : "";
+    const fillSummary = notFilledFields.length > 0 || missingRequired.length > 0 ? `Filled ${filledCount} of ${totalParams} field(s).` : "Form submitted successfully.";
+    const text = `${fillSummary}${warningText} Fields: ${JSON.stringify(formData)}`;
     const result = {
       content: [
         { type: "text", text },
@@ -1955,7 +1965,7 @@ async function fillLookupInput(el, value) {
   });
   if (!listbox) {
     console.warn("[auto-webmcp] fillLookupInput: listbox did not appear after 3s, leaving text as-is");
-    return;
+    return false;
   }
   const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
   const shadowOptions = queryShadowAll(listbox, '[role="option"]');
@@ -1976,6 +1986,7 @@ async function fillLookupInput(el, value) {
     match.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    return true;
   } else {
     console.warn(
       "[auto-webmcp] fillLookupInput: no option matched",
@@ -1983,6 +1994,7 @@ async function fillLookupInput(el, value) {
       "available:",
       options.map((o) => o.getAttribute("data-value") ?? o.textContent?.trim())
     );
+    return false;
   }
 }
 async function fillComboboxButton(el, value) {
@@ -2027,7 +2039,7 @@ async function fillComboboxButton(el, value) {
   });
   if (!listbox) {
     console.warn("[auto-webmcp] fillComboboxButton: listbox did not appear after 3s");
-    return;
+    return false;
   }
   const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
   const shadowOptions = queryShadowAll(listbox, '[role="option"]');
@@ -2045,6 +2057,7 @@ async function fillComboboxButton(el, value) {
     match.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    return true;
   } else {
     console.warn(
       "[auto-webmcp] fillComboboxButton: no option matched",
@@ -2052,6 +2065,7 @@ async function fillComboboxButton(el, value) {
       "available:",
       options.map((o) => o.getAttribute("data-value") ?? o.textContent?.trim())
     );
+    return false;
   }
 }
 
@@ -2521,13 +2535,18 @@ async function scanOrphanInputs(config) {
     const execute = async (params, _client) => {
       console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
       console.log(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map((p) => p.key));
+      const notFilled = [];
       for (const { key, el } of inputPairs) {
         if (params[key] !== void 0) {
           console.log(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], "element=", el);
           if (el.getAttribute("role") === "combobox" && el.tagName.toLowerCase() === "input" && (el.getAttribute("aria-autocomplete") === "list" || el.getAttribute("aria-haspopup") === "listbox")) {
-            await fillLookupInput(el, params[key]);
+            const filled = await fillLookupInput(el, params[key]);
+            if (!filled)
+              notFilled.push(key);
           } else if (el.getAttribute("role") === "combobox" && el.tagName.toLowerCase() === "button") {
-            await fillComboboxButton(el, params[key]);
+            const filled = await fillComboboxButton(el, params[key]);
+            if (!filled)
+              notFilled.push(key);
           } else {
             fillElement(el, params[key]);
           }
@@ -2539,8 +2558,10 @@ async function scanOrphanInputs(config) {
       window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
       const shouldAutoSubmit = config.autoSubmit || !!submitBtn?.hasAttribute("toolautosubmit") || submitBtn instanceof HTMLElement && submitBtn.dataset["webmcpAutosubmit"] !== void 0 || container.hasAttribute("toolautosubmit") || container instanceof HTMLElement && container.dataset["webmcpAutosubmit"] !== void 0;
       if (!shouldAutoSubmit) {
+        const issueText = notFilled.length > 0 ? ` Could not fill: ${notFilled.map((f) => `"${f}" (no matching option)`).join(", ")}.` : "";
+        const readyText = notFilled.length > 0 ? `Fields partially filled.${issueText} Review in browser, then click Save.` : "Fields filled. Ready to submit.";
         console.log(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
-        return { content: [{ type: "text", text: "Fields filled. Ready to submit." }] };
+        return { content: [{ type: "text", text: readyText }] };
       }
       console.log(`[auto-webmcp] orphan execute: resolving submit button (up to 2s)...`);
       let btn = null;

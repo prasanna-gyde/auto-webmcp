@@ -690,6 +690,8 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
       console.log(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map(p => p.key));
 
+      const notFilled: string[] = [];
+
       for (const { key, el } of inputPairs) {
         if (params[key] !== undefined) {
           console.log(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], 'element=', el);
@@ -700,11 +702,13 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
             el.tagName.toLowerCase() === 'input' &&
             (el.getAttribute('aria-autocomplete') === 'list' || el.getAttribute('aria-haspopup') === 'listbox')
           ) {
-            await fillLookupInput(el, params[key]);
+            const filled = await fillLookupInput(el, params[key]);
+            if (!filled) notFilled.push(key);
           // button[role="combobox"] (Salesforce Lightning Stage, Atlaskit) requires async fill:
           // click to open listbox, wait for options to render, click the matching option.
           } else if (el.getAttribute('role') === 'combobox' && el.tagName.toLowerCase() === 'button') {
-            await fillComboboxButton(el, params[key]);
+            const filled = await fillComboboxButton(el, params[key]);
+            if (!filled) notFilled.push(key);
           } else {
             fillElement(el, params[key]);
           }
@@ -723,8 +727,14 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         (container instanceof HTMLElement && container.dataset['webmcpAutosubmit'] !== undefined);
 
       if (!shouldAutoSubmit) {
+        const issueText = notFilled.length > 0
+          ? ` Could not fill: ${notFilled.map((f) => `"${f}" (no matching option)`).join(', ')}.`
+          : '';
+        const readyText = notFilled.length > 0
+          ? `Fields partially filled.${issueText} Review in browser, then click Save.`
+          : 'Fields filled. Ready to submit.';
         console.log(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
-        return { content: [{ type: 'text', text: 'Fields filled. Ready to submit.' }] };
+        return { content: [{ type: 'text', text: readyText }] };
       }
 
       // Find the enabled submit button to click.

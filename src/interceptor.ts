@@ -473,9 +473,13 @@ export function buildExecuteHandler(
                 lastFilledSnapshot.delete(submitForm);
                 lastFilledSnapshot.delete(form);
                 preFillValues.delete(form);
+                const valErrors = structured.validation_errors ?? [];
+                const valSummary = valErrors.length > 0
+                  ? ` Fix: ${valErrors.map((e) => `"${e.field}" (${e.message})`).join('; ')}.`
+                  : '';
                 resolve({
                   content: [
-                    { type: 'text', text: 'Form submission blocked by native validation.' },
+                    { type: 'text', text: `Form blocked by validation.${valSummary}` },
                     { type: 'text', text: JSON.stringify(structured) },
                   ],
                 });
@@ -538,12 +542,22 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
       ...(existingVals !== undefined && { existing_values: existingVals }),
     };
 
+    const notFilledFields = fillWarnings.filter((w) => w.type === 'not_filled').map((w) => w.field);
+    const totalParams = Object.keys(lastParams.get(form) ?? {}).length;
+    const filledCount = Object.keys(formData).length;
     const allWarnMessages = [
-      ...(missingRequired.length ? [`required fields were not filled: ${missingRequired.join(', ')}`] : []),
-      ...fillWarnings.map((w) => w.message),
+      ...(missingRequired.length ? [`required fields not provided: ${missingRequired.join(', ')}`] : []),
+      ...notFilledFields.map((f) => {
+        const w = fillWarnings.find((fw) => fw.field === f);
+        return `"${f}" could not be filled (${w?.message ?? 'no matching option'})`;
+      }),
+      ...fillWarnings.filter((w) => w.type !== 'not_filled').map((w) => w.message),
     ];
-    const warningText = allWarnMessages.length ? ` Note: ${allWarnMessages.join('; ')}.` : '';
-    const text = `Form submitted. Fields: ${JSON.stringify(formData)}${warningText}`;
+    const warningText = allWarnMessages.length ? ` Issues: ${allWarnMessages.join('; ')}.` : '';
+    const fillSummary = notFilledFields.length > 0 || missingRequired.length > 0
+      ? `Filled ${filledCount} of ${totalParams} field(s).`
+      : 'Form submitted successfully.';
+    const text = `${fillSummary}${warningText} Fields: ${JSON.stringify(formData)}`;
     const result: ExecuteResult = {
       content: [
         { type: 'text', text },
@@ -1221,7 +1235,7 @@ function queryShadowAll(root: Element | ShadowRoot | Document, selector: string)
  *
  * Exported for use by the orphan execute handler in discovery.ts.
  */
-export async function fillLookupInput(el: Element, value: unknown): Promise<void> {
+export async function fillLookupInput(el: Element, value: unknown): Promise<boolean> {
   const text = String(value ?? '').trim();
   const input = el as HTMLInputElement;
   console.log('[auto-webmcp] fillLookupInput: typing value=', JSON.stringify(text));
@@ -1259,7 +1273,7 @@ export async function fillLookupInput(el: Element, value: unknown): Promise<void
 
   if (!listbox) {
     console.warn('[auto-webmcp] fillLookupInput: listbox did not appear after 3s, leaving text as-is');
-    return;
+    return false;
   }
 
   const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
@@ -1286,13 +1300,15 @@ export async function fillLookupInput(el: Element, value: unknown): Promise<void
     match.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return true;
   } else {
     console.warn('[auto-webmcp] fillLookupInput: no option matched', JSON.stringify(text),
       'available:', options.map((o) => (o.getAttribute('data-value') ?? o.textContent?.trim())));
+    return false;
   }
 }
 
-export async function fillComboboxButton(el: Element, value: unknown): Promise<void> {
+export async function fillComboboxButton(el: Element, value: unknown): Promise<boolean> {
   const text = String(value ?? '').trim();
   console.log('[auto-webmcp] fillComboboxButton: clicking button, value=', JSON.stringify(text));
 
@@ -1337,7 +1353,7 @@ export async function fillComboboxButton(el: Element, value: unknown): Promise<v
 
   if (!listbox) {
     console.warn('[auto-webmcp] fillComboboxButton: listbox did not appear after 3s');
-    return;
+    return false;
   }
 
   // Collect options from the listbox, including those inside its shadow DOM.
@@ -1360,8 +1376,10 @@ export async function fillComboboxButton(el: Element, value: unknown): Promise<v
     match.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return true;
   } else {
     console.warn('[auto-webmcp] fillComboboxButton: no option matched', JSON.stringify(text),
       'available:', options.map((o) => (o.getAttribute('data-value') ?? o.textContent?.trim())));
+    return false;
   }
 }

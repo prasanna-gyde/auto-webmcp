@@ -63,6 +63,6 @@ export declare function fillElement(el: HTMLInputElement | HTMLTextAreaElement |
  *
  * Exported for use by the orphan execute handler in discovery.ts.
  */
-export declare function fillLookupInput(el: Element, value: unknown): Promise<void>;
-export declare function fillComboboxButton(el: Element, value: unknown): Promise<void>;
+export declare function fillLookupInput(el: Element, value: unknown): Promise<boolean>;
+export declare function fillComboboxButton(el: Element, value: unknown): Promise<boolean>;
 //# sourceMappingURL=interceptor.d.ts.map
