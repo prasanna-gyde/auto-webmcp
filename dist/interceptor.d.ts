@@ -56,5 +56,13 @@ export interface StructuredExecuteData {
  */
 export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string, metadata?: ToolMetadata): (params: Record<string, unknown>, client?: unknown) => Promise<ExecuteResult>;
 export declare function fillElement(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | Element, value: unknown): void;
+/**
+ * Fill a lookup/typeahead input (e.g. Salesforce Account Name): type the search
+ * text, wait for a [role="listbox"] dropdown to appear, then click the best match.
+ * Used for <input role="combobox" aria-autocomplete="list"> elements.
+ *
+ * Exported for use by the orphan execute handler in discovery.ts.
+ */
+export declare function fillLookupInput(el: Element, value: unknown): Promise<void>;
 export declare function fillComboboxButton(el: Element, value: unknown): Promise<void>;
 //# sourceMappingURL=interceptor.d.ts.map

@@ -11,7 +11,7 @@ import {
   getAllRegisteredTools,
   getRegisteredToolName,
 } from './registry.js';
-import { buildExecuteHandler, fillElement, fillComboboxButton } from './interceptor.js';
+import { buildExecuteHandler, fillElement, fillComboboxButton, fillLookupInput } from './interceptor.js';
 import { ARIA_ROLES_TO_SCAN, JsonSchema } from './schema.js';
 
 // ---------------------------------------------------------------------------
@@ -693,9 +693,17 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       for (const { key, el } of inputPairs) {
         if (params[key] !== undefined) {
           console.log(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], 'element=', el);
-          // button[role="combobox"] (Salesforce Lightning, Atlaskit) requires async fill:
+          // input[role="combobox"] with autocomplete (Salesforce lookup fields): type to search,
+          // wait for listbox, click the matching result.
+          if (
+            el.getAttribute('role') === 'combobox' &&
+            el.tagName.toLowerCase() === 'input' &&
+            (el.getAttribute('aria-autocomplete') === 'list' || el.getAttribute('aria-haspopup') === 'listbox')
+          ) {
+            await fillLookupInput(el, params[key]);
+          // button[role="combobox"] (Salesforce Lightning Stage, Atlaskit) requires async fill:
           // click to open listbox, wait for options to render, click the matching option.
-          if (el.getAttribute('role') === 'combobox' && el.tagName.toLowerCase() === 'button') {
+          } else if (el.getAttribute('role') === 'combobox' && el.tagName.toLowerCase() === 'button') {
             await fillComboboxButton(el, params[key]);
           } else {
             fillElement(el, params[key]);

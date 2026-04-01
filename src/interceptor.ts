@@ -1214,6 +1214,84 @@ function queryShadowAll(root: Element | ShadowRoot | Document, selector: string)
   return results;
 }
 
+/**
+ * Fill a lookup/typeahead input (e.g. Salesforce Account Name): type the search
+ * text, wait for a [role="listbox"] dropdown to appear, then click the best match.
+ * Used for <input role="combobox" aria-autocomplete="list"> elements.
+ *
+ * Exported for use by the orphan execute handler in discovery.ts.
+ */
+export async function fillLookupInput(el: Element, value: unknown): Promise<void> {
+  const text = String(value ?? '').trim();
+  const input = el as HTMLInputElement;
+  console.log('[auto-webmcp] fillLookupInput: typing value=', JSON.stringify(text));
+
+  // Type the search text to trigger the async lookup.
+  setReactValue(input, text);
+  // Also fire keydown/keyup so LWC search handlers activate.
+  input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: text.slice(-1) || '' }));
+  input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: text.slice(-1) || '' }));
+
+  // Wait for a listbox to appear (same 3-priority search as fillComboboxButton).
+  const ariaControlsId = el.getAttribute('aria-controls') ?? el.getAttribute('aria-owns');
+
+  const listbox = await new Promise<Element | null>((resolve) => {
+    const deadline = Date.now() + 3000;
+    const poll = (): void => {
+      if (ariaControlsId) {
+        const byId = document.getElementById(ariaControlsId);
+        if (byId) { resolve(byId); return; }
+        const inShadow = queryShadowAll(document.body, `#${CSS.escape(ariaControlsId)}`)[0] ?? null;
+        if (inShadow) { resolve(inShadow); return; }
+      }
+      const lightCandidate =
+        document.querySelector('[role="listbox"]') ??
+        document.querySelector('[role="option"]')?.closest('[role="listbox"]') ??
+        null;
+      if (lightCandidate) { resolve(lightCandidate); return; }
+      const shadowCandidate = queryShadowAll(document.body, '[role="listbox"]')[0] ?? null;
+      if (shadowCandidate) { resolve(shadowCandidate); return; }
+      if (Date.now() >= deadline) { resolve(null); return; }
+      setTimeout(poll, 50);
+    };
+    poll();
+  });
+
+  if (!listbox) {
+    console.warn('[auto-webmcp] fillLookupInput: listbox did not appear after 3s, leaving text as-is');
+    return;
+  }
+
+  const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
+  const shadowOptions = queryShadowAll(listbox, '[role="option"]');
+  const options = lightOptions.length > 0 ? lightOptions : shadowOptions;
+  console.log('[auto-webmcp] fillLookupInput: listbox has', options.length, 'option(s)');
+
+  const lowerValue = text.toLowerCase();
+  // Try exact match first, then prefix/contains fallback for results with extra metadata text.
+  const match =
+    options.find((opt) => {
+      const dataValue = (opt.getAttribute('data-value') ?? '').toLowerCase();
+      const ariaLabel = (opt.getAttribute('aria-label') ?? '').toLowerCase();
+      const optText = (opt.textContent ?? '').trim().toLowerCase();
+      return dataValue === lowerValue || ariaLabel === lowerValue || optText === lowerValue;
+    }) ??
+    options.find((opt) => {
+      const optText = (opt.textContent ?? '').trim().toLowerCase();
+      return optText.startsWith(lowerValue) || optText.includes(lowerValue);
+    });
+
+  if (match) {
+    console.log('[auto-webmcp] fillLookupInput: selecting option', match.textContent?.trim());
+    match.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    match.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    match.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  } else {
+    console.warn('[auto-webmcp] fillLookupInput: no option matched', JSON.stringify(text),
+      'available:', options.map((o) => (o.getAttribute('data-value') ?? o.textContent?.trim())));
+  }
+}
+
 export async function fillComboboxButton(el: Element, value: unknown): Promise<void> {
   const text = String(value ?? '').trim();
   console.log('[auto-webmcp] fillComboboxButton: clicking button, value=', JSON.stringify(text));
