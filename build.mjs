@@ -3,6 +3,34 @@ import { execSync } from 'child_process';
 
 const watch = process.argv.includes('--watch');
 
+/** Country packs: src/packs/<id>.ts exporting one CountryPack as `exportName`. */
+const PACKS = [
+  { id: 'in', exportName: 'india' },
+  { id: 'us', exportName: 'unitedStates' },
+];
+
+const packTarget = ['chrome112', 'firefox115', 'safari16'];
+
+/** ESM + CJS per pack, and an IIFE that queues the pack for script-tag users. */
+function packBuilds() {
+  return PACKS.flatMap(({ id, exportName }) => [
+    esbuild.build({ entryPoints: [`src/packs/${id}.ts`], bundle: true, format: 'esm', target: packTarget, outfile: `dist/packs/${id}.esm.js` }),
+    esbuild.build({ entryPoints: [`src/packs/${id}.ts`], bundle: true, format: 'cjs', target: packTarget, outfile: `dist/packs/${id}.cjs.js` }),
+    esbuild.build({
+      stdin: {
+        contents: `import { ${exportName} } from './${id}.js';\n(window.__AUTO_WEBMCP_PACKS = window.__AUTO_WEBMCP_PACKS || []).push(${exportName});`,
+        resolveDir: 'src/packs',
+        loader: 'ts',
+      },
+      bundle: true,
+      format: 'iife',
+      minify: true,
+      target: packTarget,
+      outfile: `dist/packs/${id}.iife.js`,
+    }),
+  ]);
+}
+
 const sharedOptions = {
   entryPoints: ['src/index.ts'],
   bundle: true,
@@ -53,6 +81,7 @@ async function build() {
         outfile: 'dist/auto-webmcp.cjs.js',
         minify: false,
       }),
+      ...packBuilds(),
     ]);
     console.log('Build complete: dist/');
   }

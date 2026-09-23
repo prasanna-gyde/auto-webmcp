@@ -12,10 +12,12 @@
 import { AutoWebMCPConfig, resolveConfig } from './config.js';
 import { startDiscovery, stopDiscovery, unregisterOrphanTools } from './discovery.js';
 import { unregisterAll, getAllRegisteredTools, isWebMCPSupported } from './registry.js';
+import { setDebug } from './log.js';
 
 export type { AutoWebMCPConfig } from './config.js';
 export type { ToolMetadata } from './analyzer.js';
 export type { JsonSchema, JsonSchemaProperty } from './schema.js';
+export type { CountryPack, FieldRule, FieldAction } from './packs/types.js';
 
 export interface AutoWebMCPHandle {
   /** Stop observing and unregister all tools */
@@ -34,6 +36,7 @@ export interface AutoWebMCPHandle {
  */
 export async function autoWebMCP(config?: AutoWebMCPConfig): Promise<AutoWebMCPHandle> {
   const resolved = resolveConfig(config);
+  setDebug(resolved.debug);
 
   if (resolved.debug) {
     console.debug('[auto-webmcp] Initializing', {

@@ -161,18 +161,21 @@ test.describe('Checkout form', () => {
 
   test('uses data-webmcp-description attribute for description', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
-    expect(tools[0]?.['description']).toBe(
-      'Complete a purchase by providing shipping address and payment details',
+    expect(tools[0]?.['description']).toMatch(
+      /^Complete a purchase by providing shipping address and payment details/,
     );
   });
 
-  test('skips password field (none here) and hidden fields', async ({ page }) => {
+  test('blocks card fields and skips hidden fields', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
     const props = schema['properties'] as Record<string, unknown>;
 
-    // card_number has data-webmcp-title
-    expect(Object.keys(props)).toContain('card_number');
+    // Card data is entered by the user, never the agent
+    expect(Object.keys(props)).not.toContain('card_number');
+    expect(Object.keys(props)).not.toContain('card_expiry');
+    expect(Object.keys(props)).not.toContain('cvv');
+    expect(Object.keys(props)).toContain('promo_code');
 
     // No hidden or file fields
     expect(Object.keys(props)).not.toContain('__hidden');
@@ -186,12 +189,9 @@ test.describe('Checkout form', () => {
     expect(props['save_card']?.['type']).toBe('boolean');
   });
 
-  test('field with data-webmcp-title uses that as title', async ({ page }) => {
+  test('blocked field with data-webmcp-title is named in the description', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
-    const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
-    const props = schema['properties'] as Record<string, Record<string, unknown>>;
-
-    expect(props['card_number']?.['title']).toBe('Credit Card Number');
+    expect(tools[0]?.['description']).toContain('The user must enter: Credit Card Number');
   });
 });
 
@@ -1406,5 +1406,149 @@ test.describe('consequentialHint', () => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const book = tools.find((t) => t['name'] === 'book');
     expect(((book?.['annotations'] ?? {}) as Record<string, unknown>)['consequentialHint']).toBe(false);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Sensitive fields and country packs
+// ---------------------------------------------------------------------------
+
+type Tool = Record<string, unknown> & { inputSchema: { properties: Record<string, Record<string, unknown>> } };
+
+async function initSensitive(page: import('@playwright/test').Page, packs: string[], extra: Record<string, unknown> = {}) {
+  await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+  await page.addInitScript(() => {
+    (window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_NO_AUTOINIT'] = true;
+  });
+  await page.goto('/tests/fixtures/sensitive-form.html');
+  await page.evaluate(async ({ packs, extra }) => {
+    const mod = await import('/dist/auto-webmcp.esm.js');
+    const loaded = [];
+    for (const id of packs) {
+      const packMod = await import(`/dist/packs/${id}.esm.js`);
+      loaded.push(Object.values(packMod).find((v) => v && typeof v === 'object' && 'rules' in (v as object)));
+    }
+    await mod.autoWebMCP({ packs: loaded, ...extra });
+  }, { packs, extra });
+  const tools = await getRegisteredTools(page) as Tool[];
+  return {
+    kyc: tools.find((t) => (t['name'] as string).startsWith('save_details'))!,
+    payout: tools.find((t) => (t['name'] as string).startsWith('add_payout'))!,
+  };
+}
+
+async function runTool(page: import('@playwright/test').Page, name: string, params: Record<string, unknown>) {
+  const result = await page.evaluate(async ({ name, params }) => {
+    const handlers = (window as unknown as Record<string, Record<string, (p: unknown) => Promise<unknown>>>)['__executeHandlers'];
+    return handlers[name]!(params);
+  }, { name, params }) as { content: Array<{ text: string }> };
+  return { text: result.content[0]!.text, structured: JSON.parse(result.content[1]!.text) };
+}
+
+test.describe('Core sensitive-field rules (no packs)', () => {
+  test('blocks Aadhaar, OTP and password; keeps ordinary fields', async ({ page }) => {
+    const { kyc } = await initSensitive(page, []);
+    const keys = Object.keys(kyc.inputSchema.properties);
+    expect(keys).toContain('full_name');
+    expect(keys).not.toContain('aadhaar');
+    expect(keys).not.toContain('code');
+    expect(keys).not.toContain('password');
+    expect(keys).not.toContain('csrf_token');
+  });
+
+  test('tool is consequential and names the fields the user must enter', async ({ page }) => {
+    const { kyc } = await initSensitive(page, []);
+    expect((kyc['annotations'] as Record<string, unknown>)['consequentialHint']).toBe(true);
+    expect(kyc['description']).toContain('The user must enter: Aadhaar Number, Enter OTP');
+  });
+
+  test('SSN is blocked without the US pack', async ({ page }) => {
+    const { payout } = await initSensitive(page, []);
+    expect(Object.keys(payout.inputSchema.properties)).not.toContain('ssn');
+  });
+
+  test('data-webmcp-sensitive="allow" exposes a field core would block', async ({ page }) => {
+    const { kyc } = await initSensitive(page, []);
+    expect(Object.keys(kyc.inputSchema.properties)).toContain('referral_bsn');
+  });
+
+  test('results never include hidden, password or blocked values', async ({ page }) => {
+    const { kyc } = await initSensitive(page, [], { execution: { timeoutMs: 300 } });
+    const { structured } = await runTool(page, kyc['name'] as string, { full_name: 'Asha Rao' });
+    const serialized = JSON.stringify(structured);
+    expect(serialized).not.toContain('secret-csrf-123');
+    expect(serialized).not.toContain('hunter2');
+    expect(serialized).not.toContain('234567890123');
+    expect(structured.requires_user).toEqual(['Aadhaar Number', 'Enter OTP']);
+  });
+
+  test('data-webmcp-sensitive="redact" masks the value in results', async ({ page }) => {
+    const { kyc } = await initSensitive(page, [], { execution: { timeoutMs: 300 } });
+    const { structured } = await runTool(page, kyc['name'] as string, { full_name: 'Asha Rao' });
+    expect(structured.existing_values.loyalty_number).toBe('XXX-XXXX7766');
+  });
+});
+
+test.describe('India pack', () => {
+  test('adds formats for GSTIN, IFSC, PIN code and mobile', async ({ page }) => {
+    const { kyc } = await initSensitive(page, ['in']);
+    const props = kyc.inputSchema.properties;
+    expect(props['gstin']?.['pattern']).toBeDefined();
+    expect(props['ifsc']?.['pattern']).toBe('^[A-Za-z]{4}0[A-Za-z0-9]{6}$');
+    expect(props['pincode']?.['pattern']).toBe('^[1-9]\\d{5}$');
+    expect(props['mobile']?.['description']).toContain('Indian mobile');
+  });
+
+  test('"PIN Code" is a postal code, not a blocked secret PIN', async ({ page }) => {
+    const { kyc } = await initSensitive(page, ['in']);
+    expect(Object.keys(kyc.inputSchema.properties)).toContain('pincode');
+  });
+
+  test('PAN and UPI ID are exposed but masked in results', async ({ page }) => {
+    const { kyc } = await initSensitive(page, ['in'], { execution: { timeoutMs: 300 } });
+    expect(Object.keys(kyc.inputSchema.properties)).toContain('pan');
+    const { structured, text } = await runTool(page, kyc['name'] as string, { pan: 'ABCDE1234F', upi_id: 'asha@okbank' });
+    expect(structured.filled_fields.pan).toBe('XXXXXX234F');
+    expect(structured.filled_fields.upi_id).not.toContain('asha');
+    expect(text).not.toContain('ABCDE1234F');
+  });
+
+  test('invalid GSTIN checksum produces an invalid_format warning', async ({ page }) => {
+    const { kyc } = await initSensitive(page, ['in'], { execution: { timeoutMs: 300 } });
+    const bad = await runTool(page, kyc['name'] as string, { gstin: '27AAPFU0939F1ZX' });
+    expect(bad.structured.warnings.some((w: { type: string; field: string }) => w.type === 'invalid_format' && w.field === 'gstin')).toBe(true);
+    const good = await runTool(page, kyc['name'] as string, { gstin: '27AAPFU0939F1ZV' });
+    expect(good.structured.warnings.some((w: { type: string }) => w.type === 'invalid_format')).toBe(false);
+  });
+
+  test('pack queued on window.__AUTO_WEBMCP_PACKS is picked up', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.addInitScript(() => {
+      (window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_NO_AUTOINIT'] = true;
+    });
+    await page.goto('/tests/fixtures/sensitive-form.html');
+    await page.evaluate(async () => {
+      const packMod = await import('/dist/packs/in.esm.js');
+      (window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_PACKS'] = [packMod.india];
+      const mod = await import('/dist/auto-webmcp.esm.js');
+      await mod.autoWebMCP();
+    });
+    const tools = await getRegisteredTools(page) as Tool[];
+    const kyc = tools.find((t) => (t['name'] as string).startsWith('save_details'))!;
+    expect(kyc.inputSchema.properties['ifsc']?.['pattern']).toBeDefined();
+  });
+});
+
+test.describe('US pack', () => {
+  test('adds ZIP and routing formats; routing checksum is validated', async ({ page }) => {
+    const { payout } = await initSensitive(page, ['us'], { execution: { timeoutMs: 300 } });
+    const props = payout.inputSchema.properties;
+    expect(props['zip']?.['pattern']).toBe('^\\d{5}(-\\d{4})?$');
+    expect(props['routing_number']?.['pattern']).toBe('^\\d{9}$');
+    const bad = await runTool(page, payout['name'] as string, { routing_number: '021000022' });
+    expect(bad.structured.warnings.some((w: { type: string }) => w.type === 'invalid_format')).toBe(true);
+    const good = await runTool(page, payout['name'] as string, { routing_number: '021000021' });
+    expect(good.structured.warnings.some((w: { type: string }) => w.type === 'invalid_format')).toBe(false);
   });
 });

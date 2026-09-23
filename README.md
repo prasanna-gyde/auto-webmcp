@@ -216,6 +216,47 @@ Override any annotation with data attributes:
 
 ---
 
+## Sensitive fields and country packs
+
+Some fields should never be filled by an agent. auto-webmcp keeps them out of the tool schema, lists them in the description ("The user must enter: Card number"), marks the tool `consequentialHint`, and returns them in `requires_user` so the agent hands off to the user.
+
+**Always blocked (no configuration):** passwords, one-time codes, secret PINs (UPI PIN, MPIN, card PIN), security answers, card number, CVV and expiry, Aadhaar, US SSN, Singapore NRIC/FIN, Dutch BSN, Irish PPSN and Belgian national register numbers.
+
+Tool results only include fields the agent can see. Hidden inputs such as CSRF tokens and password values never leave the page.
+
+**Country packs** add redaction and format hints:
+
+```js
+import { autoWebMCP } from 'auto-webmcp';
+import { india } from 'auto-webmcp/packs/in';
+import { unitedStates } from 'auto-webmcp/packs/us';
+
+autoWebMCP({ packs: [india, unitedStates] });
+```
+
+```html
+<!-- Script tag: load packs before the core bundle -->
+<script src="https://unpkg.com/auto-webmcp@0.5.0/dist/packs/in.iife.js"></script>
+<script src="https://unpkg.com/auto-webmcp@0.5.0/dist/auto-webmcp.iife.js"></script>
+```
+
+| Pack | Redacted (masked in results) | Formatted (pattern + hint, checksum warnings) |
+|---|---|---|
+| `in` India | PAN, UPI ID, bank account, passport, voter ID, driving licence, ABHA, UAN | GSTIN, IFSC, TAN, CIN, PIN code, mobile |
+| `us` United States | ITIN, bank account, date of birth, driver's license, passport, Medicare MBI | ABA routing, EIN, NPI, ZIP, phone |
+
+Override any field:
+
+```html
+<input name="loyalty_no" data-webmcp-sensitive="redact">
+<input name="employee_bsn" data-webmcp-sensitive="allow">  <!-- site has a legal basis -->
+<input name="nickname" data-webmcp-sensitive="block">
+```
+
+This limits what auto-webmcp puts into the agent's context and logs. It cannot stop an agent that reads the page directly, so also send `Permissions-Policy: tools=()` on KYC and payment pages. Design notes and sources: [docs/design/country-packs.md](docs/design/country-packs.md).
+
+---
+
 ## Advanced discovery
 
 ### Shadow DOM (Web Components)
@@ -252,11 +293,12 @@ Every tool execution returns a two-item `content` array:
   "filled_fields": { "email": "a@b.com", "frequency": "weekly" },
   "skipped_fields": [],
   "missing_required": [],
-  "warnings": []
+  "warnings": [],
+  "requires_user": ["Card number"]
 }
 ```
 
-`status` is `"partial"` when required fields were missing or a value was clamped. Each warning in the `warnings` array has a `field`, `type` (`clamped`, `not_filled`, `missing_required`, `type_mismatch`), `message`, and optionally `original` / `actual` values.
+`status` is `"partial"` when required fields were missing or a value was clamped. Each warning in the `warnings` array has a `field`, `type` (`clamped`, `not_filled`, `missing_required`, `type_mismatch`, `invalid_format`), `message`, and optionally `original` / `actual` values. `requires_user` lists sensitive fields the user must complete.
 
 ---
 

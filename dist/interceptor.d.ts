@@ -24,7 +24,7 @@ export interface ExecuteResult {
 }
 export interface FillWarning {
     field: string;
-    type: 'clamped' | 'not_filled' | 'missing_required' | 'type_mismatch' | 'alias_resolved' | 'blocked_submit' | 'timeout';
+    type: 'clamped' | 'not_filled' | 'missing_required' | 'type_mismatch' | 'alias_resolved' | 'blocked_submit' | 'invalid_format' | 'timeout';
     message: string;
     original?: unknown;
     actual?: unknown;
@@ -45,6 +45,8 @@ export interface StructuredExecuteData {
     validation_errors?: ValidationError[];
     /** Field values captured from the form before the agent filled it. */
     existing_values?: Record<string, unknown>;
+    /** Sensitive fields the agent cannot fill; the user must complete them. */
+    requires_user?: string[];
 }
 /**
  * Build an `execute` function for a form tool.

@@ -1,6 +1,7 @@
 /**
- * config.ts — User configuration merging & defaults
+ * config.ts: User configuration merging & defaults
  */
+import type { CountryPack } from './packs/types.js';
 export interface FormOverride {
     name?: string;
     description?: string;
@@ -59,6 +60,12 @@ export interface AutoWebMCPConfig {
      */
     preserveExisting?: boolean;
     /**
+     * Country packs that redact personal identifiers and add format patterns,
+     * e.g. `import { india } from 'auto-webmcp/packs/in'`. Core safety rules
+     * (credentials, card data, restricted national IDs) apply without any pack.
+     */
+    packs?: CountryPack[];
+    /**
      * Log registered tools to console on init. Default: false
      */
     debug?: boolean;
@@ -76,6 +83,7 @@ export interface ResolvedConfig {
     };
     overrides: Record<string, FormOverride>;
     preserveExisting: boolean;
+    packs: CountryPack[];
     debug: boolean;
 }
 export declare function resolveConfig(userConfig?: AutoWebMCPConfig): ResolvedConfig;

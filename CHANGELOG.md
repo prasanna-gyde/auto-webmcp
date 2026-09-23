@@ -6,6 +6,36 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.0] - 2026-09-23
+
+### Security
+- Tool results only include fields in the tool schema. Hidden inputs (CSRF tokens) and password values were previously returned in `filled_fields` and `existing_values`.
+- Core sensitive-field rules, always on: passwords, one-time codes, secret PINs, security answers, card number, CVV and expiry, Aadhaar, US SSN, Singapore NRIC/FIN, Dutch BSN, Irish PPSN and Belgian national register numbers are never exposed to agents.
+- Tools with blocked or redacted fields get `consequentialHint`, list the fields in the description, and return them in `requires_user`.
+
+### New Features
+- Country packs: `auto-webmcp/packs/in` (India) and `auto-webmcp/packs/us` (United States). Redact personal identifiers in results; add JSON Schema patterns and hints; checksum warnings (`invalid_format`) for GSTIN, ABA routing, EIN and NPI.
+- IIFE pack bundles (`dist/packs/<id>.iife.js`) queue themselves on `window.__AUTO_WEBMCP_PACKS`.
+- `data-webmcp-sensitive="allow|redact|block"` per-field override.
+
+### Changed
+- Console logging is silent unless `debug: true`.
+- `package.json` exports list `types` first so TypeScript resolves declarations.
+
+## [0.4.0] - 2026-09-23
+
+### Changed (breaking)
+- Registers on `document.modelContext` (falls back to `navigator.modelContext`); unregisters by aborting the registration signal.
+- Select, radio and datalist schemas use `anyOf` with `{ type, const, title }` instead of `oneOf`.
+- Inferred tool names are capped at 30 characters; `outputSchema` is no longer sent.
+
+### New Features
+- `consequentialHint` inference, tool `title`, execute honours the agent's `AbortSignal` (`status: "cancelled"`), debug warnings for Chrome character budgets.
+
+Releases 0.3.16 to 0.3.24 are described in their commit messages.
+
+---
+
 ## [0.3.15] — 2026-03-31
 
 ### New Features

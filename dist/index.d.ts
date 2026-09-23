@@ -12,6 +12,7 @@ import { AutoWebMCPConfig } from './config.js';
 export type { AutoWebMCPConfig } from './config.js';
 export type { ToolMetadata } from './analyzer.js';
 export type { JsonSchema, JsonSchemaProperty } from './schema.js';
+export type { CountryPack, FieldRule, FieldAction } from './packs/types.js';
 export interface AutoWebMCPHandle {
     /** Stop observing and unregister all tools */
     destroy: () => Promise<void>;
