@@ -495,7 +495,9 @@ function withRequiresUser(description, policy) {
   if (policy.blocked.length === 0)
     return description;
   const labels = policy.blocked.map((b) => b.label).join(", ");
-  return `${description} The user must enter: ${labels}.`;
+  const base = description.trim();
+  const sep = /[.!?]$/.test(base) ? " " : ". ";
+  return `${base}${sep}The user must enter: ${labels}.`;
 }
 function inferToolTitle(form) {
   const raw = form.dataset["webmcpToolTitle"] || getNearestHeadingText(form) || getSubmitButtonText(form);

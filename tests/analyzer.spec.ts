@@ -1460,7 +1460,7 @@ test.describe('Core sensitive-field rules (no packs)', () => {
   test('tool is consequential and names the fields the user must enter', async ({ page }) => {
     const { kyc } = await initSensitive(page, []);
     expect((kyc['annotations'] as Record<string, unknown>)['consequentialHint']).toBe(true);
-    expect(kyc['description']).toContain('The user must enter: Aadhaar Number, Enter OTP');
+    expect(kyc['description']).toBe('Merchant KYC: KYC and Payout Details. The user must enter: Aadhaar Number, Enter OTP.');
   });
 
   test('SSN is blocked without the US pack', async ({ page }) => {

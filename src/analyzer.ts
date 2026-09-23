@@ -115,7 +115,9 @@ function applySensitiveAnnotations(annotations: ToolAnnotations, policy: Sensiti
 function withRequiresUser(description: string, policy: SensitivePolicy): string {
   if (policy.blocked.length === 0) return description;
   const labels = policy.blocked.map((b) => b.label).join(', ');
-  return `${description} The user must enter: ${labels}.`;
+  const base = description.trim();
+  const sep = /[.!?]$/.test(base) ? ' ' : '. ';
+  return `${base}${sep}The user must enter: ${labels}.`;
 }
 
 function inferToolTitle(form: HTMLFormElement): string {
