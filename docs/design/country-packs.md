@@ -1,6 +1,6 @@
 # Sensitive fields and country packs
 
-Status: shipped in v0.5.0 (core rules, India and US packs). Planned: Singapore and UK (0.5.x), EU shared rules plus DE, FR, IT, ES, NL (0.6.0).
+Status: core rules, India and US packs shipped in v0.5.0; Singapore and UK packs in v0.7.0. Planned: EU shared rules (IBAN, BIC, VAT) plus DE, FR, IT, ES, NL.
 
 ## Principle
 
@@ -74,6 +74,32 @@ Detection needs a matching label, name, placeholder or autocomplete token. HTML 
 | ZIP / ZIP+4 | format | `^\d{5}(-\d{4})?$` |
 | Phone (NANP) | format | |
 
+## Singapore pack (`auto-webmcp/packs/sg`)
+
+NRIC/FIN is a core block (PDPC NRIC Advisory Guidelines), so the pack has no NRIC check-letter code. Singpass credentials are covered by the core password and OTP rules.
+
+| Field | Tier | Format |
+|---|---|---|
+| Passport, date of birth | redact | |
+| UEN | format | `nnnnnnnnX`, `yyyynnnnnX` or `TyyPQnnnnX` (check letter algorithm not published, so pattern only) |
+| Postal code | format | `^\d{6}$` |
+| Phone | format | 8 digits starting 3, 6, 8 or 9, optional +65 |
+
+## UK pack (`auto-webmcp/packs/gb`)
+
+| Field | Tier | Format |
+|---|---|---|
+| National Insurance number | redact | HMRC NIM39110 prefixes (no D, F, I, Q, U, V first; no BG, GB, KN, NK, NT, TN, ZZ); suffix A to D |
+| NHS number | redact | 10 digits, mod 11 check (weights 10 to 2) |
+| UTR, bank account (8 digits), passport (9 digits), driving licence, date of birth | redact | |
+| Sort code | format | `nn-nn-nn` |
+| Company number | format | 8 digits or 2 letters plus 6 digits |
+| UK VAT | format | 9 or 12 digits, mod 97 or mod 9755 check; GD and HA formats |
+| Postcode | format | Royal Mail format including GIR 0AA |
+| Phone | format | +44 or 0, then 9 to 10 digits |
+
+Validators were checked on published test numbers: NHS 943 476 5919, UK VAT GB999999973.
+
 ## Usage
 
 ```js
@@ -86,8 +112,8 @@ autoWebMCP({ packs: [india] });
 Script tag: load the pack before the core bundle.
 
 ```html
-<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/packs/in.iife.js"></script>
-<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/auto-webmcp.iife.js"></script>
+<script src="https://unpkg.com/auto-webmcp@0.7.0/dist/packs/in.iife.js"></script>
+<script src="https://unpkg.com/auto-webmcp@0.7.0/dist/auto-webmcp.iife.js"></script>
 ```
 
 ## Open questions

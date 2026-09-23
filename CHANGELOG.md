@@ -6,6 +6,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.7.0] - 2026-09-23
+
+### New Features
+- Singapore pack (`auto-webmcp/packs/sg`, `dist/packs/sg.iife.js`): formats UEN, postal code and phone; redacts passport and date of birth. NRIC/FIN remains a core block.
+- UK pack (`auto-webmcp/packs/gb`, `dist/packs/gb.iife.js`): redacts National Insurance number, NHS number (mod 11 check), UTR, bank account, passport, driving licence and date of birth; formats sort code, company number, UK VAT (mod 97 / 9755 check), postcode and phone.
+
 ## [0.6.0] - 2026-09-23
 
 ### New Features
