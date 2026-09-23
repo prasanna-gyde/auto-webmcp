@@ -56,7 +56,8 @@ export interface StructuredExecuteData {
     | 'error'
     | 'awaiting_user_action'
     | 'timed_out'
-    | 'blocked_invalid';
+    | 'blocked_invalid'
+    | 'cancelled';
   filled_fields: Record<string, unknown>;
   skipped_fields: string[];
   missing_required: string[];
@@ -67,8 +68,30 @@ export interface StructuredExecuteData {
   existing_values?: Record<string, unknown>;
 }
 
-interface ModelContextClientLike {
+/**
+ * Second argument to execute(). The current spec passes `{ signal }`; legacy Chrome
+ * builds passed a client object exposing requestUserInteraction().
+ */
+interface ExecuteOptionsLike {
+  signal?: AbortSignal;
   requestUserInteraction?: <T>(callback: () => Promise<T>) => Promise<T>;
+}
+
+function cancelledResult(toolName: string, reason: string): ExecuteResult {
+  window.dispatchEvent(new CustomEvent('toolcancel', { detail: { toolName } }));
+  const structured: StructuredExecuteData = {
+    status: 'cancelled',
+    filled_fields: {},
+    skipped_fields: [],
+    missing_required: [],
+    warnings: [],
+  };
+  return {
+    content: [
+      { type: 'text', text: `Cancelled "${toolName}": ${reason}.` },
+      { type: 'text', text: JSON.stringify(structured) },
+    ],
+  };
 }
 
 type Resolver = (result: ExecuteResult) => void;
@@ -281,7 +304,7 @@ export function buildExecuteHandler(
   config: ResolvedConfig,
   toolName: string,
   metadata?: ToolMetadata,
-): (params: Record<string, unknown>, client?: unknown) => Promise<ExecuteResult> {
+): (params: Record<string, unknown>, options?: unknown) => Promise<ExecuteResult> {
   // Store field element map for this form
   if (metadata?.fieldElements) {
     formFieldElements.set(form, metadata.fieldElements);
@@ -290,23 +313,25 @@ export function buildExecuteHandler(
   // Attach submit/reset listeners once per form
   attachSubmitInterceptor(form, toolName);
 
-  return async (params: Record<string, unknown>, client?: unknown): Promise<ExecuteResult> => {
-    const modelContextClient = client as ModelContextClientLike | undefined;
+  return async (params: Record<string, unknown>, options?: unknown): Promise<ExecuteResult> => {
+    const execOptions = (options ?? undefined) as ExecuteOptionsLike | undefined;
+    const signal = execOptions?.signal instanceof AbortSignal ? execOptions.signal : undefined;
+    if (signal?.aborted) return cancelledResult(toolName, 'aborted by the agent');
+
+    const annotations = metadata?.annotations;
+    const isHighStakes = annotations?.consequentialHint === true || annotations?.destructiveHint === true;
     if (
       config.autoSubmit &&
-      metadata?.annotations?.destructiveHint === true &&
-      typeof modelContextClient?.requestUserInteraction === 'function'
+      isHighStakes &&
+      typeof execOptions?.requestUserInteraction === 'function'
     ) {
-      const approved = await modelContextClient.requestUserInteraction(async () => {
+      const approved = await execOptions.requestUserInteraction(async () => {
         return new Promise<boolean>((resolve) => {
-          const ok = window.confirm(`Agent requested a destructive action via "${toolName}". Continue?`);
+          const ok = window.confirm(`Agent requested a high-stakes action via "${toolName}". Continue?`);
           resolve(ok);
         });
       });
-      if (!approved) {
-        window.dispatchEvent(new CustomEvent('toolcancel', { detail: { toolName } }));
-        return { content: [{ type: 'text', text: `Cancelled "${toolName}" by user.` }] };
-      }
+      if (!approved) return cancelledResult(toolName, 'declined by user');
     }
 
     pendingFillWarnings.set(form, []);
@@ -398,6 +423,19 @@ export function buildExecuteHandler(
         });
       }, timeoutMs);
       pendingExecutions.set(form, { resolve, reject, timeoutId });
+
+      // Spec: the agent may abort an in-flight call. Stop waiting and report it.
+      signal?.addEventListener('abort', () => {
+        const pending = pendingExecutions.get(form);
+        if (!pending || pending.resolve !== resolve) return;
+        if (pending.timeoutId) clearTimeout(pending.timeoutId);
+        pendingExecutions.delete(form);
+        pendingWarnings.delete(form);
+        pendingFillWarnings.delete(form);
+        lastFilledSnapshot.delete(form);
+        preFillValues.delete(form);
+        resolve(cancelledResult(toolName, 'aborted by the agent'));
+      }, { once: true });
 
       if (
         config.autoSubmit ||

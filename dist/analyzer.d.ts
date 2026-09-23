@@ -1,16 +1,24 @@
 /**
- * analyzer.ts — Infer tool name, description, and JSON Schema from form DOM
+ * analyzer.ts: Infer tool name, description, and JSON Schema from form DOM
  */
 import { JsonSchema } from './schema.js';
 import { FormOverride } from './config.js';
 export interface ToolAnnotations {
+    /** WebMCP spec: the tool does not modify state. */
     readOnlyHint?: boolean;
+    /** WebMCP spec: the tool performs a high-stakes action (payment, booking, deletion). */
+    consequentialHint?: boolean;
+    /** WebMCP spec: the tool output may contain untrusted content. */
+    untrustedContentHint?: boolean;
+    /** MCP hints, kept for MCP bridges. Ignored by WebMCP browsers. */
     destructiveHint?: boolean;
     idempotentHint?: boolean;
     openWorldHint?: boolean;
 }
 export interface ToolMetadata {
     name: string;
+    /** Human-readable label for browser UIs (spec `title`). */
+    title?: string;
     description: string;
     inputSchema: JsonSchema;
     annotations?: ToolAnnotations;

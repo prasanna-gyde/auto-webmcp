@@ -134,7 +134,8 @@ function buildStringSchema(input) {
       );
       if (options.length > 0) {
         prop.enum = options.map((o) => o.value.trim());
-        prop.oneOf = options.map((o) => ({
+        prop.anyOf = options.map((o) => ({
+          type: "string",
           const: o.value.trim(),
           title: o.textContent?.trim() || o.value.trim()
         }));
@@ -153,7 +154,7 @@ function isPlaceholderOption(opt) {
 }
 function mapSelectElement(select) {
   const enumValues = [];
-  const oneOf = [];
+  const anyOf = [];
   for (const child of Array.from(select.children)) {
     if (child instanceof HTMLOptGroupElement) {
       if (child.disabled)
@@ -166,18 +167,19 @@ function mapSelectElement(select) {
           continue;
         enumValues.push(opt.value);
         const entry = {
+          type: "string",
           const: opt.value,
           title: opt.text.trim() || opt.value
         };
         if (groupLabel)
           entry.group = groupLabel;
-        oneOf.push(entry);
+        anyOf.push(entry);
       }
     } else if (child instanceof HTMLOptionElement) {
       if (isPlaceholderOption(child))
         continue;
       enumValues.push(child.value);
-      oneOf.push({ const: child.value, title: child.text.trim() || child.value });
+      anyOf.push({ type: "string", const: child.value, title: child.text.trim() || child.value });
     }
   }
   if (enumValues.length === 0)
@@ -185,7 +187,7 @@ function mapSelectElement(select) {
   if (select.multiple) {
     return { type: "array", items: { type: "string", enum: enumValues } };
   }
-  return { type: "string", enum: enumValues, oneOf };
+  return { type: "string", enum: enumValues, anyOf };
 }
 function collectCheckboxEnum(form, name) {
   return Array.from(form.elements).filter(
@@ -198,13 +200,13 @@ function collectRadioEnum(form, name) {
   );
   return radios.map((r) => r.value).filter((v) => v !== "");
 }
-function collectRadioOneOf(form, name) {
+function collectRadioAnyOf(form, name) {
   const radios = Array.from(form.elements).filter(
     (el) => el instanceof HTMLInputElement && el.type === "radio" && el.name === name
   ).filter((r) => r.value !== "");
   return radios.map((r) => {
     const title = getRadioLabelText(r);
-    return { const: r.value, title: title || r.value };
+    return { type: "string", const: r.value, title: title || r.value };
   });
 }
 function ariaRoleToSchema(el, role) {
@@ -233,11 +235,12 @@ function ariaRoleToSchema(el, role) {
           );
           if (options.length > 0) {
             const enumValues = options.map((o) => (o.getAttribute("data-value") ?? o.textContent ?? "").trim()).filter(Boolean);
-            const oneOf = options.map((o) => ({
+            const anyOf = options.map((o) => ({
+              type: "string",
               const: (o.getAttribute("data-value") ?? o.textContent ?? "").trim(),
               title: (o.textContent ?? "").trim()
             }));
-            return { type: "string", enum: enumValues, oneOf };
+            return { type: "string", enum: enumValues, anyOf };
           }
         }
       }
@@ -277,7 +280,12 @@ function analyzeForm(form, override) {
   const description = override?.description ?? inferToolDescription(form);
   const { schema: inputSchema, fieldElements } = buildSchema(form);
   const annotations = inferAnnotations(form);
-  return { name, description, inputSchema, annotations, fieldElements };
+  const title = inferToolTitle(form);
+  return { name, ...title && { title }, description, inputSchema, annotations, fieldElements };
+}
+function inferToolTitle(form) {
+  const raw = form.dataset["webmcpToolTitle"] || getNearestHeadingText(form) || getSubmitButtonText(form);
+  return raw.replace(/\s+/g, " ").trim().slice(0, 60);
 }
 function inferToolName(form) {
   const nativeName = form.getAttribute("toolname");
@@ -303,8 +311,17 @@ function inferToolName(form) {
   }
   return `form_${++formIndex}`;
 }
+var MAX_TOOL_NAME_LENGTH = 30;
 function sanitizeName(raw) {
-  return raw.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "form";
+  const name = raw.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return truncateAtWord(name, MAX_TOOL_NAME_LENGTH) || "form";
+}
+function truncateAtWord(name, max) {
+  if (name.length <= max)
+    return name;
+  const cut = name.slice(0, max);
+  const lastSep = cut.lastIndexOf("_");
+  return (lastSep > 0 ? cut.slice(0, lastSep) : cut).replace(/_+$/, "");
 }
 function getSubmitButtonText(form) {
   const buttons = [
@@ -377,8 +394,18 @@ function inferToolDescription(form) {
 var READONLY_BUTTON_PATTERNS = /^(search|find|look|filter|browse|view|show|check|preview|get|fetch|retrieve|load)\b/i;
 var DESTRUCTIVE_BUTTON_PATTERNS = /^(delete|remove|cancel|terminate|destroy|purge|revoke|unsubscribe|deactivate)\b/i;
 var DESTRUCTIVE_URL_PATTERNS = /\/(delete|remove|cancel|destroy)\b/i;
+var CONSEQUENTIAL_BUTTON_PATTERNS = /^(pay|buy|purchase|place\s+(an\s+)?order|check\s?out|complete\s+(order|purchase|payment)|confirm\s+(order|purchase|payment|booking)|book|reserve|transfer|send\s+money|donate|withdraw)\b/i;
+var PAYMENT_FIELD_SELECTOR = 'input[autocomplete^="cc-"], input[autocomplete*=" cc-"]';
+function isConsequential(submitText, destructive, root) {
+  if (destructive)
+    return true;
+  if (submitText && CONSEQUENTIAL_BUTTON_PATTERNS.test(submitText.trim()))
+    return true;
+  return !!root?.querySelector(PAYMENT_FIELD_SELECTOR);
+}
 function inferAnnotations(form) {
   const annotations = {};
+  const hasPaymentFields = !!form.querySelector(PAYMENT_FIELD_SELECTOR);
   if (form.dataset["webmcpReadonly"] !== void 0) {
     annotations.readOnlyHint = form.dataset["webmcpReadonly"] !== "false";
   }
@@ -391,11 +418,14 @@ function inferAnnotations(form) {
   if (form.dataset["webmcpOpenworld"] !== void 0) {
     annotations.openWorldHint = form.dataset["webmcpOpenworld"] !== "false";
   }
+  if (form.dataset["webmcpConsequential"] !== void 0) {
+    annotations.consequentialHint = form.dataset["webmcpConsequential"] !== "false";
+  }
   if (annotations.readOnlyHint === void 0) {
     const isGet = form.method.toLowerCase() === "get";
     const submitText = getSubmitButtonText(form);
     const isReadLabel = submitText ? READONLY_BUTTON_PATTERNS.test(submitText.trim()) : false;
-    if (isGet || isReadLabel)
+    if ((isGet || isReadLabel) && !hasPaymentFields)
       annotations.readOnlyHint = true;
   }
   if (annotations.destructiveHint === void 0) {
@@ -405,15 +435,20 @@ function inferAnnotations(form) {
     if (isDestructiveLabel || isDestructiveUrl)
       annotations.destructiveHint = true;
   }
+  if (annotations.consequentialHint === void 0 && annotations.readOnlyHint !== true) {
+    if (isConsequential(getSubmitButtonText(form), annotations.destructiveHint === true, form)) {
+      annotations.consequentialHint = true;
+    }
+  }
   if (annotations.idempotentHint === void 0) {
-    if (annotations.readOnlyHint === true || form.method.toLowerCase() === "get") {
+    if (annotations.readOnlyHint === true || form.method.toLowerCase() === "get" && !hasPaymentFields) {
       annotations.idempotentHint = true;
     }
   }
   if (annotations.openWorldHint === void 0) {
     annotations.openWorldHint = annotations.readOnlyHint !== true;
   }
-  const hasNonDefault = annotations.readOnlyHint === true || annotations.destructiveHint === true || annotations.idempotentHint === true || annotations.openWorldHint === false;
+  const hasNonDefault = annotations.readOnlyHint === true || annotations.consequentialHint === true || annotations.destructiveHint === true || annotations.idempotentHint === true || annotations.openWorldHint === false;
   return hasNonDefault ? annotations : {};
 }
 function extractDefaultValue(control) {
@@ -509,9 +544,9 @@ function buildSchema(form) {
       schemaProp.default = defaultVal;
     if (control instanceof HTMLInputElement && control.type === "radio") {
       schemaProp.enum = collectRadioEnum(form, fieldKey);
-      const radioOneOf = collectRadioOneOf(form, fieldKey);
-      if (radioOneOf.length > 0)
-        schemaProp.oneOf = radioOneOf;
+      const radioAnyOf = collectRadioAnyOf(form, fieldKey);
+      if (radioAnyOf.length > 0)
+        schemaProp.anyOf = radioAnyOf;
       const checkedRadio = Array.from(form.elements).find(
         (el) => el instanceof HTMLInputElement && el.type === "radio" && el.name === fieldKey && el.checked
       );
@@ -563,7 +598,7 @@ function buildSchema(form) {
   }
   const ariaControls = collectAriaControls(form);
   const processedAriaRadioGroups = /* @__PURE__ */ new Set();
-  for (const { el, role, key, enumValues, enumOneOf } of ariaControls) {
+  for (const { el, role, key, enumValues, enumAnyOf } of ariaControls) {
     if (properties[key])
       continue;
     if (role === "radio") {
@@ -574,8 +609,8 @@ function buildSchema(form) {
     const schemaProp = ariaRoleToSchema(el, role);
     if (enumValues && enumValues.length > 0) {
       schemaProp.enum = enumValues;
-      if (enumOneOf && enumOneOf.length > 0)
-        schemaProp.oneOf = enumOneOf;
+      if (enumAnyOf && enumAnyOf.length > 0)
+        schemaProp.anyOf = enumAnyOf;
     }
     schemaProp.title = inferAriaFieldTitle(el);
     const desc = inferAriaFieldDescription(el);
@@ -683,13 +718,13 @@ function collectAriaControls(form) {
     if (!groupKey)
       continue;
     const enumValues = members.map((el) => (el.getAttribute("data-value") ?? el.getAttribute("aria-label") ?? el.textContent ?? "").trim()).filter(Boolean);
-    const enumOneOf = members.map((el) => {
+    const enumAnyOf = members.map((el) => {
       const val = (el.getAttribute("data-value") ?? el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
       const title = (el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
-      return { const: val, title: title || val };
+      return { type: "string", const: val, title: title || val };
     }).filter((e) => e.const !== "");
     if (enumValues.length > 0) {
-      groupedEntries.push({ el: group, role: "radio", key: groupKey, enumValues, enumOneOf });
+      groupedEntries.push({ el: group, role: "radio", key: groupKey, enumValues, enumAnyOf });
     }
   }
   return [...nonRadioEntries, ...groupedEntries, ...ungroupedRadios];
@@ -876,10 +911,13 @@ function inferOrphanAnnotations(submitBtn) {
   if (DESTRUCTIVE_BUTTON_PATTERNS.test(submitText)) {
     annotations.destructiveHint = true;
   }
+  if (annotations.readOnlyHint !== true && isConsequential(submitText, annotations.destructiveHint === true, null)) {
+    annotations.consequentialHint = true;
+  }
   if (annotations.readOnlyHint !== true) {
     annotations.openWorldHint = true;
   }
-  const hasNonDefault = annotations.readOnlyHint === true || annotations.destructiveHint === true || annotations.idempotentHint === true || annotations.openWorldHint === false;
+  const hasNonDefault = annotations.readOnlyHint === true || annotations.consequentialHint === true || annotations.destructiveHint === true || annotations.idempotentHint === true || annotations.openWorldHint === false;
   return hasNonDefault ? annotations : {};
 }
 function inferOrphanToolName(container, submitBtn) {
@@ -1000,103 +1038,84 @@ function buildSchemaFromInputs(inputs) {
 }
 
 // src/registry.ts
-var EXECUTE_OUTPUT_SCHEMA = {
-  type: "object",
-  properties: {
-    status: {
-      type: "string",
-      enum: ["success", "partial", "error", "awaiting_user_action", "timed_out", "blocked_invalid"],
-      description: "Outcome of the form execution."
-    },
-    filled_fields: {
-      type: "object",
-      description: "Field name to submitted value map."
-    },
-    skipped_fields: {
-      type: "array",
-      items: { type: "string" },
-      description: "Fields the agent provided but that could not be filled."
-    },
-    missing_required: {
-      type: "array",
-      items: { type: "string" },
-      description: "Required fields not supplied by the agent."
-    },
-    validation_errors: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          field: { type: "string" },
-          constraint: { type: "string", description: "HTML ValidityState key that failed." },
-          message: { type: "string" }
-        },
-        required: ["field", "constraint", "message"]
-      },
-      description: "Per-field HTML5 validation failures (present when status is blocked_invalid)."
-    },
-    existing_values: {
-      type: "object",
-      description: "Field values present in the form before the agent filled it."
-    },
-    warnings: {
-      type: "array",
-      items: { type: "object" },
-      description: "Non-fatal fill warnings (alias_resolved, clamped, not_filled, etc.)."
-    }
-  },
-  required: ["status", "filled_fields", "skipped_fields", "missing_required", "warnings"]
-};
 var registeredTools = /* @__PURE__ */ new Map();
 var registrationControllers = /* @__PURE__ */ new Map();
-function isWebMCPSupported() {
-  return typeof navigator !== "undefined" && typeof navigator.modelContext !== "undefined";
+function getModelContext() {
+  if (typeof document !== "undefined" && document.modelContext)
+    return document.modelContext;
+  if (typeof navigator !== "undefined" && navigator.modelContext)
+    return navigator.modelContext;
+  return null;
 }
-async function registerFormTool(form, metadata, execute) {
+function isWebMCPSupported() {
+  return getModelContext() !== null;
+}
+async function registerToolDefinition(toolDef, debug = false) {
+  const ctx = getModelContext();
+  if (!ctx)
+    return null;
+  const controller = new AbortController();
+  try {
+    await ctx.registerTool(toolDef, { signal: controller.signal });
+    return controller;
+  } catch (err) {
+    if (isDuplicateNameError(err) && typeof ctx.unregisterTool === "function") {
+      try {
+        await ctx.unregisterTool(toolDef.name);
+        await ctx.registerTool(toolDef, { signal: controller.signal });
+        return controller;
+      } catch (retryErr) {
+        err = retryErr;
+      }
+    }
+    if (debug)
+      warnRegistrationError(toolDef.name, err);
+    return null;
+  }
+}
+async function unregisterToolDefinition(name, controller) {
+  controller?.abort();
+  try {
+    await getModelContext()?.unregisterTool?.(name);
+  } catch {
+  }
+}
+function isDuplicateNameError(err) {
+  return err instanceof DOMException && err.name === "InvalidStateError";
+}
+function warnRegistrationError(name, err) {
+  const kind = err instanceof DOMException ? err.name : "";
+  const hint = kind === "NotAllowedError" ? ' The "tools" Permissions Policy blocks this document (cross-origin iframes need allow="tools").' : kind === "SecurityError" ? " WebMCP requires an origin-keyed agent cluster (is document.domain set?)." : kind === "InvalidStateError" ? " Check for a duplicate name, an invalid name (allowed: A-Z a-z 0-9 _ - .), or an empty description." : "";
+  console.warn(`[auto-webmcp] registerTool("${name}") failed: ${String(err)}.${hint}`);
+}
+async function registerFormTool(form, metadata, execute, debug = false) {
   if (!isWebMCPSupported())
     return;
-  const existing = registeredTools.get(form);
-  if (existing) {
+  if (registeredTools.has(form)) {
     await unregisterFormTool(form);
   }
   const toolDef = {
     name: metadata.name,
     description: metadata.description,
     inputSchema: metadata.inputSchema,
-    outputSchema: EXECUTE_OUTPUT_SCHEMA,
     execute
   };
+  if (metadata.title)
+    toolDef.title = metadata.title;
   if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
     toolDef.annotations = metadata.annotations;
   }
-  const controller = new AbortController();
-  registrationControllers.set(form, controller);
-  try {
-    await navigator.modelContext.registerTool(toolDef, { signal: controller.signal });
-  } catch {
-    try {
-      await navigator.modelContext.unregisterTool?.(metadata.name);
-      await navigator.modelContext.registerTool(toolDef, { signal: controller.signal });
-    } catch {
-    }
-  }
+  const controller = await registerToolDefinition(toolDef, debug);
+  if (controller)
+    registrationControllers.set(form, controller);
   registeredTools.set(form, metadata.name);
 }
 async function unregisterFormTool(form) {
-  if (!isWebMCPSupported())
-    return;
   const name = registeredTools.get(form);
   if (!name)
     return;
-  const controller = registrationControllers.get(form);
-  if (controller) {
-    controller.abort();
-    registrationControllers.delete(form);
-  }
-  try {
-    await navigator.modelContext.unregisterTool?.(name);
-  } catch {
-  }
+  await unregisterToolDefinition(name, registrationControllers.get(form));
+  registrationControllers.delete(form);
   registeredTools.delete(form);
 }
 function getRegisteredToolName(form) {
@@ -1111,6 +1130,22 @@ async function unregisterAll() {
 }
 
 // src/interceptor.ts
+function cancelledResult(toolName, reason) {
+  window.dispatchEvent(new CustomEvent("toolcancel", { detail: { toolName } }));
+  const structured = {
+    status: "cancelled",
+    filled_fields: {},
+    skipped_fields: [],
+    missing_required: [],
+    warnings: []
+  };
+  return {
+    content: [
+      { type: "text", text: `Cancelled "${toolName}": ${reason}.` },
+      { type: "text", text: JSON.stringify(structured) }
+    ]
+  };
+}
 var pendingExecutions = /* @__PURE__ */ new WeakMap();
 var lastParams = /* @__PURE__ */ new WeakMap();
 var formFieldElements = /* @__PURE__ */ new WeakMap();
@@ -1244,19 +1279,22 @@ function buildExecuteHandler(form, config, toolName, metadata) {
     formFieldElements.set(form, metadata.fieldElements);
   }
   attachSubmitInterceptor(form, toolName);
-  return async (params, client) => {
-    const modelContextClient = client;
-    if (config.autoSubmit && metadata?.annotations?.destructiveHint === true && typeof modelContextClient?.requestUserInteraction === "function") {
-      const approved = await modelContextClient.requestUserInteraction(async () => {
+  return async (params, options) => {
+    const execOptions = options ?? void 0;
+    const signal = execOptions?.signal instanceof AbortSignal ? execOptions.signal : void 0;
+    if (signal?.aborted)
+      return cancelledResult(toolName, "aborted by the agent");
+    const annotations = metadata?.annotations;
+    const isHighStakes = annotations?.consequentialHint === true || annotations?.destructiveHint === true;
+    if (config.autoSubmit && isHighStakes && typeof execOptions?.requestUserInteraction === "function") {
+      const approved = await execOptions.requestUserInteraction(async () => {
         return new Promise((resolve) => {
-          const ok = window.confirm(`Agent requested a destructive action via "${toolName}". Continue?`);
+          const ok = window.confirm(`Agent requested a high-stakes action via "${toolName}". Continue?`);
           resolve(ok);
         });
       });
-      if (!approved) {
-        window.dispatchEvent(new CustomEvent("toolcancel", { detail: { toolName } }));
-        return { content: [{ type: "text", text: `Cancelled "${toolName}" by user.` }] };
-      }
+      if (!approved)
+        return cancelledResult(toolName, "declined by user");
     }
     pendingFillWarnings.set(form, []);
     pendingWarnings.delete(form);
@@ -1331,6 +1369,19 @@ function buildExecuteHandler(form, config, toolName, metadata) {
         });
       }, timeoutMs);
       pendingExecutions.set(form, { resolve, reject, timeoutId });
+      signal?.addEventListener("abort", () => {
+        const pending = pendingExecutions.get(form);
+        if (!pending || pending.resolve !== resolve)
+          return;
+        if (pending.timeoutId)
+          clearTimeout(pending.timeoutId);
+        pendingExecutions.delete(form);
+        pendingWarnings.delete(form);
+        pendingFillWarnings.delete(form);
+        lastFilledSnapshot.delete(form);
+        preFillValues.delete(form);
+        resolve(cancelledResult(toolName, "aborted by the agent"));
+      }, { once: true });
       if (config.autoSubmit || form.hasAttribute("toolautosubmit") || form.dataset["webmcpAutosubmit"] !== void 0) {
         waitForDomStable(form).then(async () => {
           try {
@@ -2146,10 +2197,10 @@ async function registerForm(form, config) {
   }
   metadata.name = resolvedName;
   if (config.debug) {
-    warnToolQuality(metadata.name, metadata.description);
+    warnToolQuality(metadata.name, metadata.description, metadata.inputSchema);
   }
   const execute = buildExecuteHandler(form, config, metadata.name, metadata);
-  await registerFormTool(form, metadata, execute);
+  await registerFormTool(form, metadata, execute, config.debug);
   registeredForms.add(form);
   registeredFormCount++;
   const formSubmitBtn = form.querySelector(
@@ -2189,6 +2240,7 @@ var ORPHAN_RESCAN_DEBOUNCE_MS = 500;
 var orphanRescanDelayedTimer = null;
 var ORPHAN_RESCAN_DELAYED_MS = 2e3;
 var registeredOrphanToolNames = /* @__PURE__ */ new Set();
+var orphanToolControllers = /* @__PURE__ */ new Map();
 function scheduleOrphanRescan(config) {
   if (orphanRescanTimer)
     clearTimeout(orphanRescanTimer);
@@ -2532,7 +2584,7 @@ async function scanOrphanInputs(config) {
       continue;
     }
     const toolName = metadata.name;
-    const execute = async (params, _client) => {
+    const execute = async (params, _options) => {
       console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
       console.log(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map((p) => p.key));
       const notFilled = [];
@@ -2619,7 +2671,10 @@ async function scanOrphanInputs(config) {
       if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
         toolDef.annotations = metadata.annotations;
       }
-      await navigator.modelContext.registerTool(toolDef);
+      const controller = await registerToolDefinition(toolDef, config.debug);
+      if (!controller)
+        continue;
+      orphanToolControllers.set(metadata.name, controller);
       registeredOrphanToolNames.add(metadata.name);
       const pendingBtns = window["__pendingSubmitBtns"] ??= {};
       pendingBtns[metadata.name] = submitBtn;
@@ -2630,7 +2685,22 @@ async function scanOrphanInputs(config) {
     }
   }
 }
-function warnToolQuality(name, description) {
+var BUDGET = { name: 30, description: 500, paramName: 30, paramDescription: 150 };
+function warnToolQuality(name, description, schema) {
+  if (name.length > BUDGET.name) {
+    console.warn(`[auto-webmcp] Tool "${name}" name exceeds ${BUDGET.name} characters.`);
+  }
+  if (description.length > BUDGET.description) {
+    console.warn(`[auto-webmcp] Tool "${name}" description is ${description.length} characters (budget ${BUDGET.description}).`);
+  }
+  for (const [param, prop] of Object.entries(schema?.properties ?? {})) {
+    if (param.length > BUDGET.paramName) {
+      console.warn(`[auto-webmcp] Tool "${name}" parameter "${param}" name exceeds ${BUDGET.paramName} characters.`);
+    }
+    if ((prop.description?.length ?? 0) > BUDGET.paramDescription) {
+      console.warn(`[auto-webmcp] Tool "${name}" parameter "${param}" description exceeds ${BUDGET.paramDescription} characters.`);
+    }
+  }
   if (/^form_\d+$|^submit$|^form$/.test(name)) {
     console.warn(`[auto-webmcp] Tool "${name}" has a generic name. Consider adding a toolname or data-webmcp-name attribute.`);
   }
@@ -2658,6 +2728,12 @@ function stopDiscovery() {
   observer?.disconnect();
   observer = null;
 }
+async function unregisterOrphanTools() {
+  const entries = Array.from(orphanToolControllers.entries());
+  orphanToolControllers.clear();
+  registeredOrphanToolNames.clear();
+  await Promise.all(entries.map(([name, controller]) => unregisterToolDefinition(name, controller)));
+}
 
 // src/index.ts
 async function autoWebMCP(config) {
@@ -2672,7 +2748,7 @@ async function autoWebMCP(config) {
   return {
     destroy: async () => {
       stopDiscovery();
-      await unregisterAll();
+      await Promise.all([unregisterAll(), unregisterOrphanTools()]);
     },
     getTools: getAllRegisteredTools,
     isSupported: isWebMCPSupported()

@@ -36,7 +36,7 @@ export interface ValidationError {
     message: string;
 }
 export interface StructuredExecuteData {
-    status: 'success' | 'partial' | 'error' | 'awaiting_user_action' | 'timed_out' | 'blocked_invalid';
+    status: 'success' | 'partial' | 'error' | 'awaiting_user_action' | 'timed_out' | 'blocked_invalid' | 'cancelled';
     filled_fields: Record<string, unknown>;
     skipped_fields: string[];
     missing_required: string[];
@@ -54,7 +54,7 @@ export interface StructuredExecuteData {
  *  2. Fires a submit event (or auto-submits if configured)
  *  3. Resolves with structured form data once submitted
  */
-export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string, metadata?: ToolMetadata): (params: Record<string, unknown>, client?: unknown) => Promise<ExecuteResult>;
+export declare function buildExecuteHandler(form: HTMLFormElement, config: ResolvedConfig, toolName: string, metadata?: ToolMetadata): (params: Record<string, unknown>, options?: unknown) => Promise<ExecuteResult>;
 export declare function fillElement(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | Element, value: unknown): void;
 /**
  * Fill a lookup/typeahead input (e.g. Salesforce Account Name): type the search

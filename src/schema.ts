@@ -15,7 +15,7 @@ export interface JsonSchemaProperty {
   description?: string;
   title?: string;
   enum?: string[];
-  oneOf?: Array<{ const: string; title: string; group?: string }>;
+  anyOf?: Array<{ type: 'string'; const: string; title: string; group?: string }>;
   items?: { type: string; enum?: string[] };
   minimum?: number;
   maximum?: number;
@@ -120,7 +120,7 @@ function buildStringSchema(input: HTMLInputElement): JsonSchemaProperty {
   if (input.maxLength > 0 && input.maxLength !== 524288) prop.maxLength = input.maxLength;
   if (input.pattern) prop.pattern = input.pattern;
 
-  // Expose <datalist> suggestions as enum/oneOf so agents know the preferred values.
+  // Expose <datalist> suggestions as enum/anyOf so agents know the preferred values.
   // The field stays type:string because datalist is advisory, not restrictive.
   const listId = input.getAttribute('list');
   if (listId) {
@@ -131,7 +131,8 @@ function buildStringSchema(input: HTMLInputElement): JsonSchemaProperty {
       );
       if (options.length > 0) {
         prop.enum = options.map((o) => o.value.trim());
-        prop.oneOf = options.map((o) => ({
+        prop.anyOf = options.map((o) => ({
+          type: 'string' as const,
           const: o.value.trim(),
           title: o.textContent?.trim() || o.value.trim(),
         }));
@@ -166,7 +167,7 @@ function isPlaceholderOption(opt: HTMLOptionElement): boolean {
 
 function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
   const enumValues: string[] = [];
-  const oneOf: Array<{ const: string; title: string; group?: string }> = [];
+  const anyOf: Array<{ type: 'string'; const: string; title: string; group?: string }> = [];
 
   for (const child of Array.from(select.children)) {
     if (child instanceof HTMLOptGroupElement) {
@@ -176,17 +177,18 @@ function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
         if (!(opt instanceof HTMLOptionElement)) continue;
         if (isPlaceholderOption(opt)) continue;
         enumValues.push(opt.value);
-        const entry: { const: string; title: string; group?: string } = {
+        const entry: { type: 'string'; const: string; title: string; group?: string } = {
+          type: 'string',
           const: opt.value,
           title: opt.text.trim() || opt.value,
         };
         if (groupLabel) entry.group = groupLabel;
-        oneOf.push(entry);
+        anyOf.push(entry);
       }
     } else if (child instanceof HTMLOptionElement) {
       if (isPlaceholderOption(child)) continue;
       enumValues.push(child.value);
-      oneOf.push({ const: child.value, title: child.text.trim() || child.value });
+      anyOf.push({ type: 'string', const: child.value, title: child.text.trim() || child.value });
     }
   }
 
@@ -197,7 +199,7 @@ function mapSelectElement(select: HTMLSelectElement): JsonSchemaProperty {
     return { type: 'array', items: { type: 'string', enum: enumValues } };
   }
 
-  return { type: 'string', enum: enumValues, oneOf };
+  return { type: 'string', enum: enumValues, anyOf };
 }
 
 /** Collect all checkbox values for a given name within a form (for checkbox groups) */
@@ -224,11 +226,11 @@ export function collectRadioEnum(form: HTMLFormElement, name: string): string[] 
   return radios.map((r) => r.value).filter((v) => v !== '');
 }
 
-/** Collect radio button values + label titles as oneOf entries */
-export function collectRadioOneOf(
+/** Collect radio button values + label titles as anyOf entries */
+export function collectRadioAnyOf(
   form: HTMLFormElement,
   name: string,
-): Array<{ const: string; title: string }> {
+): Array<{ type: 'string'; const: string; title: string }> {
   const radios = Array.from(form.elements)
     .filter(
       (el): el is HTMLInputElement =>
@@ -240,7 +242,7 @@ export function collectRadioOneOf(
 
   return radios.map((r) => {
     const title = getRadioLabelText(r);
-    return { const: r.value, title: title || r.value };
+    return { type: 'string', const: r.value, title: title || r.value };
   });
 }
 
@@ -273,11 +275,12 @@ export function ariaRoleToSchema(el: Element, role: AriaRole): JsonSchemaPropert
             const enumValues = options
               .map((o) => (o.getAttribute('data-value') ?? o.textContent ?? '').trim())
               .filter(Boolean);
-            const oneOf = options.map((o) => ({
+            const anyOf = options.map((o) => ({
+              type: 'string' as const,
               const: (o.getAttribute('data-value') ?? o.textContent ?? '').trim(),
               title: (o.textContent ?? '').trim(),
             }));
-            return { type: 'string', enum: enumValues, oneOf };
+            return { type: 'string', enum: enumValues, anyOf };
           }
         }
       }
