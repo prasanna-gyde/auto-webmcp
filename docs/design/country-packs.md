@@ -86,8 +86,8 @@ autoWebMCP({ packs: [india] });
 Script tag: load the pack before the core bundle.
 
 ```html
-<script src="https://unpkg.com/auto-webmcp@0.5.0/dist/packs/in.iife.js"></script>
-<script src="https://unpkg.com/auto-webmcp@0.5.0/dist/auto-webmcp.iife.js"></script>
+<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/packs/in.iife.js"></script>
+<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/auto-webmcp.iife.js"></script>
 ```
 
 ## Open questions

@@ -1,6 +1,6 @@
 {
   "name": "auto-webmcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Automatically make any HTML form WebMCP-ready \u2014 zero coding required",
   "author": "Prasanna Vaidya <prasanna@gyde.ai>",
   "license": "MIT",
@@ -23,6 +23,11 @@
       "types": "./dist/packs/us.d.ts",
       "import": "./dist/packs/us.esm.js",
       "require": "./dist/packs/us.cjs.js"
+    },
+    "./adapters/razorpay": {
+      "types": "./dist/adapters/razorpay.d.ts",
+      "import": "./dist/adapters/razorpay.esm.js",
+      "require": "./dist/adapters/razorpay.cjs.js"
     }
   },
   "files": [

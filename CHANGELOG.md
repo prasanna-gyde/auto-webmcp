@@ -6,6 +6,16 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.0] - 2026-09-23
+
+### New Features
+- Razorpay Checkout adapter: `auto-webmcp/adapters/razorpay` (ESM, CJS) and `dist/adapters/razorpay.iife.js` (`AutoWebMCPRazorpay`). Registers `get_plans`, `start_subscription`, `get_subscription_status`, `cancel_subscription`, and Orders tools (`get_order_summary`, `start_payment`, `get_payment_status`) from merchant-supplied hooks.
+- Checkout outcomes: `submitted`, `dismissed`, `failed`, `awaiting_user_action`, `cancelled`. A failed attempt is only final when the user closes Checkout, so retries inside the modal are reported correctly.
+- `cancel_subscription` asks the user to confirm in-page by default (`confirmCancel: false` to disable).
+- `openRazorpayCheckout()` exported for merchants who want the same promise-based Checkout for their own buttons.
+
+Verified end to end in Razorpay test mode on Chrome 152 (UPI `success@razorpay`, subscription reached `active`).
+
 ## [0.5.0] - 2026-09-23
 
 ### Security
