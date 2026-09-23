@@ -3,6 +3,8 @@
  */
 
 import { ResolvedConfig } from './config.js';
+import { debugLog } from './log.js';
+import { getActivePacks } from './sensitive.js';
 import { analyzeForm, analyzeOrphanInputGroup, ToolAnnotations } from './analyzer.js';
 import {
   registerFormTool,
@@ -91,7 +93,7 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
     }
     if (config.debug) {
       const mode = config.declarativeMode;
-      console.log(`[auto-webmcp] Skipping imperative registration for native declarative form (mode=${mode})`);
+      debugLog(`[auto-webmcp] Skipping imperative registration for native declarative form (mode=${mode})`);
     }
     return;
   }
@@ -109,7 +111,7 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
     }
   }
 
-  const metadata = analyzeForm(form, override);
+  const metadata = analyzeForm(form, override, getActivePacks(config.packs));
   const resolvedName = ensureUniqueToolName(metadata.name, form);
   if (resolvedName !== metadata.name && config.debug) {
     console.warn(`[auto-webmcp] tool name collision: "${metadata.name}" renamed to "${resolvedName}"`);
@@ -138,7 +140,7 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
   pendingBtns[metadata.name] = formSubmitBtn;
 
   if (config.debug) {
-    console.log(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
+    debugLog(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
   }
 
   emit('form:registered', form, metadata.name);
@@ -154,7 +156,7 @@ async function unregisterForm(form: HTMLFormElement, config: ResolvedConfig): Pr
   if (pendingBtns) delete pendingBtns[name];
 
   if (config.debug) {
-    console.log(`[auto-webmcp] Unregistered: ${name}`);
+    debugLog(`[auto-webmcp] Unregistered: ${name}`);
   }
 
   emit('form:unregistered', form, name);
@@ -476,12 +478,12 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     ),
   ) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement>).filter((el) => {
     if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) {
-      console.log(`[auto-webmcp] orphan: skipping excluded type "${el.type}" (name="${el.name}" id="${el.id}")`);
+      debugLog(`[auto-webmcp] orphan: skipping excluded type "${el.type}" (name="${el.name}" id="${el.id}")`);
       return false;
     }
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) {
-      console.log(`[auto-webmcp] orphan: skipping invisible input (name="${(el as HTMLElement & { name?: string }).name}" id="${el.id}")`);
+      debugLog(`[auto-webmcp] orphan: skipping invisible input (name="${(el as HTMLElement & { name?: string }).name}" id="${el.id}")`);
       return false;
     }
     return true;
@@ -489,7 +491,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
 
   // Also collect inputs buried inside shadow DOM (e.g. Salesforce LWC lightning-input components).
   const shadowOrphans = collectShadowOrphanInputs(document.body, null);
-  console.log(`[auto-webmcp] orphan: found ${orphanInputs.length} light-DOM + ${shadowOrphans.length} shadow-DOM orphan inputs`);
+  debugLog(`[auto-webmcp] orphan: found ${orphanInputs.length} light-DOM + ${shadowOrphans.length} shadow-DOM orphan inputs`);
 
   if (orphanInputs.length === 0 && shadowOrphans.length === 0) return;
 
@@ -514,7 +516,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       container = container.parentElement;
     }
 
-    console.log(`[auto-webmcp] orphan: input (name="${(input as HTMLElement & { name?: string }).name}" id="${input.id}") grouped into container`, foundContainer);
+    debugLog(`[auto-webmcp] orphan: input (name="${(input as HTMLElement & { name?: string }).name}" id="${input.id}") grouped into container`, foundContainer);
     if (!groups.has(foundContainer)) groups.set(foundContainer, []);
     groups.get(foundContainer)!.push(input);
   }
@@ -537,12 +539,12 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       container = container.parentElement;
     }
 
-    console.log(`[auto-webmcp] orphan (shadow): input (id="${el.id}") via host <${shadowHost.tagName.toLowerCase()}> grouped into container`, foundContainer);
+    debugLog(`[auto-webmcp] orphan (shadow): input (id="${el.id}") via host <${shadowHost.tagName.toLowerCase()}> grouped into container`, foundContainer);
     if (!groups.has(foundContainer)) groups.set(foundContainer, []);
     groups.get(foundContainer)!.push(el);
   }
 
-  console.log(`[auto-webmcp] orphan: ${groups.size} group(s) found`);
+  debugLog(`[auto-webmcp] orphan: ${groups.size} group(s) found`);
 
   for (const [container, inputs] of groups) {
     // Pick the last visible submit button within the container (same logic as
@@ -569,7 +571,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         return r.width > 0 && r.height > 0 && (b as HTMLButtonElement).disabled;
       });
       submitBtn = (disabledCandidates[disabledCandidates.length - 1] as HTMLButtonElement | HTMLInputElement) ?? null;
-      if (submitBtn) console.log(`[auto-webmcp] orphan: using disabled submit button as reference: "${submitBtn.textContent?.trim()}"`);
+      if (submitBtn) debugLog(`[auto-webmcp] orphan: using disabled submit button as reference: "${submitBtn.textContent?.trim()}"`);
     }
 
     // Fallback 2: any visible button with submit-like text WITHIN the container.
@@ -588,7 +590,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
           SUBMIT_TEXT_RE.test(b.textContent ?? '');
       });
       submitBtn = (containerBtns[containerBtns.length - 1] as HTMLButtonElement | null) ?? null;
-      if (submitBtn) console.log(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
+      if (submitBtn) debugLog(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
     }
 
     // Fallback 3: nearest dialog/modal ancestor — catches buttons like LinkedIn's
@@ -606,7 +608,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
           const r = b.getBoundingClientRect();
           return r.width > 0 && r.height > 0 && SUBMIT_TEXT_RE.test(b.textContent ?? '');
         });
-        console.log(`[auto-webmcp] orphan: dialog buttons matching submit text:`,
+        debugLog(`[auto-webmcp] orphan: dialog buttons matching submit text:`,
           allDialogBtns.map(b => `"${b.textContent?.trim().slice(0, 30)}" disabled=${(b as HTMLButtonElement).disabled} aria-disabled=${b.getAttribute('aria-disabled')}`));
         // Pass 1: any form of disabled (HTML or ARIA) — real submit button waiting for input
         const disabledBtns = allDialogBtns.filter(
@@ -618,7 +620,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         );
         const dialogBtns = disabledBtns.length > 0 ? disabledBtns : enabledBtns;
         submitBtn = (dialogBtns[dialogBtns.length - 1] as HTMLButtonElement | null) ?? null;
-        if (submitBtn) console.log(`[auto-webmcp] orphan: using text-matched button in dialog: "${submitBtn.textContent?.trim().slice(0, 40)}" disabled=${(submitBtn as HTMLButtonElement).disabled} aria-disabled=${submitBtn.getAttribute('aria-disabled')}`);
+        if (submitBtn) debugLog(`[auto-webmcp] orphan: using text-matched button in dialog: "${submitBtn.textContent?.trim().slice(0, 40)}" disabled=${(submitBtn as HTMLButtonElement).disabled} aria-disabled=${submitBtn.getAttribute('aria-disabled')}`);
       }
     }
 
@@ -634,15 +636,15 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
           SUBMIT_TEXT_RE.test(b.textContent ?? '');
       });
       submitBtn = (pageBtns[pageBtns.length - 1] as HTMLButtonElement | null) ?? null;
-      if (submitBtn) console.log(`[auto-webmcp] orphan: using page-wide fallback submit button: "${submitBtn.textContent?.trim()}"`);
+      if (submitBtn) debugLog(`[auto-webmcp] orphan: using page-wide fallback submit button: "${submitBtn.textContent?.trim()}"`);
     }
 
-    console.log(`[auto-webmcp] orphan: submit button for group:`, submitBtn ? `"${submitBtn.textContent?.trim()}" disabled=${(submitBtn as HTMLButtonElement).disabled}` : 'none');
+    debugLog(`[auto-webmcp] orphan: submit button for group:`, submitBtn ? `"${submitBtn.textContent?.trim()}" disabled=${(submitBtn as HTMLButtonElement).disabled}` : 'none');
 
-    const metadata = analyzeOrphanInputGroup(container, inputs, submitBtn);
+    const metadata = analyzeOrphanInputGroup(container, inputs, submitBtn, getActivePacks(config.packs));
     // Same orphan group can be discovered repeatedly; skip duplicates by base name.
     if (registeredOrphanToolNames.has(metadata.name)) {
-      console.log(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
+      debugLog(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
       continue;
     }
     const orphanName = ensureUniqueToolName(metadata.name);
@@ -650,7 +652,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       console.warn(`[auto-webmcp] orphan tool name collision: "${metadata.name}" renamed to "${orphanName}"`);
     }
     metadata.name = orphanName;
-    console.log(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
+    debugLog(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
 
     // Build key → element pairs for the execute handler
     const inputPairs: Array<{ key: string; el: HTMLElement }> = [];
@@ -674,16 +676,16 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         ? key.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64)
         : null;
       const matched = !!(safeKey && schemaProps[safeKey]);
-      console.log(`[auto-webmcp] orphan: field (name="${(el as HTMLInputElement).name ?? ''}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
+      debugLog(`[auto-webmcp] orphan: field (name="${(el as HTMLInputElement).name ?? ''}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
       if (matched) {
         inputPairs.push({ key: safeKey!, el });
       }
     }
 
-    console.log(`[auto-webmcp] orphan: ${inputPairs.length}/${inputs.length} input(s) mapped to schema keys`);
+    debugLog(`[auto-webmcp] orphan: ${inputPairs.length}/${inputs.length} input(s) mapped to schema keys`);
 
     if (inputPairs.length === 0) {
-      console.log(`[auto-webmcp] orphan: skipping group "${metadata.name}" — no inputs mapped to schema keys`);
+      debugLog(`[auto-webmcp] orphan: skipping group "${metadata.name}" — no inputs mapped to schema keys`);
       continue;
     }
 
@@ -692,14 +694,14 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       params: Record<string, unknown>,
       _options?: unknown,
     ): Promise<{ content: Array<{ type: 'text'; text: string }> }> => {
-      console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
-      console.log(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map(p => p.key));
+      debugLog(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
+      debugLog(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map(p => p.key));
 
       const notFilled: string[] = [];
 
       for (const { key, el } of inputPairs) {
         if (params[key] !== undefined) {
-          console.log(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], 'element=', el);
+          debugLog(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], 'element=', el);
           // input[role="combobox"] with autocomplete (Salesforce lookup fields): type to search,
           // wait for listbox, click the matching result.
           if (
@@ -717,9 +719,9 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
           } else {
             fillElement(el, params[key]);
           }
-          console.log(`[auto-webmcp] orphan execute: after fill, element value=`, (el as HTMLInputElement).value);
+          debugLog(`[auto-webmcp] orphan execute: after fill, element value=`, (el as HTMLInputElement).value);
         } else {
-          console.log(`[auto-webmcp] orphan execute: key="${key}" not in params, skipping`);
+          debugLog(`[auto-webmcp] orphan execute: key="${key}" not in params, skipping`);
         }
       }
       window.dispatchEvent(new CustomEvent('toolactivated', { detail: { toolName } }));
@@ -738,14 +740,14 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         const readyText = notFilled.length > 0
           ? `Fields partially filled.${issueText} Review in browser, then click Save.`
           : 'Fields filled. Ready to submit.';
-        console.log(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
+        debugLog(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
         return { content: [{ type: 'text', text: readyText }] };
       }
 
       // Find the enabled submit button to click.
       // Priority: captured submitBtn reference (still in DOM + enabled) → selector poll (React/Vue
       // enable-on-valid pattern) → text-matched button (Salesforce type="button" Save, Gmail Send).
-      console.log(`[auto-webmcp] orphan execute: resolving submit button (up to 2s)...`);
+      debugLog(`[auto-webmcp] orphan execute: resolving submit button (up to 2s)...`);
       let btn: HTMLButtonElement | HTMLInputElement | HTMLElement | null = null;
 
       // Check the captured reference first (avoids 2s timeout for always-enabled buttons like Salesforce Save).
@@ -755,7 +757,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         const r = submitBtn.getBoundingClientRect();
         if (isEnabled && r.width > 0 && r.height > 0) {
           btn = submitBtn;
-          console.log(`[auto-webmcp] orphan execute: using captured submit button "${btn.textContent?.trim()}"`);
+          debugLog(`[auto-webmcp] orphan execute: using captured submit button "${btn.textContent?.trim()}"`);
         }
       }
 
@@ -788,7 +790,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
             SUBMIT_TEXT_RE.test(b.textContent ?? '');
         });
         btn = textBtns[textBtns.length - 1] ?? null;
-        if (btn) console.log(`[auto-webmcp] orphan execute: using text-matched fallback button "${btn.textContent?.trim()}"`);
+        if (btn) debugLog(`[auto-webmcp] orphan execute: using text-matched fallback button "${btn.textContent?.trim()}"`);
       }
 
       if (!btn) {
@@ -796,7 +798,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
         return { content: [{ type: 'text', text: 'Fields filled but the submit button is still disabled. The page may require additional input before submitting.' }] };
       }
 
-      console.log(`[auto-webmcp] orphan execute: clicking submit button "${(btn as HTMLElement).textContent?.trim()}"`);
+      debugLog(`[auto-webmcp] orphan execute: clicking submit button "${(btn as HTMLElement).textContent?.trim()}"`);
       (btn as HTMLElement).click();
       return { content: [{ type: 'text', text: 'Fields filled and form submitted.' }] };
     };
@@ -821,7 +823,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       const pendingBtns = ((window as unknown as Record<string, unknown>)['__pendingSubmitBtns'] ??= {}) as Record<string, Element | null>;
       pendingBtns[metadata.name] = submitBtn;
       if (config.debug) {
-        console.log(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
+        debugLog(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
       }
     } catch {
       // Best-effort

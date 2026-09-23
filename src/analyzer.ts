@@ -3,7 +3,17 @@
  */
 
 import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum, collectRadioAnyOf, collectCheckboxEnum, ARIA_ROLES_TO_SCAN, AriaRole, ariaRoleToSchema } from './schema.js';
+import { debugLog } from './log.js';
 import { FormOverride } from './config.js';
+import {
+  CountryPack,
+  FieldClassification,
+  SensitivePolicy,
+  applyRuleToSchema,
+  classifyField,
+  createPolicy,
+  hasSensitiveFields,
+} from './sensitive.js';
 
 export interface ToolAnnotations {
   /** WebMCP spec: the tool does not modify state. */
@@ -27,6 +37,8 @@ export interface ToolMetadata {
   annotations?: ToolAnnotations;
   /** Key → DOM element for fields not addressable by name (id-keyed or ARIA-role controls). */
   fieldElements?: Map<string, Element>;
+  /** Blocked, redacted and formatted fields found by core rules and country packs. */
+  sensitive?: SensitivePolicy;
 }
 
 // Track form index for fallback naming
@@ -38,14 +50,74 @@ export function resetFormIndex(): void {
 }
 
 /** Derive ToolMetadata from a <form> element */
-export function analyzeForm(form: HTMLFormElement, override?: FormOverride): ToolMetadata {
+export function analyzeForm(form: HTMLFormElement, override?: FormOverride, packs: CountryPack[] = []): ToolMetadata {
   const name = override?.name ?? inferToolName(form);
-  const description = override?.description ?? inferToolDescription(form);
-  const { schema: inputSchema, fieldElements } = buildSchema(form);
+  const ctx: SchemaBuildContext = { packs, policy: createPolicy() };
+  const { schema: inputSchema, fieldElements } = buildSchema(form, ctx);
   const annotations = inferAnnotations(form);
+  applySensitiveAnnotations(annotations, ctx.policy, form);
+  const description = withRequiresUser(override?.description ?? inferToolDescription(form), ctx.policy);
   const title = inferToolTitle(form);
 
-  return { name, ...(title && { title }), description, inputSchema, annotations, fieldElements };
+  return { name, ...(title && { title }), description, inputSchema, annotations, fieldElements, sensitive: ctx.policy };
+}
+
+// ---------------------------------------------------------------------------
+// Sensitive fields
+// ---------------------------------------------------------------------------
+
+interface SchemaBuildContext {
+  packs: CountryPack[];
+  policy: SensitivePolicy;
+}
+
+/**
+ * Classify a field against core rules and packs. Blocked fields are recorded and
+ * reported as 'blocked' so the caller leaves them out of the schema.
+ */
+function classifyForSchema(
+  el: Element,
+  key: string,
+  labelText: string,
+  title: string,
+  ctx: SchemaBuildContext,
+): FieldClassification | null | 'blocked' {
+  if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) return null;
+  const cls = classifyField(el, labelText, ctx.packs);
+  if (cls?.action === 'block') {
+    if (!ctx.policy.blocked.some((b) => b.key === key)) {
+      ctx.policy.blocked.push({ key, label: title || cls.rule.label, ruleId: cls.rule.id });
+    }
+    return 'blocked';
+  }
+  return cls;
+}
+
+function applyClassification(prop: JsonSchemaProperty, key: string, cls: FieldClassification | null, ctx: SchemaBuildContext): void {
+  if (!cls) return;
+  applyRuleToSchema(prop, cls.rule);
+  ctx.policy.rules.set(key, cls.rule);
+  if (cls.action === 'redact') ctx.policy.redacted.add(key);
+}
+
+/** Forms with blocked or redacted fields are consequential unless the site says otherwise. */
+function applySensitiveAnnotations(annotations: ToolAnnotations, policy: SensitivePolicy, form?: HTMLFormElement): void {
+  if (!hasSensitiveFields(policy)) return;
+  if (form?.dataset['webmcpConsequential'] !== undefined) return;
+  annotations.consequentialHint = true;
+  if (form?.dataset['webmcpReadonly'] === undefined) {
+    delete annotations.readOnlyHint;
+    delete annotations.idempotentHint;
+  }
+}
+
+/** Tell the agent which fields the user completes, so it hands off instead of guessing. */
+function withRequiresUser(description: string, policy: SensitivePolicy): string {
+  if (policy.blocked.length === 0) return description;
+  const labels = policy.blocked.map((b) => b.label).join(', ');
+  const base = description.trim();
+  const sep = /[.!?]$/.test(base) ? ' ' : '. ';
+  return `${base}${sep}The user must enter: ${labels}.`;
 }
 
 function inferToolTitle(form: HTMLFormElement): string {
@@ -332,7 +404,7 @@ function collectShadowControls(
         ),
       );
       if (found.length > 0) {
-        console.log(`[auto-webmcp] shadow: found ${found.length} control(s) in ${el.tagName.toLowerCase()} shadow root:`, found.map(f => `${f.tagName.toLowerCase()}[type=${f.type ?? '?'}][name="${(f as HTMLInputElement).name}"][id="${f.id}"]`));
+        debugLog(`[auto-webmcp] shadow: found ${found.length} control(s) in ${el.tagName.toLowerCase()} shadow root:`, found.map(f => `${f.tagName.toLowerCase()}[type=${f.type ?? '?'}][name="${(f as HTMLInputElement).name}"][id="${f.id}"]`));
       }
       results.push(...found, ...collectShadowControls(el.shadowRoot, visited));
     }
@@ -366,7 +438,7 @@ function collectFormAssociatedControls(
   return controls;
 }
 
-function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements: Map<string, Element> } {
+function buildSchema(form: HTMLFormElement, ctx: SchemaBuildContext): { schema: JsonSchema; fieldElements: Map<string, Element> } {
   const properties: Record<string, JsonSchemaProperty> = {};
   const required: string[] = [];
   const fieldElements = new Map<string, Element>();
@@ -400,8 +472,11 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
 
     // Enrich with title and description
     schemaProp.title = inferFieldTitle(control);
+    const sensitivity = classifyForSchema(control, fieldKey, getAssociatedLabelText(control), schemaProp.title, ctx);
+    if (sensitivity === 'blocked') continue;
     const desc = inferFieldDescription(control);
     if (desc) schemaProp.description = desc;
+    applyClassification(schemaProp, fieldKey, sensitivity, ctx);
 
     // Attach current DOM value as JSON Schema 'default' so agents know the pre-filled state
     const defaultVal = extractDefaultValue(control);
@@ -497,8 +572,11 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
     }
 
     schemaProp.title = inferAriaFieldTitle(el);
+    const ariaSensitivity = classifyForSchema(el, key, schemaProp.title, schemaProp.title, ctx);
+    if (ariaSensitivity === 'blocked') continue;
     const desc = inferAriaFieldDescription(el);
     if (desc) schemaProp.description = desc;
+    applyClassification(schemaProp, key, ariaSensitivity, ctx);
 
     properties[key] = schemaProp;
     fieldElements.set(key, el);
@@ -559,11 +637,11 @@ function resolveShadowHostKey(el: Element): string | null {
     if (!(root instanceof ShadowRoot)) break;
     const host = root.host;
     const fieldName = host.getAttribute('field-name');
-    if (fieldName) { console.log('[auto-webmcp] shadow host key: field-name=', fieldName); return sanitizeName(fieldName); }
+    if (fieldName) { debugLog('[auto-webmcp] shadow host key: field-name=', fieldName); return sanitizeName(fieldName); }
     const hostLabel = host.getAttribute('label') || host.getAttribute('aria-label');
-    if (hostLabel) { console.log('[auto-webmcp] shadow host key: label=', hostLabel); return sanitizeName(hostLabel); }
+    if (hostLabel) { debugLog('[auto-webmcp] shadow host key: label=', hostLabel); return sanitizeName(hostLabel); }
     const hostName = host.getAttribute('name');
-    if (hostName) { console.log('[auto-webmcp] shadow host key: name=', hostName); return sanitizeName(hostName); }
+    if (hostName) { debugLog('[auto-webmcp] shadow host key: name=', hostName); return sanitizeName(hostName); }
     node = host;
   }
   return null;
@@ -866,12 +944,15 @@ export function analyzeOrphanInputGroup(
   container: Element,
   inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement>,
   submitBtn: HTMLButtonElement | HTMLInputElement | null,
+  packs: CountryPack[] = [],
 ): ToolMetadata {
   const name = inferOrphanToolName(container, submitBtn);
-  const description = inferOrphanToolDescription(container);
-  const { schema: inputSchema, fieldElements } = buildSchemaFromInputs(inputs);
+  const ctx: SchemaBuildContext = { packs, policy: createPolicy() };
+  const { schema: inputSchema, fieldElements } = buildSchemaFromInputs(inputs, ctx);
   const annotations = inferOrphanAnnotations(submitBtn);
-  return { name, description, inputSchema, annotations, fieldElements };
+  applySensitiveAnnotations(annotations, ctx.policy);
+  const description = withRequiresUser(inferOrphanToolDescription(container), ctx.policy);
+  return { name, description, inputSchema, annotations, fieldElements, sensitive: ctx.policy };
 }
 
 function inferOrphanAnnotations(
@@ -972,6 +1053,7 @@ function getNearestHeadingTextFrom(el: Element): string {
  */
 function buildSchemaFromInputs(
   inputs: Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement>,
+  ctx: SchemaBuildContext,
 ): { schema: JsonSchema; fieldElements: Map<string, Element> } {
   const properties: Record<string, JsonSchemaProperty> = {};
   const required: string[] = [];
@@ -987,6 +1069,9 @@ function buildSchemaFromInputs(
       if (!isControlVisible(control)) continue;
       const prop: JsonSchemaProperty = { type: 'string' };
       prop.title = control.getAttribute('aria-label') ?? fieldKey;
+      const editableSensitivity = classifyForSchema(control, fieldKey, prop.title, prop.title, ctx);
+      if (editableSensitivity === 'blocked') continue;
+      applyClassification(prop, fieldKey, editableSensitivity, ctx);
       const desc = control.getAttribute('aria-description') ?? control.getAttribute('aria-describedby') ? null : null;
       if (desc) prop.description = desc;
       properties[fieldKey] = prop;
@@ -1016,8 +1101,11 @@ function buildSchemaFromInputs(
     if (!isControlVisible(control)) continue; // display:none, aria-hidden, disabled fieldset
 
     schemaProp.title = inferFieldTitle(control);
+    const sensitivity = classifyForSchema(control, fieldKey, getAssociatedLabelText(control), schemaProp.title, ctx);
+    if (sensitivity === 'blocked') continue;
     const desc = inferFieldDescription(control);
     if (desc) schemaProp.description = desc;
+    applyClassification(schemaProp, fieldKey, sensitivity, ctx);
 
     // For checkbox groups, derive values from the inputs array (no form context here)
     if (control instanceof HTMLInputElement && control.type === 'checkbox') {

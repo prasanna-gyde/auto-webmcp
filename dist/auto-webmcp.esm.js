@@ -15,8 +15,209 @@ function resolveConfig(userConfig) {
     },
     overrides: userConfig?.overrides ?? {},
     preserveExisting: userConfig?.preserveExisting ?? false,
+    packs: userConfig?.packs ?? [],
     debug: userConfig?.debug ?? false
   };
+}
+
+// src/log.ts
+var enabled = false;
+function setDebug(value) {
+  enabled = value;
+}
+function debugLog(...args) {
+  if (enabled)
+    console.log(...args);
+}
+
+// src/sensitive.ts
+var CORE_RULES = [
+  // Credentials and authentication factors (NIST SP 800-63B, PSD2 SCA, RBI AFA)
+  {
+    id: "core.otp",
+    label: "One-time code",
+    action: "block",
+    autocomplete: ["one-time-code"],
+    match: /\b(otp|one time (pass(word|code)?|code)|verification code|auth(entication)? code|2fa|mfa|totp|sms code|bestätigungscode)\b|ओटीपी|सत्यापन कोड/
+  },
+  {
+    id: "core.password",
+    label: "Password",
+    action: "block",
+    autocomplete: ["current-password", "new-password", "webauthn"],
+    match: /\b(password|passcode|passwd|passwort|mot de passe)\b/
+  },
+  {
+    id: "core.secret-pin",
+    label: "PIN",
+    action: "block",
+    match: /\b(upi pin|m ?pin|atm pin|card pin|debit pin|transaction pin|t ?pin|pin number|security pin)\b|यूपीआई पिन/
+  },
+  {
+    id: "core.security-answer",
+    label: "Security answer",
+    action: "block",
+    match: /\b((security|secret) (question|answer)|maiden name|memorable (word|answer)|first pet)\b/
+  },
+  // Payment card data (PCI DSS v4.0.1 Req 3.3.1): the user enters it, never the agent
+  {
+    id: "core.card-number",
+    label: "Card number",
+    action: "block",
+    autocomplete: ["cc-number"],
+    match: /\b(card ?(number|no)|credit card|debit card|cc ?num(ber)?|ccnum|kartennummer|numéro de carte)\b/
+  },
+  {
+    id: "core.card-csc",
+    label: "Card security code",
+    action: "block",
+    autocomplete: ["cc-csc"],
+    match: /\b(cvv2?|cvc2?|csc|cvn|card (security|verification) code|security code)\b/
+  },
+  {
+    id: "core.card-expiry",
+    label: "Card expiry",
+    action: "block",
+    autocomplete: ["cc-exp", "cc-exp-month", "cc-exp-year"],
+    match: /\b((card|cc) exp\w*|exp(iry|iration)? (date|month|year|mm|yy)|valid (thru|through))\b/
+  },
+  // National IDs whose processing is most restricted
+  {
+    id: "in.aadhaar",
+    label: "Aadhaar number",
+    action: "block",
+    match: /\b(aadhaa?r|adhaar|aadhaar vid)\b|आधार|ஆதார்|আধার|ఆధార్/
+  },
+  {
+    id: "us.ssn",
+    label: "Social Security number",
+    action: "block",
+    match: /\b(ssn|social security( number| no)?|soc sec)\b/
+  },
+  {
+    id: "sg.nric",
+    label: "NRIC/FIN",
+    action: "block",
+    match: /\b(nric|uinfin|nric ?\/? ?fin|fin (number|no))\b/
+  },
+  {
+    id: "nl.bsn",
+    label: "BSN",
+    action: "block",
+    match: /\b(bsn|burgerservicenummer|sofi ?nummer)\b/
+  },
+  {
+    id: "ie.ppsn",
+    label: "PPS number",
+    action: "block",
+    match: /\b(ppsn|pps (number|no)|personal public service)\b/
+  },
+  {
+    id: "be.rrn",
+    label: "National register number",
+    action: "block",
+    match: /\b(rijksregisternummer|registre national|niss|insz|national register number)\b/
+  }
+];
+function getActivePacks(configured) {
+  const queued = typeof window !== "undefined" ? window.__AUTO_WEBMCP_PACKS ?? [] : [];
+  const byId = /* @__PURE__ */ new Map();
+  for (const pack of [...configured, ...queued]) {
+    if (pack && Array.isArray(pack.rules))
+      byId.set(pack.id, pack);
+  }
+  return Array.from(byId.values());
+}
+function readOverride(el) {
+  const raw = el.getAttribute("data-webmcp-sensitive")?.trim().toLowerCase();
+  return raw === "allow" || raw === "redact" || raw === "block" ? raw : null;
+}
+function fieldText(el, labelText) {
+  const parts = [
+    el.getAttribute("name"),
+    el.id,
+    labelText,
+    el.getAttribute("placeholder"),
+    el.getAttribute("aria-label"),
+    el.getAttribute("title")
+  ];
+  return parts.filter(Boolean).join(" ").toLowerCase().replace(/[_\-.]+/g, " ").replace(/([a-z])([0-9])/g, "$1 $2");
+}
+function autocompleteTokens(el) {
+  return (el.getAttribute("autocomplete") ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+}
+function ruleMatches(rule, text, tokens) {
+  if (rule.autocomplete?.some((t) => tokens.includes(t)))
+    return true;
+  if (!rule.match || !rule.match.test(text))
+    return false;
+  return !(rule.exclude && rule.exclude.test(text));
+}
+var OVERRIDE_RULE = { id: "site.override", label: "Sensitive field", action: "block" };
+function classifyField(el, labelText, packs) {
+  const override = readOverride(el);
+  if (override === "allow")
+    return null;
+  const text = fieldText(el, labelText);
+  const tokens = autocompleteTokens(el);
+  let matched = null;
+  for (const rule of CORE_RULES) {
+    if (ruleMatches(rule, text, tokens)) {
+      matched = rule;
+      break;
+    }
+  }
+  if (!matched) {
+    outer:
+      for (const pack of packs) {
+        for (const rule of pack.rules) {
+          if (ruleMatches(rule, text, tokens)) {
+            matched = rule;
+            break outer;
+          }
+        }
+      }
+  }
+  if (override)
+    return { rule: matched ?? { ...OVERRIDE_RULE, action: override }, action: override };
+  return matched ? { rule: matched, action: matched.action } : null;
+}
+function createPolicy() {
+  return { blocked: [], redacted: /* @__PURE__ */ new Set(), rules: /* @__PURE__ */ new Map() };
+}
+function hasSensitiveFields(policy) {
+  return !!policy && (policy.blocked.length > 0 || policy.redacted.size > 0);
+}
+function applyRuleToSchema(prop, rule) {
+  if (prop.type !== "string")
+    return;
+  if (rule.pattern && !prop.pattern)
+    prop.pattern = rule.pattern;
+  if (rule.maxLength && !prop.maxLength)
+    prop.maxLength = rule.maxLength;
+  if (rule.hint)
+    prop.description = prop.description ? `${prop.description} (${rule.hint})` : rule.hint;
+}
+function maskValue(value) {
+  if (Array.isArray(value))
+    return value.map(maskValue);
+  if (typeof value !== "string" || value === "")
+    return value;
+  const chars = Array.from(value);
+  const alnumIdx = chars.map((c, i) => /[A-Za-z0-9]/.test(c) ? i : -1).filter((i) => i >= 0);
+  const keep = alnumIdx.length > 4 ? new Set(alnumIdx.slice(-4)) : /* @__PURE__ */ new Set();
+  return chars.map((c, i) => /[A-Za-z0-9]/.test(c) && !keep.has(i) ? "X" : c).join("");
+}
+function sanitizeValues(values, exposedKeys, policy) {
+  if (!exposedKeys)
+    return values;
+  const out = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (!exposedKeys.has(key))
+      continue;
+    out[key] = policy?.redacted.has(key) ? maskValue(value) : value;
+  }
+  return out;
 }
 
 // src/schema.ts
@@ -249,13 +450,54 @@ function getRadioLabelText(radio) {
 
 // src/analyzer.ts
 var formIndex = 0;
-function analyzeForm(form, override) {
+function analyzeForm(form, override, packs = []) {
   const name = override?.name ?? inferToolName(form);
-  const description = override?.description ?? inferToolDescription(form);
-  const { schema: inputSchema, fieldElements } = buildSchema(form);
+  const ctx = { packs, policy: createPolicy() };
+  const { schema: inputSchema, fieldElements } = buildSchema(form, ctx);
   const annotations = inferAnnotations(form);
+  applySensitiveAnnotations(annotations, ctx.policy, form);
+  const description = withRequiresUser(override?.description ?? inferToolDescription(form), ctx.policy);
   const title = inferToolTitle(form);
-  return { name, ...title && { title }, description, inputSchema, annotations, fieldElements };
+  return { name, ...title && { title }, description, inputSchema, annotations, fieldElements, sensitive: ctx.policy };
+}
+function classifyForSchema(el, key, labelText, title, ctx) {
+  if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio"))
+    return null;
+  const cls = classifyField(el, labelText, ctx.packs);
+  if (cls?.action === "block") {
+    if (!ctx.policy.blocked.some((b) => b.key === key)) {
+      ctx.policy.blocked.push({ key, label: title || cls.rule.label, ruleId: cls.rule.id });
+    }
+    return "blocked";
+  }
+  return cls;
+}
+function applyClassification(prop, key, cls, ctx) {
+  if (!cls)
+    return;
+  applyRuleToSchema(prop, cls.rule);
+  ctx.policy.rules.set(key, cls.rule);
+  if (cls.action === "redact")
+    ctx.policy.redacted.add(key);
+}
+function applySensitiveAnnotations(annotations, policy, form) {
+  if (!hasSensitiveFields(policy))
+    return;
+  if (form?.dataset["webmcpConsequential"] !== void 0)
+    return;
+  annotations.consequentialHint = true;
+  if (form?.dataset["webmcpReadonly"] === void 0) {
+    delete annotations.readOnlyHint;
+    delete annotations.idempotentHint;
+  }
+}
+function withRequiresUser(description, policy) {
+  if (policy.blocked.length === 0)
+    return description;
+  const labels = policy.blocked.map((b) => b.label).join(", ");
+  const base = description.trim();
+  const sep = /[.!?]$/.test(base) ? " " : ". ";
+  return `${base}${sep}The user must enter: ${labels}.`;
 }
 function inferToolTitle(form) {
   const raw = form.dataset["webmcpToolTitle"] || getNearestHeadingText(form) || getSubmitButtonText(form);
@@ -462,7 +704,7 @@ function collectShadowControls(root, visited = /* @__PURE__ */ new Set()) {
         )
       );
       if (found.length > 0) {
-        console.log(`[auto-webmcp] shadow: found ${found.length} control(s) in ${el.tagName.toLowerCase()} shadow root:`, found.map((f) => `${f.tagName.toLowerCase()}[type=${f.type ?? "?"}][name="${f.name}"][id="${f.id}"]`));
+        debugLog(`[auto-webmcp] shadow: found ${found.length} control(s) in ${el.tagName.toLowerCase()} shadow root:`, found.map((f) => `${f.tagName.toLowerCase()}[type=${f.type ?? "?"}][name="${f.name}"][id="${f.id}"]`));
       }
       results.push(...found, ...collectShadowControls(el.shadowRoot, visited));
     }
@@ -482,7 +724,7 @@ function collectFormAssociatedControls(form) {
   }
   return controls;
 }
-function buildSchema(form) {
+function buildSchema(form, ctx) {
   const properties = {};
   const required = [];
   const fieldElements = /* @__PURE__ */ new Map();
@@ -510,9 +752,13 @@ function buildSchema(form) {
     if (!isControlVisible(control))
       continue;
     schemaProp.title = inferFieldTitle(control);
+    const sensitivity = classifyForSchema(control, fieldKey, getAssociatedLabelText(control), schemaProp.title, ctx);
+    if (sensitivity === "blocked")
+      continue;
     const desc = inferFieldDescription(control);
     if (desc)
       schemaProp.description = desc;
+    applyClassification(schemaProp, fieldKey, sensitivity, ctx);
     const defaultVal = extractDefaultValue(control);
     if (defaultVal !== void 0)
       schemaProp.default = defaultVal;
@@ -587,9 +833,13 @@ function buildSchema(form) {
         schemaProp.anyOf = enumAnyOf;
     }
     schemaProp.title = inferAriaFieldTitle(el);
+    const ariaSensitivity = classifyForSchema(el, key, schemaProp.title, schemaProp.title, ctx);
+    if (ariaSensitivity === "blocked")
+      continue;
     const desc = inferAriaFieldDescription(el);
     if (desc)
       schemaProp.description = desc;
+    applyClassification(schemaProp, key, ariaSensitivity, ctx);
     properties[key] = schemaProp;
     fieldElements.set(key, el);
     if (el.getAttribute("aria-required") === "true") {
@@ -628,17 +878,17 @@ function resolveShadowHostKey(el) {
     const host = root.host;
     const fieldName = host.getAttribute("field-name");
     if (fieldName) {
-      console.log("[auto-webmcp] shadow host key: field-name=", fieldName);
+      debugLog("[auto-webmcp] shadow host key: field-name=", fieldName);
       return sanitizeName(fieldName);
     }
     const hostLabel = host.getAttribute("label") || host.getAttribute("aria-label");
     if (hostLabel) {
-      console.log("[auto-webmcp] shadow host key: label=", hostLabel);
+      debugLog("[auto-webmcp] shadow host key: label=", hostLabel);
       return sanitizeName(hostLabel);
     }
     const hostName = host.getAttribute("name");
     if (hostName) {
-      console.log("[auto-webmcp] shadow host key: name=", hostName);
+      debugLog("[auto-webmcp] shadow host key: name=", hostName);
       return sanitizeName(hostName);
     }
     node = host;
@@ -868,12 +1118,14 @@ function isControlVisible(el) {
     return false;
   return true;
 }
-function analyzeOrphanInputGroup(container, inputs, submitBtn) {
+function analyzeOrphanInputGroup(container, inputs, submitBtn, packs = []) {
   const name = inferOrphanToolName(container, submitBtn);
-  const description = inferOrphanToolDescription(container);
-  const { schema: inputSchema, fieldElements } = buildSchemaFromInputs(inputs);
+  const ctx = { packs, policy: createPolicy() };
+  const { schema: inputSchema, fieldElements } = buildSchemaFromInputs(inputs, ctx);
   const annotations = inferOrphanAnnotations(submitBtn);
-  return { name, description, inputSchema, annotations, fieldElements };
+  applySensitiveAnnotations(annotations, ctx.policy);
+  const description = withRequiresUser(inferOrphanToolDescription(container), ctx.policy);
+  return { name, description, inputSchema, annotations, fieldElements, sensitive: ctx.policy };
 }
 function inferOrphanAnnotations(submitBtn) {
   const annotations = {};
@@ -940,7 +1192,7 @@ function getNearestHeadingTextFrom(el) {
   }
   return "";
 }
-function buildSchemaFromInputs(inputs) {
+function buildSchemaFromInputs(inputs, ctx) {
   const properties = {};
   const required = [];
   const fieldElements = /* @__PURE__ */ new Map();
@@ -955,6 +1207,10 @@ function buildSchemaFromInputs(inputs) {
         continue;
       const prop = { type: "string" };
       prop.title = control.getAttribute("aria-label") ?? fieldKey2;
+      const editableSensitivity = classifyForSchema(control, fieldKey2, prop.title, prop.title, ctx);
+      if (editableSensitivity === "blocked")
+        continue;
+      applyClassification(prop, fieldKey2, editableSensitivity, ctx);
       const desc2 = control.getAttribute("aria-description") ?? control.getAttribute("aria-describedby") ? null : null;
       if (desc2)
         prop.description = desc2;
@@ -983,9 +1239,13 @@ function buildSchemaFromInputs(inputs) {
     if (!isControlVisible(control))
       continue;
     schemaProp.title = inferFieldTitle(control);
+    const sensitivity = classifyForSchema(control, fieldKey, getAssociatedLabelText(control), schemaProp.title, ctx);
+    if (sensitivity === "blocked")
+      continue;
     const desc = inferFieldDescription(control);
     if (desc)
       schemaProp.description = desc;
+    applyClassification(schemaProp, fieldKey, sensitivity, ctx);
     if (control instanceof HTMLInputElement && control.type === "checkbox") {
       const checkboxValues = inputs.filter((i) => i instanceof HTMLInputElement && i.type === "checkbox" && i.name === fieldKey).map((cb) => cb.value).filter((v) => v !== "" && v !== "on");
       if (checkboxValues.length > 1) {
@@ -1120,6 +1380,15 @@ function cancelledResult(toolName, reason) {
     ]
   };
 }
+var agentPolicies = /* @__PURE__ */ new WeakMap();
+function sanitizeFor(form, values) {
+  const entry = agentPolicies.get(form);
+  return entry ? sanitizeValues(values, entry.exposed, entry.policy) : values;
+}
+function requiresUserField(form) {
+  const blocked = agentPolicies.get(form)?.policy?.blocked ?? [];
+  return blocked.length > 0 ? { requires_user: blocked.map((b) => b.label) } : {};
+}
 var pendingExecutions = /* @__PURE__ */ new WeakMap();
 var lastParams = /* @__PURE__ */ new WeakMap();
 var formFieldElements = /* @__PURE__ */ new WeakMap();
@@ -1199,6 +1468,20 @@ function resolveParamsForSchema(form, params, metadata, config) {
   }
   return { resolved, warnings };
 }
+function checkFieldFormats(params, policy) {
+  if (!policy)
+    return [];
+  const warnings = [];
+  for (const [key, value] of Object.entries(params)) {
+    const rule = policy.rules.get(key);
+    if (!rule?.validate || typeof value !== "string" || value === "")
+      continue;
+    if (!rule.validate(value)) {
+      warnings.push({ field: key, type: "invalid_format", message: `"${key}" does not look like a valid ${rule.label}` });
+    }
+  }
+  return warnings;
+}
 function collectInvalidFieldWarnings(form) {
   const warnings = [];
   const controls = Array.from(form.elements).filter(
@@ -1232,7 +1515,7 @@ function captureCurrentValues(form) {
     }
   } catch {
   }
-  return result;
+  return sanitizeFor(form, result);
 }
 function collectValidationErrors(form) {
   const errors = [];
@@ -1251,6 +1534,12 @@ function collectValidationErrors(form) {
 function buildExecuteHandler(form, config, toolName, metadata) {
   if (metadata?.fieldElements) {
     formFieldElements.set(form, metadata.fieldElements);
+  }
+  if (metadata) {
+    agentPolicies.set(form, {
+      exposed: new Set(Object.keys(metadata.inputSchema.properties)),
+      ...metadata.sensitive && { policy: metadata.sensitive }
+    });
   }
   attachSubmitInterceptor(form, toolName);
   return async (params, options) => {
@@ -1282,6 +1571,10 @@ function buildExecuteHandler(form, config, toolName, metadata) {
     );
     if (aliasWarnings.length > 0) {
       pendingFillWarnings.set(form, [...pendingFillWarnings.get(form) ?? [], ...aliasWarnings]);
+    }
+    const formatWarnings = checkFieldFormats(resolvedParams, metadata?.sensitive);
+    if (formatWarnings.length > 0) {
+      pendingFillWarnings.set(form, [...pendingFillWarnings.get(form) ?? [], ...formatWarnings]);
     }
     let paramsToFill = resolvedParams;
     if (config.preserveExisting) {
@@ -1329,7 +1622,8 @@ function buildExecuteHandler(form, config, toolName, metadata) {
           skipped_fields: [],
           missing_required: pendingWarnings.get(form) ?? [],
           warnings: [...pendingFillWarnings.get(form) ?? [], warn],
-          ..._existingValsTimeout !== void 0 && { existing_values: _existingValsTimeout }
+          ..._existingValsTimeout !== void 0 && { existing_values: _existingValsTimeout },
+          ...requiresUserField(form)
         };
         pendingWarnings.delete(form);
         pendingFillWarnings.delete(form);
@@ -1378,6 +1672,9 @@ function buildExecuteHandler(form, config, toolName, metadata) {
                 const pending = pendingExecutions.get(form);
                 const nextPending = pending?.timeoutId ? { resolve, reject, timeoutId: pending.timeoutId } : { resolve, reject };
                 pendingExecutions.set(submitForm, nextPending);
+                const formPolicy = agentPolicies.get(form);
+                if (formPolicy)
+                  agentPolicies.set(submitForm, formPolicy);
                 attachSubmitInterceptor(submitForm, toolName);
               }
             }
@@ -1406,7 +1703,8 @@ function buildExecuteHandler(form, config, toolName, metadata) {
                   missing_required: pendingWarnings.get(submitForm) ?? pendingWarnings.get(form) ?? [],
                   warnings,
                   validation_errors: collectValidationErrors(submitForm),
-                  ..._existingValsBlocked !== void 0 && { existing_values: _existingValsBlocked }
+                  ..._existingValsBlocked !== void 0 && { existing_values: _existingValsBlocked },
+                  ...requiresUserField(form)
                 };
                 pendingWarnings.delete(submitForm);
                 pendingWarnings.delete(form);
@@ -1467,7 +1765,8 @@ function attachSubmitInterceptor(form, toolName) {
         })),
         ...fillWarnings
       ],
-      ...existingVals !== void 0 && { existing_values: existingVals }
+      ...existingVals !== void 0 && { existing_values: existingVals },
+      ...requiresUserField(form)
     };
     const notFilledFields = fillWarnings.filter((w) => w.type === "not_filled").map((w) => w.field);
     const totalParams = Object.keys(lastParams.get(form) ?? {}).length;
@@ -1738,7 +2037,7 @@ function fillAriaField(el, value) {
     return;
   }
   const htmlEl = el;
-  console.log("[auto-webmcp] fillAriaField", {
+  debugLog("[auto-webmcp] fillAriaField", {
     tag: el.tagName,
     role,
     isContentEditable: htmlEl.isContentEditable,
@@ -1754,7 +2053,7 @@ function fillAriaField(el, value) {
     sel?.removeAllRanges();
     sel?.addRange(range);
     const text = String(value ?? "");
-    console.log("[auto-webmcp] fillAriaField: text to insert:", JSON.stringify(text));
+    debugLog("[auto-webmcp] fillAriaField: text to insert:", JSON.stringify(text));
     let inserted = false;
     try {
       const dt = new DataTransfer();
@@ -1766,14 +2065,14 @@ function fillAriaField(el, value) {
         clipboardData: dt
       }));
       inserted = (htmlEl.textContent ?? "").trim().length > 0;
-      console.log("[auto-webmcp] fillAriaField: S1 paste result:", inserted, JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
+      debugLog("[auto-webmcp] fillAriaField: S1 paste result:", inserted, JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
     } catch (e) {
-      console.log("[auto-webmcp] fillAriaField: S1 paste threw:", e);
+      debugLog("[auto-webmcp] fillAriaField: S1 paste threw:", e);
     }
     if (!inserted) {
       const ok = document.execCommand("insertText", false, text);
       inserted = (htmlEl.textContent ?? "").trim().length > 0;
-      console.log("[auto-webmcp] fillAriaField: S2 execCommand result:", ok, "inserted:", inserted, JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
+      debugLog("[auto-webmcp] fillAriaField: S2 execCommand result:", ok, "inserted:", inserted, JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
     }
     if (!inserted) {
       try {
@@ -1785,9 +2084,9 @@ function fillAriaField(el, value) {
           data: text
         }));
         inserted = (htmlEl.textContent ?? "").trim().length > 0;
-        console.log("[auto-webmcp] fillAriaField: S3 beforeinput result:", inserted, JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
+        debugLog("[auto-webmcp] fillAriaField: S3 beforeinput result:", inserted, JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
       } catch (e) {
-        console.log("[auto-webmcp] fillAriaField: S3 beforeinput threw:", e);
+        debugLog("[auto-webmcp] fillAriaField: S3 beforeinput threw:", e);
       }
     }
     if (!inserted) {
@@ -1797,7 +2096,7 @@ function fillAriaField(el, value) {
       r2.collapse(false);
       sel?.removeAllRanges();
       sel?.addRange(r2);
-      console.log("[auto-webmcp] fillAriaField: S4 textContent assignment done, textContent:", JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
+      debugLog("[auto-webmcp] fillAriaField: S4 textContent assignment done, textContent:", JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
     }
     htmlEl.dispatchEvent(new InputEvent("input", {
       bubbles: true,
@@ -1805,9 +2104,9 @@ function fillAriaField(el, value) {
       inputType: "insertText",
       data: text
     }));
-    console.log("[auto-webmcp] fillAriaField: done, final textContent:", JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
+    debugLog("[auto-webmcp] fillAriaField: done, final textContent:", JSON.stringify((htmlEl.textContent ?? "").slice(0, 80)));
   } else {
-    console.log("[auto-webmcp] fillAriaField: not contentEditable, dispatching input/change only");
+    debugLog("[auto-webmcp] fillAriaField: not contentEditable, dispatching input/change only");
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
@@ -1853,7 +2152,7 @@ function serializeFormData(form, params, fieldEls) {
       }
     }
   }
-  return result;
+  return sanitizeFor(form, result);
 }
 function maybeConvertIsoDate(value, el) {
   const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -1950,7 +2249,7 @@ function queryShadowAll(root, selector) {
 async function fillLookupInput(el, value) {
   const text = String(value ?? "").trim();
   const input = el;
-  console.log("[auto-webmcp] fillLookupInput: typing value=", JSON.stringify(text));
+  debugLog("[auto-webmcp] fillLookupInput: typing value=", JSON.stringify(text));
   setReactValue(input, text);
   input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: text.slice(-1) || "" }));
   input.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, cancelable: true, key: text.slice(-1) || "" }));
@@ -1995,7 +2294,7 @@ async function fillLookupInput(el, value) {
   const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
   const shadowOptions = queryShadowAll(listbox, '[role="option"]');
   const options = lightOptions.length > 0 ? lightOptions : shadowOptions;
-  console.log("[auto-webmcp] fillLookupInput: listbox has", options.length, "option(s)");
+  debugLog("[auto-webmcp] fillLookupInput: listbox has", options.length, "option(s)");
   const lowerValue = text.toLowerCase();
   const match = options.find((opt) => {
     const dataValue = (opt.getAttribute("data-value") ?? "").toLowerCase();
@@ -2007,7 +2306,7 @@ async function fillLookupInput(el, value) {
     return optText.startsWith(lowerValue) || optText.includes(lowerValue);
   });
   if (match) {
-    console.log("[auto-webmcp] fillLookupInput: selecting option", match.textContent?.trim());
+    debugLog("[auto-webmcp] fillLookupInput: selecting option", match.textContent?.trim());
     match.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -2024,7 +2323,7 @@ async function fillLookupInput(el, value) {
 }
 async function fillComboboxButton(el, value) {
   const text = String(value ?? "").trim();
-  console.log("[auto-webmcp] fillComboboxButton: clicking button, value=", JSON.stringify(text));
+  debugLog("[auto-webmcp] fillComboboxButton: clicking button, value=", JSON.stringify(text));
   el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
   el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
   el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -2069,7 +2368,7 @@ async function fillComboboxButton(el, value) {
   const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
   const shadowOptions = queryShadowAll(listbox, '[role="option"]');
   const options = lightOptions.length > 0 ? lightOptions : shadowOptions;
-  console.log("[auto-webmcp] fillComboboxButton: listbox has", options.length, "option(s)");
+  debugLog("[auto-webmcp] fillComboboxButton: listbox has", options.length, "option(s)");
   const lowerValue = text.toLowerCase();
   const match = options.find((opt) => {
     const dataValue = (opt.getAttribute("data-value") ?? "").toLowerCase();
@@ -2078,7 +2377,7 @@ async function fillComboboxButton(el, value) {
     return dataValue === lowerValue || ariaLabel === lowerValue || optText === lowerValue;
   });
   if (match) {
-    console.log("[auto-webmcp] fillComboboxButton: selecting option", match.textContent?.trim());
+    debugLog("[auto-webmcp] fillComboboxButton: selecting option", match.textContent?.trim());
     match.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -2150,7 +2449,7 @@ async function registerForm(form, config) {
     }
     if (config.debug) {
       const mode = config.declarativeMode;
-      console.log(`[auto-webmcp] Skipping imperative registration for native declarative form (mode=${mode})`);
+      debugLog(`[auto-webmcp] Skipping imperative registration for native declarative form (mode=${mode})`);
     }
     return;
   }
@@ -2164,7 +2463,7 @@ async function registerForm(form, config) {
     } catch {
     }
   }
-  const metadata = analyzeForm(form, override);
+  const metadata = analyzeForm(form, override, getActivePacks(config.packs));
   const resolvedName = ensureUniqueToolName(metadata.name, form);
   if (resolvedName !== metadata.name && config.debug) {
     console.warn(`[auto-webmcp] tool name collision: "${metadata.name}" renamed to "${resolvedName}"`);
@@ -2186,7 +2485,7 @@ async function registerForm(form, config) {
   }
   pendingBtns[metadata.name] = formSubmitBtn;
   if (config.debug) {
-    console.log(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
+    debugLog(`[auto-webmcp] Registered: ${metadata.name}`, metadata);
   }
   emit("form:registered", form, metadata.name);
 }
@@ -2200,7 +2499,7 @@ async function unregisterForm(form, config) {
   if (pendingBtns)
     delete pendingBtns[name];
   if (config.debug) {
-    console.log(`[auto-webmcp] Unregistered: ${name}`);
+    debugLog(`[auto-webmcp] Unregistered: ${name}`);
   }
   emit("form:unregistered", form, name);
 }
@@ -2409,18 +2708,18 @@ async function scanOrphanInputs(config) {
     )
   ).filter((el) => {
     if (el instanceof HTMLInputElement && ORPHAN_EXCLUDED_TYPES.has(el.type.toLowerCase())) {
-      console.log(`[auto-webmcp] orphan: skipping excluded type "${el.type}" (name="${el.name}" id="${el.id}")`);
+      debugLog(`[auto-webmcp] orphan: skipping excluded type "${el.type}" (name="${el.name}" id="${el.id}")`);
       return false;
     }
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) {
-      console.log(`[auto-webmcp] orphan: skipping invisible input (name="${el.name}" id="${el.id}")`);
+      debugLog(`[auto-webmcp] orphan: skipping invisible input (name="${el.name}" id="${el.id}")`);
       return false;
     }
     return true;
   });
   const shadowOrphans = collectShadowOrphanInputs(document.body, null);
-  console.log(`[auto-webmcp] orphan: found ${orphanInputs.length} light-DOM + ${shadowOrphans.length} shadow-DOM orphan inputs`);
+  debugLog(`[auto-webmcp] orphan: found ${orphanInputs.length} light-DOM + ${shadowOrphans.length} shadow-DOM orphan inputs`);
   if (orphanInputs.length === 0 && shadowOrphans.length === 0)
     return;
   const groups = /* @__PURE__ */ new Map();
@@ -2437,7 +2736,7 @@ async function scanOrphanInputs(config) {
       }
       container = container.parentElement;
     }
-    console.log(`[auto-webmcp] orphan: input (name="${input.name}" id="${input.id}") grouped into container`, foundContainer);
+    debugLog(`[auto-webmcp] orphan: input (name="${input.name}" id="${input.id}") grouped into container`, foundContainer);
     if (!groups.has(foundContainer))
       groups.set(foundContainer, []);
     groups.get(foundContainer).push(input);
@@ -2455,12 +2754,12 @@ async function scanOrphanInputs(config) {
       }
       container = container.parentElement;
     }
-    console.log(`[auto-webmcp] orphan (shadow): input (id="${el.id}") via host <${shadowHost.tagName.toLowerCase()}> grouped into container`, foundContainer);
+    debugLog(`[auto-webmcp] orphan (shadow): input (id="${el.id}") via host <${shadowHost.tagName.toLowerCase()}> grouped into container`, foundContainer);
     if (!groups.has(foundContainer))
       groups.set(foundContainer, []);
     groups.get(foundContainer).push(el);
   }
-  console.log(`[auto-webmcp] orphan: ${groups.size} group(s) found`);
+  debugLog(`[auto-webmcp] orphan: ${groups.size} group(s) found`);
   for (const [container, inputs] of groups) {
     const allCandidates = Array.from(
       container.querySelectorAll(SUBMIT_BTN_SELECTOR)
@@ -2478,7 +2777,7 @@ async function scanOrphanInputs(config) {
       });
       submitBtn = disabledCandidates[disabledCandidates.length - 1] ?? null;
       if (submitBtn)
-        console.log(`[auto-webmcp] orphan: using disabled submit button as reference: "${submitBtn.textContent?.trim()}"`);
+        debugLog(`[auto-webmcp] orphan: using disabled submit button as reference: "${submitBtn.textContent?.trim()}"`);
     }
     if (!submitBtn) {
       const containerBtns = Array.from(
@@ -2489,7 +2788,7 @@ async function scanOrphanInputs(config) {
       });
       submitBtn = containerBtns[containerBtns.length - 1] ?? null;
       if (submitBtn)
-        console.log(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
+        debugLog(`[auto-webmcp] orphan: using text-matched button in container: "${submitBtn.textContent?.trim()}"`);
     }
     if (!submitBtn) {
       const dialog = container.closest('[role="dialog"], [aria-modal="true"]');
@@ -2500,7 +2799,7 @@ async function scanOrphanInputs(config) {
           const r = b.getBoundingClientRect();
           return r.width > 0 && r.height > 0 && SUBMIT_TEXT_RE.test(b.textContent ?? "");
         });
-        console.log(
+        debugLog(
           `[auto-webmcp] orphan: dialog buttons matching submit text:`,
           allDialogBtns.map((b) => `"${b.textContent?.trim().slice(0, 30)}" disabled=${b.disabled} aria-disabled=${b.getAttribute("aria-disabled")}`)
         );
@@ -2513,7 +2812,7 @@ async function scanOrphanInputs(config) {
         const dialogBtns = disabledBtns.length > 0 ? disabledBtns : enabledBtns;
         submitBtn = dialogBtns[dialogBtns.length - 1] ?? null;
         if (submitBtn)
-          console.log(`[auto-webmcp] orphan: using text-matched button in dialog: "${submitBtn.textContent?.trim().slice(0, 40)}" disabled=${submitBtn.disabled} aria-disabled=${submitBtn.getAttribute("aria-disabled")}`);
+          debugLog(`[auto-webmcp] orphan: using text-matched button in dialog: "${submitBtn.textContent?.trim().slice(0, 40)}" disabled=${submitBtn.disabled} aria-disabled=${submitBtn.getAttribute("aria-disabled")}`);
       }
     }
     if (!submitBtn) {
@@ -2525,12 +2824,12 @@ async function scanOrphanInputs(config) {
       });
       submitBtn = pageBtns[pageBtns.length - 1] ?? null;
       if (submitBtn)
-        console.log(`[auto-webmcp] orphan: using page-wide fallback submit button: "${submitBtn.textContent?.trim()}"`);
+        debugLog(`[auto-webmcp] orphan: using page-wide fallback submit button: "${submitBtn.textContent?.trim()}"`);
     }
-    console.log(`[auto-webmcp] orphan: submit button for group:`, submitBtn ? `"${submitBtn.textContent?.trim()}" disabled=${submitBtn.disabled}` : "none");
-    const metadata = analyzeOrphanInputGroup(container, inputs, submitBtn);
+    debugLog(`[auto-webmcp] orphan: submit button for group:`, submitBtn ? `"${submitBtn.textContent?.trim()}" disabled=${submitBtn.disabled}` : "none");
+    const metadata = analyzeOrphanInputGroup(container, inputs, submitBtn, getActivePacks(config.packs));
     if (registeredOrphanToolNames.has(metadata.name)) {
-      console.log(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
+      debugLog(`[auto-webmcp] orphan: "${metadata.name}" already registered, skipping`);
       continue;
     }
     const orphanName = ensureUniqueToolName(metadata.name);
@@ -2538,7 +2837,7 @@ async function scanOrphanInputs(config) {
       console.warn(`[auto-webmcp] orphan tool name collision: "${metadata.name}" renamed to "${orphanName}"`);
     }
     metadata.name = orphanName;
-    console.log(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
+    debugLog(`[auto-webmcp] orphan: tool="${metadata.name}" schema keys:`, Object.keys(metadata.inputSchema.properties));
     const inputPairs = [];
     const schemaProps = metadata.inputSchema.properties;
     const AUTO_ID_RE = /^_r_[0-9a-z]+_$/i;
@@ -2547,24 +2846,24 @@ async function scanOrphanInputs(config) {
       const key = el.name || el.getAttribute("name") || el.dataset["webmcpName"] || id || el.getAttribute("aria-label") || el.getAttribute("placeholder") || null;
       const safeKey = key ? key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) : null;
       const matched = !!(safeKey && schemaProps[safeKey]);
-      console.log(`[auto-webmcp] orphan: field (name="${el.name ?? ""}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
+      debugLog(`[auto-webmcp] orphan: field (name="${el.name ?? ""}" id="${el.id}") rawKey="${key}" safeKey="${safeKey}" matched=${matched}`);
       if (matched) {
         inputPairs.push({ key: safeKey, el });
       }
     }
-    console.log(`[auto-webmcp] orphan: ${inputPairs.length}/${inputs.length} input(s) mapped to schema keys`);
+    debugLog(`[auto-webmcp] orphan: ${inputPairs.length}/${inputs.length} input(s) mapped to schema keys`);
     if (inputPairs.length === 0) {
-      console.log(`[auto-webmcp] orphan: skipping group "${metadata.name}" \u2014 no inputs mapped to schema keys`);
+      debugLog(`[auto-webmcp] orphan: skipping group "${metadata.name}" \u2014 no inputs mapped to schema keys`);
       continue;
     }
     const toolName = metadata.name;
     const execute = async (params, _options) => {
-      console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
-      console.log(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map((p) => p.key));
+      debugLog(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
+      debugLog(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map((p) => p.key));
       const notFilled = [];
       for (const { key, el } of inputPairs) {
         if (params[key] !== void 0) {
-          console.log(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], "element=", el);
+          debugLog(`[auto-webmcp] orphan execute: filling key="${key}" value=`, params[key], "element=", el);
           if (el.getAttribute("role") === "combobox" && el.tagName.toLowerCase() === "input" && (el.getAttribute("aria-autocomplete") === "list" || el.getAttribute("aria-haspopup") === "listbox")) {
             const filled = await fillLookupInput(el, params[key]);
             if (!filled)
@@ -2576,9 +2875,9 @@ async function scanOrphanInputs(config) {
           } else {
             fillElement(el, params[key]);
           }
-          console.log(`[auto-webmcp] orphan execute: after fill, element value=`, el.value);
+          debugLog(`[auto-webmcp] orphan execute: after fill, element value=`, el.value);
         } else {
-          console.log(`[auto-webmcp] orphan execute: key="${key}" not in params, skipping`);
+          debugLog(`[auto-webmcp] orphan execute: key="${key}" not in params, skipping`);
         }
       }
       window.dispatchEvent(new CustomEvent("toolactivated", { detail: { toolName } }));
@@ -2586,17 +2885,17 @@ async function scanOrphanInputs(config) {
       if (!shouldAutoSubmit) {
         const issueText = notFilled.length > 0 ? ` Could not fill: ${notFilled.map((f) => `"${f}" (no matching option)`).join(", ")}.` : "";
         const readyText = notFilled.length > 0 ? `Fields partially filled.${issueText} Review in browser, then click Save.` : "Fields filled. Ready to submit.";
-        console.log(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
+        debugLog(`[auto-webmcp] orphan execute: autoSubmit=false, returning without clicking submit`);
         return { content: [{ type: "text", text: readyText }] };
       }
-      console.log(`[auto-webmcp] orphan execute: resolving submit button (up to 2s)...`);
+      debugLog(`[auto-webmcp] orphan execute: resolving submit button (up to 2s)...`);
       let btn = null;
       if (submitBtn && document.contains(submitBtn)) {
         const isEnabled = !submitBtn.disabled && submitBtn.getAttribute("aria-disabled") !== "true";
         const r = submitBtn.getBoundingClientRect();
         if (isEnabled && r.width > 0 && r.height > 0) {
           btn = submitBtn;
-          console.log(`[auto-webmcp] orphan execute: using captured submit button "${btn.textContent?.trim()}"`);
+          debugLog(`[auto-webmcp] orphan execute: using captured submit button "${btn.textContent?.trim()}"`);
         }
       }
       if (!btn) {
@@ -2625,13 +2924,13 @@ async function scanOrphanInputs(config) {
         });
         btn = textBtns[textBtns.length - 1] ?? null;
         if (btn)
-          console.log(`[auto-webmcp] orphan execute: using text-matched fallback button "${btn.textContent?.trim()}"`);
+          debugLog(`[auto-webmcp] orphan execute: using text-matched fallback button "${btn.textContent?.trim()}"`);
       }
       if (!btn) {
         console.warn(`[auto-webmcp] orphan execute: submit button still disabled after 2s`);
         return { content: [{ type: "text", text: "Fields filled but the submit button is still disabled. The page may require additional input before submitting." }] };
       }
-      console.log(`[auto-webmcp] orphan execute: clicking submit button "${btn.textContent?.trim()}"`);
+      debugLog(`[auto-webmcp] orphan execute: clicking submit button "${btn.textContent?.trim()}"`);
       btn.click();
       return { content: [{ type: "text", text: "Fields filled and form submitted." }] };
     };
@@ -2653,7 +2952,7 @@ async function scanOrphanInputs(config) {
       const pendingBtns = window["__pendingSubmitBtns"] ??= {};
       pendingBtns[metadata.name] = submitBtn;
       if (config.debug) {
-        console.log(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
+        debugLog(`[auto-webmcp] Orphan tool registered: ${metadata.name}`, metadata);
       }
     } catch {
     }
@@ -2712,6 +3011,7 @@ async function unregisterOrphanTools() {
 // src/index.ts
 async function autoWebMCP(config) {
   const resolved = resolveConfig(config);
+  setDebug(resolved.debug);
   if (resolved.debug) {
     console.debug("[auto-webmcp] Initializing", {
       webmcpSupported: isWebMCPSupported(),

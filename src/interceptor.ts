@@ -8,6 +8,8 @@
  */
 
 import { ResolvedConfig } from './config.js';
+import { debugLog } from './log.js';
+import { SensitivePolicy, sanitizeValues } from './sensitive.js';
 import type { ToolMetadata } from './analyzer.js';
 
 // ---------------------------------------------------------------------------
@@ -36,6 +38,7 @@ export interface FillWarning {
     | 'type_mismatch'
     | 'alias_resolved'
     | 'blocked_submit'
+    | 'invalid_format'
     | 'timeout';
   message: string;
   original?: unknown;
@@ -66,6 +69,8 @@ export interface StructuredExecuteData {
   validation_errors?: ValidationError[];
   /** Field values captured from the form before the agent filled it. */
   existing_values?: Record<string, unknown>;
+  /** Sensitive fields the agent cannot fill; the user must complete them. */
+  requires_user?: string[];
 }
 
 /**
@@ -92,6 +97,19 @@ function cancelledResult(toolName: string, reason: string): ExecuteResult {
       { type: 'text', text: JSON.stringify(structured) },
     ],
   };
+}
+
+/** What the agent may see for each form: exposed schema keys and the sensitive-field policy. */
+const agentPolicies = new WeakMap<HTMLFormElement, { exposed: Set<string>; policy?: SensitivePolicy }>();
+
+function sanitizeFor(form: HTMLFormElement, values: Record<string, unknown>): Record<string, unknown> {
+  const entry = agentPolicies.get(form);
+  return entry ? sanitizeValues(values, entry.exposed, entry.policy) : values;
+}
+
+function requiresUserField(form: HTMLFormElement): { requires_user?: string[] } {
+  const blocked = agentPolicies.get(form)?.policy?.blocked ?? [];
+  return blocked.length > 0 ? { requires_user: blocked.map((b) => b.label) } : {};
 }
 
 type Resolver = (result: ExecuteResult) => void;
@@ -218,6 +236,20 @@ function resolveParamsForSchema(
   return { resolved, warnings };
 }
 
+/** Checksum failures for pack fields (GSTIN, routing number, etc.) surface as warnings. */
+function checkFieldFormats(params: Record<string, unknown>, policy: SensitivePolicy | undefined): FillWarning[] {
+  if (!policy) return [];
+  const warnings: FillWarning[] = [];
+  for (const [key, value] of Object.entries(params)) {
+    const rule = policy.rules.get(key);
+    if (!rule?.validate || typeof value !== 'string' || value === '') continue;
+    if (!rule.validate(value)) {
+      warnings.push({ field: key, type: 'invalid_format', message: `"${key}" does not look like a valid ${rule.label}` });
+    }
+  }
+  return warnings;
+}
+
 function collectInvalidFieldWarnings(form: HTMLFormElement): FillWarning[] {
   const warnings: FillWarning[] = [];
   const controls = Array.from(form.elements).filter(
@@ -255,9 +287,9 @@ function captureCurrentValues(form: HTMLFormElement): Record<string, unknown> {
       }
     }
   } catch {
-    // FormData constructor can throw for detached forms — return what we have
+    // FormData constructor can throw for detached forms, so return what we have
   }
-  return result;
+  return sanitizeFor(form, result);
 }
 
 /**
@@ -309,6 +341,12 @@ export function buildExecuteHandler(
   if (metadata?.fieldElements) {
     formFieldElements.set(form, metadata.fieldElements);
   }
+  if (metadata) {
+    agentPolicies.set(form, {
+      exposed: new Set(Object.keys(metadata.inputSchema.properties)),
+      ...(metadata.sensitive && { policy: metadata.sensitive }),
+    });
+  }
 
   // Attach submit/reset listeners once per form
   attachSubmitInterceptor(form, toolName);
@@ -349,6 +387,10 @@ export function buildExecuteHandler(
     );
     if (aliasWarnings.length > 0) {
       pendingFillWarnings.set(form, [...(pendingFillWarnings.get(form) ?? []), ...aliasWarnings]);
+    }
+    const formatWarnings = checkFieldFormats(resolvedParams, metadata?.sensitive);
+    if (formatWarnings.length > 0) {
+      pendingFillWarnings.set(form, [...(pendingFillWarnings.get(form) ?? []), ...formatWarnings]);
     }
 
     // If preserveExisting is enabled, skip filling fields that already have a non-empty value.
@@ -410,6 +452,7 @@ export function buildExecuteHandler(
           missing_required: pendingWarnings.get(form) ?? [],
           warnings: [...(pendingFillWarnings.get(form) ?? []), warn],
           ...(_existingValsTimeout !== undefined && { existing_values: _existingValsTimeout }),
+          ...requiresUserField(form),
         };
         pendingWarnings.delete(form);
         pendingFillWarnings.delete(form);
@@ -474,6 +517,8 @@ export function buildExecuteHandler(
                   ? { resolve, reject, timeoutId: pending.timeoutId }
                   : { resolve, reject };
                 pendingExecutions.set(submitForm, nextPending);
+                const formPolicy = agentPolicies.get(form);
+                if (formPolicy) agentPolicies.set(submitForm, formPolicy);
                 attachSubmitInterceptor(submitForm, toolName);
               }
             }
@@ -505,6 +550,7 @@ export function buildExecuteHandler(
                   warnings,
                   validation_errors: collectValidationErrors(submitForm),
                   ...(_existingValsBlocked !== undefined && { existing_values: _existingValsBlocked }),
+                  ...requiresUserField(form),
                 };
                 pendingWarnings.delete(submitForm);
                 pendingWarnings.delete(form);
@@ -578,6 +624,7 @@ function attachSubmitInterceptor(form: HTMLFormElement, toolName: string): void 
         ...fillWarnings,
       ],
       ...(existingVals !== undefined && { existing_values: existingVals }),
+      ...requiresUserField(form),
     };
 
     const notFilledFields = fillWarnings.filter((w) => w.type === 'not_filled').map((w) => w.field);
@@ -963,7 +1010,7 @@ function fillAriaField(el: Element, value: unknown): void {
 
   // textbox, combobox, searchbox, spinbutton
   const htmlEl = el as HTMLElement;
-  console.log('[auto-webmcp] fillAriaField', {
+  debugLog('[auto-webmcp] fillAriaField', {
     tag: el.tagName, role, isContentEditable: htmlEl.isContentEditable,
     id: el.id, ariaLabel: el.getAttribute('aria-label'),
     textContentBefore: (htmlEl.textContent ?? '').slice(0, 80),
@@ -981,7 +1028,7 @@ function fillAriaField(el: Element, value: unknown): void {
     sel?.addRange(range);
 
     const text = String(value ?? '');
-    console.log('[auto-webmcp] fillAriaField: text to insert:', JSON.stringify(text));
+    debugLog('[auto-webmcp] fillAriaField: text to insert:', JSON.stringify(text));
 
     // Strategy 1: paste simulation (Draft.js preferred path).
     // Draft.js intercepts paste, reads clipboardData, updates EditorState, and
@@ -998,9 +1045,9 @@ function fillAriaField(el: Element, value: unknown): void {
         bubbles: true, cancelable: true, composed: true, clipboardData: dt,
       }));
       inserted = (htmlEl.textContent ?? '').trim().length > 0;
-      console.log('[auto-webmcp] fillAriaField: S1 paste result:', inserted, JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
+      debugLog('[auto-webmcp] fillAriaField: S1 paste result:', inserted, JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
     } catch (e) {
-      console.log('[auto-webmcp] fillAriaField: S1 paste threw:', e);
+      debugLog('[auto-webmcp] fillAriaField: S1 paste threw:', e);
     }
 
     if (!inserted) {
@@ -1009,7 +1056,7 @@ function fillAriaField(el: Element, value: unknown): void {
       // the native beforeinput + input events that Quill/ProseMirror listen to.
       const ok = document.execCommand('insertText', false, text);
       inserted = (htmlEl.textContent ?? '').trim().length > 0;
-      console.log('[auto-webmcp] fillAriaField: S2 execCommand result:', ok, 'inserted:', inserted, JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
+      debugLog('[auto-webmcp] fillAriaField: S2 execCommand result:', ok, 'inserted:', inserted, JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
     }
 
     if (!inserted) {
@@ -1022,9 +1069,9 @@ function fillAriaField(el: Element, value: unknown): void {
           inputType: 'insertText', data: text,
         }));
         inserted = (htmlEl.textContent ?? '').trim().length > 0;
-        console.log('[auto-webmcp] fillAriaField: S3 beforeinput result:', inserted, JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
+        debugLog('[auto-webmcp] fillAriaField: S3 beforeinput result:', inserted, JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
       } catch (e) {
-        console.log('[auto-webmcp] fillAriaField: S3 beforeinput threw:', e);
+        debugLog('[auto-webmcp] fillAriaField: S3 beforeinput threw:', e);
       }
     }
 
@@ -1038,16 +1085,16 @@ function fillAriaField(el: Element, value: unknown): void {
       r2.collapse(false);
       sel?.removeAllRanges();
       sel?.addRange(r2);
-      console.log('[auto-webmcp] fillAriaField: S4 textContent assignment done, textContent:', JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
+      debugLog('[auto-webmcp] fillAriaField: S4 textContent assignment done, textContent:', JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
     }
 
     // Always dispatch input so any remaining framework listeners are notified.
     htmlEl.dispatchEvent(new InputEvent('input', {
       bubbles: true, cancelable: true, inputType: 'insertText', data: text,
     }));
-    console.log('[auto-webmcp] fillAriaField: done, final textContent:', JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
+    debugLog('[auto-webmcp] fillAriaField: done, final textContent:', JSON.stringify((htmlEl.textContent ?? '').slice(0, 80)));
   } else {
-    console.log('[auto-webmcp] fillAriaField: not contentEditable, dispatching input/change only');
+    debugLog('[auto-webmcp] fillAriaField: not contentEditable, dispatching input/change only');
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
@@ -1113,7 +1160,7 @@ function serializeFormData(
     }
   }
 
-  return result;
+  return sanitizeFor(form, result);
 }
 
 /**
@@ -1276,7 +1323,7 @@ function queryShadowAll(root: Element | ShadowRoot | Document, selector: string)
 export async function fillLookupInput(el: Element, value: unknown): Promise<boolean> {
   const text = String(value ?? '').trim();
   const input = el as HTMLInputElement;
-  console.log('[auto-webmcp] fillLookupInput: typing value=', JSON.stringify(text));
+  debugLog('[auto-webmcp] fillLookupInput: typing value=', JSON.stringify(text));
 
   // Type the search text to trigger the async lookup.
   setReactValue(input, text);
@@ -1317,7 +1364,7 @@ export async function fillLookupInput(el: Element, value: unknown): Promise<bool
   const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
   const shadowOptions = queryShadowAll(listbox, '[role="option"]');
   const options = lightOptions.length > 0 ? lightOptions : shadowOptions;
-  console.log('[auto-webmcp] fillLookupInput: listbox has', options.length, 'option(s)');
+  debugLog('[auto-webmcp] fillLookupInput: listbox has', options.length, 'option(s)');
 
   const lowerValue = text.toLowerCase();
   // Try exact match first, then prefix/contains fallback for results with extra metadata text.
@@ -1334,7 +1381,7 @@ export async function fillLookupInput(el: Element, value: unknown): Promise<bool
     });
 
   if (match) {
-    console.log('[auto-webmcp] fillLookupInput: selecting option', match.textContent?.trim());
+    debugLog('[auto-webmcp] fillLookupInput: selecting option', match.textContent?.trim());
     match.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -1348,7 +1395,7 @@ export async function fillLookupInput(el: Element, value: unknown): Promise<bool
 
 export async function fillComboboxButton(el: Element, value: unknown): Promise<boolean> {
   const text = String(value ?? '').trim();
-  console.log('[auto-webmcp] fillComboboxButton: clicking button, value=', JSON.stringify(text));
+  debugLog('[auto-webmcp] fillComboboxButton: clicking button, value=', JSON.stringify(text));
 
   // Fire pointerdown + click. LWC event handlers often listen to pointerdown to
   // manage focus/blur before click fires, so synthetic click alone is insufficient.
@@ -1398,7 +1445,7 @@ export async function fillComboboxButton(el: Element, value: unknown): Promise<b
   const lightOptions = Array.from(listbox.querySelectorAll('[role="option"]'));
   const shadowOptions = queryShadowAll(listbox, '[role="option"]');
   const options = lightOptions.length > 0 ? lightOptions : shadowOptions;
-  console.log('[auto-webmcp] fillComboboxButton: listbox has', options.length, 'option(s)');
+  debugLog('[auto-webmcp] fillComboboxButton: listbox has', options.length, 'option(s)');
 
   const lowerValue = text.toLowerCase();
   const match = options.find((opt) => {
@@ -1409,7 +1456,7 @@ export async function fillComboboxButton(el: Element, value: unknown): Promise<b
   });
 
   if (match) {
-    console.log('[auto-webmcp] fillComboboxButton: selecting option', match.textContent?.trim());
+    debugLog('[auto-webmcp] fillComboboxButton: selecting option', match.textContent?.trim());
     // Fire the same sequence on the option for LWC: pointerdown + mousedown + click.
     match.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     match.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>KYC and Payout Details</title>
+</head>
+<body>
+  <h2>Merchant KYC</h2>
+  <form id="kyc" action="/kyc" method="POST">
+    <input type="hidden" name="csrf_token" value="secret-csrf-123">
+    <label for="full_name">Full Name</label>
+    <input id="full_name" name="full_name" type="text" value="Asha Rao">
+
+    <label for="aadhaar">Aadhaar Number</label>
+    <input id="aadhaar" name="aadhaar" type="text" value="234567890123">
+
+    <label for="pan">PAN</label>
+    <input id="pan" name="pan" type="text">
+
+    <label for="gstin">GSTIN</label>
+    <input id="gstin" name="gstin" type="text">
+
+    <label for="ifsc">IFSC Code</label>
+    <input id="ifsc" name="ifsc" type="text">
+
+    <label for="pincode">PIN Code</label>
+    <input id="pincode" name="pincode" type="text">
+
+    <label for="mobile">Mobile Number</label>
+    <input id="mobile" name="mobile" type="tel">
+
+    <label for="upi">UPI ID</label>
+    <input id="upi" name="upi_id" type="text">
+
+    <label for="otp">Enter OTP</label>
+    <input id="otp" name="code" type="text" autocomplete="one-time-code">
+
+    <label for="pw">Password</label>
+    <input id="pw" name="password" type="password" value="hunter2">
+
+    <label for="ref">Referral BSN</label>
+    <input id="ref" name="referral_bsn" type="text" data-webmcp-sensitive="allow">
+
+    <label for="loyalty">Loyalty Number</label>
+    <input id="loyalty" name="loyalty_number" type="text" data-webmcp-sensitive="redact" value="LOY-99887766">
+
+    <button type="submit">Save Details</button>
+  </form>
+
+  <h2>US Payout</h2>
+  <form id="payout" action="/payout" method="POST">
+    <label for="ssn">Social Security Number</label>
+    <input id="ssn" name="ssn" type="text">
+
+    <label for="routing">Routing Number</label>
+    <input id="routing" name="routing_number" type="text">
+
+    <label for="zip">ZIP Code</label>
+    <input id="zip" name="zip" type="text">
+
+    <button type="submit">Add Payout Account</button>
+  </form>
+</body>
+</html>

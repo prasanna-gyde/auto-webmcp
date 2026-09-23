@@ -1,7 +1,7 @@
 {
   "name": "auto-webmcp",
-  "version": "0.4.0",
-  "description": "Automatically make any HTML form WebMCP-ready — zero coding required",
+  "version": "0.5.0",
+  "description": "Automatically make any HTML form WebMCP-ready \u2014 zero coding required",
   "author": "Prasanna Vaidya <prasanna@gyde.ai>",
   "license": "MIT",
   "type": "module",
@@ -10,9 +10,19 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/auto-webmcp.esm.js",
-      "require": "./dist/auto-webmcp.cjs.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/auto-webmcp.cjs.js"
+    },
+    "./packs/in": {
+      "types": "./dist/packs/in.d.ts",
+      "import": "./dist/packs/in.esm.js",
+      "require": "./dist/packs/in.cjs.js"
+    },
+    "./packs/us": {
+      "types": "./dist/packs/us.d.ts",
+      "import": "./dist/packs/us.esm.js",
+      "require": "./dist/packs/us.cjs.js"
     }
   },
   "files": [
