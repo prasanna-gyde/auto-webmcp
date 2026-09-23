@@ -230,20 +230,23 @@ Tool results only include fields the agent can see. Hidden inputs such as CSRF t
 import { autoWebMCP } from 'auto-webmcp';
 import { india } from 'auto-webmcp/packs/in';
 import { unitedStates } from 'auto-webmcp/packs/us';
+// also: singapore from 'auto-webmcp/packs/sg', unitedKingdom from 'auto-webmcp/packs/gb'
 
 autoWebMCP({ packs: [india, unitedStates] });
 ```
 
 ```html
 <!-- Script tag: load packs before the core bundle -->
-<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/packs/in.iife.js"></script>
-<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/auto-webmcp.iife.js"></script>
+<script src="https://unpkg.com/auto-webmcp@0.7.0/dist/packs/in.iife.js"></script>
+<script src="https://unpkg.com/auto-webmcp@0.7.0/dist/auto-webmcp.iife.js"></script>
 ```
 
 | Pack | Redacted (masked in results) | Formatted (pattern + hint, checksum warnings) |
 |---|---|---|
 | `in` India | PAN, UPI ID, bank account, passport, voter ID, driving licence, ABHA, UAN | GSTIN, IFSC, TAN, CIN, PIN code, mobile |
 | `us` United States | ITIN, bank account, date of birth, driver's license, passport, Medicare MBI | ABA routing, EIN, NPI, ZIP, phone |
+| `sg` Singapore | passport, date of birth (NRIC/FIN is blocked by core) | UEN, postal code, phone |
+| `gb` United Kingdom | National Insurance number, NHS number, UTR, bank account, passport, driving licence, date of birth | sort code, company number, UK VAT, postcode, phone |
 
 Override any field:
 
@@ -287,7 +290,7 @@ razorpay({
 
 `start_*` results report `submitted`, `dismissed`, `failed` (only after the user closes Checkout without a successful retry), `awaiting_user_action` or `cancelled`. Treat `submitted` as pending: confirm the payment from your server's webhook-updated state, never from the browser callback.
 
-Script tag: `<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/adapters/razorpay.iife.js"></script>` exposes `AutoWebMCPRazorpay.razorpay(...)`.
+Script tag: `<script src="https://unpkg.com/auto-webmcp@0.7.0/dist/adapters/razorpay.iife.js"></script>` exposes `AutoWebMCPRazorpay.razorpay(...)`.
 
 ---
 

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Account setup</title></head>
+<body>
+  <h2>Singapore Company Details</h2>
+  <form id="sg" action="/sg" method="POST">
+    <label for="sg-name">Full Name</label><input id="sg-name" name="full_name">
+    <label for="nric">NRIC/FIN</label><input id="nric" name="nric">
+    <label for="uen">UEN</label><input id="uen" name="uen">
+    <label for="sg-postal">Postal Code</label><input id="sg-postal" name="postal_code">
+    <label for="sg-mobile">Mobile Number</label><input id="sg-mobile" name="mobile" type="tel">
+    <button type="submit">Register Company</button>
+  </form>
+
+  <h2>UK Payroll Details</h2>
+  <form id="gb" action="/gb" method="POST">
+    <label for="nino">National Insurance Number</label><input id="nino" name="nino">
+    <label for="nhs">NHS Number</label><input id="nhs" name="nhs_number">
+    <label for="sort">Sort Code</label><input id="sort" name="sort_code">
+    <label for="acct">Account Number</label><input id="acct" name="account_number">
+    <label for="vat">VAT Number</label><input id="vat" name="vat_number">
+    <label for="pc">Postcode</label><input id="pc" name="postcode">
+    <button type="submit">Save Payroll</button>
+  </form>
+</body>
+</html>

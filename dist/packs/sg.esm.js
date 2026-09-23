@@ -1,0 +1,48 @@
+// src/packs/sg.ts
+var singapore = {
+  id: "sg",
+  name: "Singapore",
+  rules: [
+    // Redact: personal identifiers
+    { id: "sg.passport", label: "Passport number", action: "redact", match: /\b(passport (number|no))\b/ },
+    {
+      id: "sg.dob",
+      label: "Date of birth",
+      action: "redact",
+      autocomplete: ["bday", "bday-day", "bday-month", "bday-year"],
+      match: /\b(date of birth|dob|birth ?date)\b/
+    },
+    // Format: business and address fields
+    {
+      id: "sg.uen",
+      label: "UEN",
+      action: "format",
+      match: /\b(uen|unique entity number|business registration (number|no))\b/,
+      pattern: "^(\\d{8}[A-Za-z]|(19|20)\\d{7}[A-Za-z]|[TSRtsr]\\d{2}[A-Za-z]{2}\\d{4}[A-Za-z])$",
+      maxLength: 10,
+      hint: "UEN, e.g. 201912345K"
+    },
+    {
+      id: "sg.postal",
+      label: "Postal code",
+      action: "format",
+      autocomplete: ["postal-code"],
+      match: /\b(postal code|post code|postcode|zip( code)?)\b/,
+      pattern: "^\\d{6}$",
+      maxLength: 6,
+      hint: "6-digit postal code"
+    },
+    {
+      id: "sg.phone",
+      label: "Phone number",
+      action: "format",
+      autocomplete: ["tel", "tel-national"],
+      match: /\b(mobile( number| no)?|phone( number| no)?|handphone|hp (number|no)|contact (number|no))\b/,
+      pattern: "^(\\+65[\\s-]?)?[3689]\\d{3}[\\s-]?\\d{4}$",
+      hint: "8-digit Singapore number, optional +65"
+    }
+  ]
+};
+export {
+  singapore
+};
