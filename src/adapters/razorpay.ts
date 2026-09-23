@@ -110,7 +110,11 @@ type CheckoutOutcome =
   | { outcome: 'timed_out' }
   | { outcome: 'aborted' };
 
-/** Open Checkout and wait until the user pays, closes it, or the call is aborted. */
+/**
+ * Open Checkout and wait until the user pays, closes it, or the call is aborted.
+ * Razorpay fires payment.failed per attempt and keeps the modal open for a retry, so a
+ * failure is only final when the user closes the modal (or the wait times out).
+ */
 export async function openRazorpayCheckout(
   session: RazorpayCheckoutSession,
   opts: { merchant: string; timeoutMs?: number; signal?: AbortSignal } = { merchant: '' },
@@ -119,13 +123,17 @@ export async function openRazorpayCheckout(
   return new Promise<CheckoutOutcome>((resolve) => {
     let settled = false;
     let instance: RazorpayInstance | null = null;
+    let lastFailure: string | null = null;
     const finish = (value: CheckoutOutcome) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       resolve(value);
     };
-    const timer = setTimeout(() => finish({ outcome: 'timed_out' }), opts.timeoutMs ?? 10 * 60 * 1000);
+    const timer = setTimeout(
+      () => finish(lastFailure ? { outcome: 'failed', reason: lastFailure } : { outcome: 'timed_out' }),
+      opts.timeoutMs ?? 10 * 60 * 1000,
+    );
 
     instance = new Razorpay({
       key: session.keyId,
@@ -137,11 +145,11 @@ export async function openRazorpayCheckout(
       ...(session.description && { description: session.description }),
       ...(session.prefill && { prefill: session.prefill }),
       handler: (response: Record<string, unknown>) => finish({ outcome: 'submitted', response }),
-      modal: { ondismiss: () => finish({ outcome: 'dismissed' }) },
+      modal: { ondismiss: () => finish(lastFailure ? { outcome: 'failed', reason: lastFailure } : { outcome: 'dismissed' }) },
     });
     instance.on('payment.failed', (response) => {
       const error = (response['error'] ?? {}) as Record<string, unknown>;
-      finish({ outcome: 'failed', reason: String(error['description'] ?? 'payment failed') });
+      lastFailure = String(error['description'] ?? 'payment failed').trim().replace(/[.\s]+$/, '');
     });
     opts.signal?.addEventListener('abort', () => {
       instance?.close();
@@ -170,7 +178,7 @@ function describeOutcome(outcome: CheckoutOutcome, statusTool: string): TextResu
     case 'dismissed':
       return result('The user closed Razorpay Checkout without paying.', { status: 'dismissed' });
     case 'failed':
-      return result(`Payment failed: ${outcome.reason}.`, { status: 'failed', reason: outcome.reason });
+      return result(`Payment failed: ${outcome.reason}. The user closed Checkout without a successful retry.`, { status: 'failed', reason: outcome.reason });
     case 'timed_out':
       return result(`Checkout is still open. Call ${statusTool} later to see if the user paid.`, { status: 'awaiting_user_action' });
     case 'aborted':

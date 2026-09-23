@@ -73,6 +73,7 @@ async function openRazorpayCheckout(session, opts = { merchant: "" }) {
   return new Promise((resolve) => {
     let settled = false;
     let instance = null;
+    let lastFailure = null;
     const finish = (value) => {
       if (settled)
         return;
@@ -80,7 +81,10 @@ async function openRazorpayCheckout(session, opts = { merchant: "" }) {
       clearTimeout(timer);
       resolve(value);
     };
-    const timer = setTimeout(() => finish({ outcome: "timed_out" }), opts.timeoutMs ?? 10 * 60 * 1e3);
+    const timer = setTimeout(
+      () => finish(lastFailure ? { outcome: "failed", reason: lastFailure } : { outcome: "timed_out" }),
+      opts.timeoutMs ?? 10 * 60 * 1e3
+    );
     instance = new Razorpay({
       key: session.keyId,
       ...session.subscriptionId && { subscription_id: session.subscriptionId },
@@ -91,11 +95,11 @@ async function openRazorpayCheckout(session, opts = { merchant: "" }) {
       ...session.description && { description: session.description },
       ...session.prefill && { prefill: session.prefill },
       handler: (response) => finish({ outcome: "submitted", response }),
-      modal: { ondismiss: () => finish({ outcome: "dismissed" }) }
+      modal: { ondismiss: () => finish(lastFailure ? { outcome: "failed", reason: lastFailure } : { outcome: "dismissed" }) }
     });
     instance.on("payment.failed", (response) => {
       const error = response["error"] ?? {};
-      finish({ outcome: "failed", reason: String(error["description"] ?? "payment failed") });
+      lastFailure = String(error["description"] ?? "payment failed").trim().replace(/[.\s]+$/, "");
     });
     opts.signal?.addEventListener("abort", () => {
       instance?.close();
@@ -118,7 +122,7 @@ function describeOutcome(outcome, statusTool) {
     case "dismissed":
       return result("The user closed Razorpay Checkout without paying.", { status: "dismissed" });
     case "failed":
-      return result(`Payment failed: ${outcome.reason}.`, { status: "failed", reason: outcome.reason });
+      return result(`Payment failed: ${outcome.reason}. The user closed Checkout without a successful retry.`, { status: "failed", reason: outcome.reason });
     case "timed_out":
       return result(`Checkout is still open. Call ${statusTool} later to see if the user paid.`, { status: "awaiting_user_action" });
     case "aborted":

@@ -236,8 +236,8 @@ autoWebMCP({ packs: [india, unitedStates] });
 
 ```html
 <!-- Script tag: load packs before the core bundle -->
-<script src="https://unpkg.com/auto-webmcp@0.5.0/dist/packs/in.iife.js"></script>
-<script src="https://unpkg.com/auto-webmcp@0.5.0/dist/auto-webmcp.iife.js"></script>
+<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/packs/in.iife.js"></script>
+<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/auto-webmcp.iife.js"></script>
 ```
 
 | Pack | Redacted (masked in results) | Formatted (pattern + hint, checksum warnings) |
@@ -254,6 +254,40 @@ Override any field:
 ```
 
 This limits what auto-webmcp puts into the agent's context and logs. It cannot stop an agent that reads the page directly, so also send `Permissions-Policy: tools=()` on KYC and payment pages. Design notes and sources: [docs/design/country-packs.md](docs/design/country-packs.md).
+
+---
+
+## Razorpay Checkout adapter
+
+Razorpay Checkout is a button that opens a payment modal, not a form, so form discovery cannot see it. The adapter registers checkout tools directly. The agent can start checkout; the user still pays inside Razorpay's modal (UPI PIN, card OTP), and the agent never sees payment details.
+
+```js
+import { razorpay } from 'auto-webmcp/adapters/razorpay';
+
+razorpay({
+  merchant: 'Acme',
+  plans: async () => [{ id: 'inr-monthly', name: 'Pro', amount: 49900, currency: 'INR', period: 'monthly' }],
+  createSubscription: async (planId) => {
+    const r = await fetch('/billing/subscribe', { method: 'POST', body: JSON.stringify({ planId }) });
+    const { keyId, subscriptionId } = await r.json();
+    return { keyId, subscriptionId };
+  },
+  subscriptionStatus: async () => (await fetch('/billing/status')).json(),
+  cancelSubscription: async () => { await fetch('/billing/cancel', { method: 'POST' }); },
+});
+```
+
+| Tool | Annotation | Registered when you pass |
+|---|---|---|
+| `get_plans` | `readOnlyHint` | `plans` |
+| `start_subscription` | `consequentialHint` | `createSubscription` |
+| `get_subscription_status` | `readOnlyHint` | `subscriptionStatus` |
+| `cancel_subscription` | `consequentialHint`, asks the user to confirm | `cancelSubscription` |
+| `get_order_summary`, `start_payment`, `get_payment_status` | read-only / consequential / read-only | `orderSummary`, `createOrder`, `paymentStatus` (Razorpay Orders) |
+
+`start_*` results report `submitted`, `dismissed`, `failed` (only after the user closes Checkout without a successful retry), `awaiting_user_action` or `cancelled`. Treat `submitted` as pending: confirm the payment from your server's webhook-updated state, never from the browser callback.
+
+Script tag: `<script src="https://unpkg.com/auto-webmcp@0.6.0/dist/adapters/razorpay.iife.js"></script>` exposes `AutoWebMCPRazorpay.razorpay(...)`.
 
 ---
 

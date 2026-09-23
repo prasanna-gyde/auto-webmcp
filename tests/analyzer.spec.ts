@@ -1572,7 +1572,8 @@ const MOCK_RAZORPAY = `
           const b = window.__rzpBehaviour;
           if (b === 'pay') opts.handler({ razorpay_payment_id: 'pay_test_123', razorpay_subscription_id: opts.subscription_id });
           else if (b === 'dismiss') opts.modal.ondismiss();
-          else if (b === 'fail') handlers['payment.failed']({ error: { description: 'Card declined' } });
+          else if (b === 'fail') { handlers['payment.failed']({ error: { description: 'Card declined.' } }); setTimeout(() => opts.modal.ondismiss(), 20); }
+          else if (b === 'fail-then-pay') { handlers['payment.failed']({ error: { description: 'Card declined' } }); setTimeout(() => opts.handler({ razorpay_payment_id: 'pay_retry_456' }), 20); }
         }, 20);
       },
     };
@@ -1648,6 +1649,15 @@ test.describe('Razorpay adapter', () => {
     const failed = await callTool(page, 'start_subscription', { plan_id: 'inr-monthly' });
     expect(failed.data.status).toBe('failed');
     expect(failed.data.reason).toBe('Card declined');
+    expect(failed.text).not.toContain('..');
+  });
+
+  test('a failed attempt followed by a successful retry reports the payment', async ({ page }) => {
+    await initRazorpay(page);
+    await page.evaluate(() => { (window as unknown as Record<string, unknown>)['__rzpBehaviour'] = 'fail-then-pay'; });
+    const { data } = await callTool(page, 'start_subscription', { plan_id: 'inr-monthly' });
+    expect(data.status).toBe('submitted');
+    expect(data.payment_id).toBe('pay_retry_456');
   });
 
   test('an open checkout times out to awaiting_user_action; abort closes it', async ({ page }) => {

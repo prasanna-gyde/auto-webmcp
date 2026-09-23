@@ -73,7 +73,11 @@ type CheckoutOutcome = {
 } | {
     outcome: 'aborted';
 };
-/** Open Checkout and wait until the user pays, closes it, or the call is aborted. */
+/**
+ * Open Checkout and wait until the user pays, closes it, or the call is aborted.
+ * Razorpay fires payment.failed per attempt and keeps the modal open for a retry, so a
+ * failure is only final when the user closes the modal (or the wait times out).
+ */
 export declare function openRazorpayCheckout(session: RazorpayCheckoutSession, opts?: {
     merchant: string;
     timeoutMs?: number;
