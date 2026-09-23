@@ -39,7 +39,7 @@ await autoWebMCP();
 1. Scans the page for all `<form>` elements (on load + dynamically via `MutationObserver`)
 2. Also discovers inputs **outside** `<form>` tags (orphan input groups) and inputs inside **Web Component shadow roots**
 3. Infers a meaningful **tool name**, **description**, and **JSON Schema** from the form's DOM
-4. Registers each form as a WebMCP tool via `navigator.modelContext.registerTool()`
+4. Registers each form as a WebMCP tool via `document.modelContext.registerTool()` (falls back to `navigator.modelContext` on older Chrome builds)
 5. Intercepts submissions to return structured results back to the agent
 6. Degrades silently in browsers without WebMCP
 
@@ -176,8 +176,8 @@ await autoWebMCP({
 | `datetime-local`             | `string` + `format: date-time`     |
 | `checkbox`                   | `boolean`                          |
 | checkbox group (same `name`) | `array` + `items.enum`             |
-| `radio` group                | `string` + `enum` + `oneOf`        |
-| `select`                     | `string` + `enum` + `oneOf`        |
+| `radio` group                | `string` + `enum` + `anyOf`        |
+| `select`                     | `string` + `enum` + `anyOf`        |
 | `select[multiple]`           | `array` + `items.enum`             |
 | `textarea`                   | `string`                           |
 | ARIA role inputs             | mapped by role (textbox, checkbox…) |
@@ -196,17 +196,19 @@ auto-webmcp automatically infers [WebMCP ToolAnnotations](https://webmachinelear
 
 | Annotation | Auto-inferred when |
 |---|---|
-| `readOnlyHint` | Form method is `GET`, or submit button says "Search", "Find", etc. |
-| `destructiveHint` | Submit button says "Delete", "Remove", "Cancel", etc. |
-| `idempotentHint` | Form is read-only or GET |
-| `openWorldHint` | Form modifies data (default for POST forms) |
+| `readOnlyHint` | Form method is `GET`, or submit button says "Search", "Find", etc. (never when card fields are present) |
+| `consequentialHint` | Submit button says "Pay", "Buy", "Place order", "Book", "Transfer", etc., the form has card fields (`autocomplete="cc-*"`), or the form is destructive |
+
+`readOnlyHint` and `consequentialHint` are the WebMCP spec annotations. Browsers and agents can use `consequentialHint` to ask the user for confirmation before a high-stakes action.
+
+auto-webmcp also emits the MCP hints `destructiveHint`, `idempotentHint` and `openWorldHint` for MCP bridges. WebMCP browsers ignore them.
 
 Override any annotation with data attributes:
 
 ```html
 <form
+  data-webmcp-consequential="true"
   data-webmcp-destructive="true"
-  data-webmcp-openworld="true"
 >
   <!-- delete account form -->
 </form>
@@ -263,7 +265,7 @@ Every tool execution returns a two-item `content` array:
 ```ts
 const handle = await autoWebMCP(config?);
 
-handle.isSupported   // boolean — true if navigator.modelContext exists
+handle.isSupported   // boolean: true if document.modelContext (or legacy navigator.modelContext) exists
 handle.getTools()    // Array<{ form: HTMLFormElement; name: string }>
 handle.destroy()     // Promise<void> — unregister all tools & stop observing
 ```
@@ -318,8 +320,12 @@ npm test               # Playwright integration tests (Chromium)
 
 ## Browser support
 
-- Chrome 146+ with `chrome://flags/#enable-webmcp-testing` enabled for full functionality
-- All other browsers: the library loads, analyzes forms, and silently no-ops `navigator.modelContext` calls (progressive enhancement)
+- Chrome 149+ via the [WebMCP origin trial](https://developer.chrome.com/blog/ai-webmcp-origin-trial), or locally with `chrome://flags/#enable-webmcp-testing`
+- Edge 150+ via origin trial
+- Older Chrome builds that expose `navigator.modelContext` are still supported
+- All other browsers: the library loads, analyzes forms, and silently no-ops (progressive enhancement)
+
+Tools are unregistered by aborting the `AbortSignal` passed to `registerTool()`, per the current spec. Execute handlers honour the agent's `signal` and resolve with `status: "cancelled"` when aborted.
 
 ---
 

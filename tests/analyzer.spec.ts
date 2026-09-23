@@ -292,18 +292,18 @@ test.describe('Native WebMCP attributes', () => {
     expect(props['frequency']?.['description']).toBe('How often you want to receive the newsletter');
   });
 
-  test('select field has oneOf with titles', async ({ page }) => {
+  test('select field has anyOf with titles', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
     const props = schema['properties'] as Record<string, Record<string, unknown>>;
-    const oneOf = props['frequency']?.['oneOf'] as Array<Record<string, string>>;
-    expect(oneOf).toBeDefined();
-    expect(oneOf).toContainEqual({ const: 'daily', title: 'Daily' });
-    expect(oneOf).toContainEqual({ const: 'weekly', title: 'Weekly' });
-    expect(oneOf).toContainEqual({ const: 'monthly', title: 'Monthly' });
+    const anyOf = props['frequency']?.['anyOf'] as Array<Record<string, string>>;
+    expect(anyOf).toBeDefined();
+    expect(anyOf).toContainEqual({ type: 'string', const: 'daily', title: 'Daily' });
+    expect(anyOf).toContainEqual({ type: 'string', const: 'weekly', title: 'Weekly' });
+    expect(anyOf).toContainEqual({ type: 'string', const: 'monthly', title: 'Monthly' });
   });
 
-  test('select field still has enum alongside oneOf', async ({ page }) => {
+  test('select field still has enum alongside anyOf', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
     const props = schema['properties'] as Record<string, Record<string, unknown>>;
@@ -387,7 +387,7 @@ test.describe('toolactivated and toolcancel events', () => {
   });
 });
 
-test.describe('radio oneOf labels', () => {
+test.describe('radio anyOf labels', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(MOCK_WEBMCP);
     await page.goto('/tests/fixtures/search.html');
@@ -397,15 +397,15 @@ test.describe('radio oneOf labels', () => {
     );
   });
 
-  test('radio group has oneOf with human-readable titles', async ({ page }) => {
+  test('radio group has anyOf with human-readable titles', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const schema = tools[0]?.['inputSchema'] as Record<string, unknown>;
     const props = schema['properties'] as Record<string, Record<string, unknown>>;
-    const oneOf = props['trip_type']?.['oneOf'] as Array<Record<string, string>>;
-    expect(oneOf).toBeDefined();
-    expect(oneOf).toContainEqual({ const: 'roundtrip', title: 'Round Trip' });
-    expect(oneOf).toContainEqual({ const: 'oneway', title: 'One Way' });
-    expect(oneOf).toContainEqual({ const: 'multicity', title: 'Multi-City' });
+    const anyOf = props['trip_type']?.['anyOf'] as Array<Record<string, string>>;
+    expect(anyOf).toBeDefined();
+    expect(anyOf).toContainEqual({ type: 'string', const: 'roundtrip', title: 'Round Trip' });
+    expect(anyOf).toContainEqual({ type: 'string', const: 'oneway', title: 'One Way' });
+    expect(anyOf).toContainEqual({ type: 'string', const: 'multicity', title: 'Multi-City' });
   });
 });
 
@@ -547,12 +547,12 @@ test.describe('Optgroup select', () => {
     expect(country?.['enum']).toEqual(['us', 'ca', 'mx', 'de', 'fr', 'other']);
   });
 
-  test('optgroup options have group field in oneOf', async ({ page }) => {
+  test('optgroup options have group field in anyOf', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
-    const oneOf = (props?.['country'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
-    const us = oneOf?.find((o) => o['const'] === 'us');
-    const de = oneOf?.find((o) => o['const'] === 'de');
+    const anyOf = (props?.['country'] as Record<string, unknown>)?.['anyOf'] as Array<Record<string, unknown>>;
+    const us = anyOf?.find((o) => o['const'] === 'us');
+    const de = anyOf?.find((o) => o['const'] === 'de');
     expect(us?.['group']).toBe('North America');
     expect(de?.['group']).toBe('Europe');
   });
@@ -560,8 +560,8 @@ test.describe('Optgroup select', () => {
   test('direct select options have no group field', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
-    const oneOf = (props?.['country'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
-    const other = oneOf?.find((o) => o['const'] === 'other');
+    const anyOf = (props?.['country'] as Record<string, unknown>)?.['anyOf'] as Array<Record<string, unknown>>;
+    const other = anyOf?.find((o) => o['const'] === 'other');
     expect(other?.['group']).toBeUndefined();
   });
 
@@ -598,11 +598,11 @@ test.describe('Datalist suggestions', () => {
     expect(topic?.['enum']).toEqual(['javascript', 'python', 'rust', 'typescript']);
   });
 
-  test('text input with datalist has oneOf with titles', async ({ page }) => {
+  test('text input with datalist has anyOf with titles', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
-    const oneOf = (props?.['topic'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
-    expect(oneOf?.find((o) => o['const'] === 'javascript')?.['title']).toBe('JavaScript');
+    const anyOf = (props?.['topic'] as Record<string, unknown>)?.['anyOf'] as Array<Record<string, unknown>>;
+    expect(anyOf?.find((o) => o['const'] === 'javascript')?.['title']).toBe('JavaScript');
   });
 
   test('email input with datalist has format:email and enum', async ({ page }) => {
@@ -718,12 +718,12 @@ test.describe('ARIA radiogroup', () => {
     expect(visibility?.['enum']).toEqual(['public', 'private']);
   });
 
-  test('ARIA radiogroup oneOf has correct titles', async ({ page }) => {
+  test('ARIA radiogroup anyOf has correct titles', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
-    const oneOf = (props?.['visibility'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
-    expect(oneOf?.find((o) => o['const'] === 'public')?.['title']).toBe('Public');
-    expect(oneOf?.find((o) => o['const'] === 'private')?.['title']).toBe('Private');
+    const anyOf = (props?.['visibility'] as Record<string, unknown>)?.['anyOf'] as Array<Record<string, unknown>>;
+    expect(anyOf?.find((o) => o['const'] === 'public')?.['title']).toBe('Public');
+    expect(anyOf?.find((o) => o['const'] === 'private')?.['title']).toBe('Private');
   });
 
   test('individual radio elements do not appear as separate fields', async ({ page }) => {
@@ -754,11 +754,11 @@ test.describe('Multi-select schema and fill', () => {
     ]);
   });
 
-  test('multi-select array schema has no oneOf', async ({ page }) => {
+  test('multi-select array schema has no anyOf', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
     const categories = props?.['categories'] as Record<string, unknown>;
-    expect(categories?.['oneOf']).toBeUndefined();
+    expect(categories?.['anyOf']).toBeUndefined();
   });
 
   test('single-value select still produces string schema with enum', async ({ page }) => {
@@ -813,11 +813,11 @@ test.describe('Meaningful empty-value select options', () => {
     expect(diet?.['enum']).toEqual(['', 'veg', 'vegan', 'halal']);
   });
 
-  test('meaningful empty-value option has descriptive title in oneOf', async ({ page }) => {
+  test('meaningful empty-value option has descriptive title in anyOf', async ({ page }) => {
     const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
     const props = (tools[0]?.['inputSchema'] as Record<string, unknown>)?.['properties'] as Record<string, unknown>;
-    const oneOf = (props?.['diet'] as Record<string, unknown>)?.['oneOf'] as Array<Record<string, unknown>>;
-    expect(oneOf?.find((o) => o['const'] === '')?.['title']).toBe('No preference');
+    const anyOf = (props?.['diet'] as Record<string, unknown>)?.['anyOf'] as Array<Record<string, unknown>>;
+    expect(anyOf?.find((o) => o['const'] === '')?.['title']).toBe('No preference');
   });
 
   test('placeholder option starting with dashes is excluded', async ({ page }) => {
@@ -1199,5 +1199,212 @@ test.describe('Execution state machine', () => {
     const structured = JSON.parse(result.content[1]!.text);
     expect(structured.status).toBe('blocked_invalid');
     expect(structured.warnings.some((w: { type: string }) => w.type === 'blocked_submit')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Current WebMCP spec: document.modelContext, AbortSignal unregistration
+// ---------------------------------------------------------------------------
+
+// Mirrors the spec's registerTool() checks. No unregisterTool: aborting the signal unregisters.
+const MOCK_SPEC_WEBMCP = `
+  window.__registeredTools = [];
+  window.__executeHandlers = {};
+  window.__registerErrors = [];
+  const ctx = {
+    registerTool(tool, options = {}) {
+      const invalid = !/^[A-Za-z0-9_.-]{1,128}$/.test(tool.name) || !tool.description ||
+        window.__registeredTools.some(t => t.name === tool.name);
+      if (invalid) {
+        window.__registerErrors.push(tool.name);
+        return Promise.reject(new DOMException('invalid tool', 'InvalidStateError'));
+      }
+      window.__registeredTools.push(JSON.parse(JSON.stringify(tool)));
+      window.__executeHandlers[tool.name] = tool.execute;
+      options.signal?.addEventListener('abort', () => {
+        window.__registeredTools = window.__registeredTools.filter(t => t.name !== tool.name);
+        delete window.__executeHandlers[tool.name];
+      });
+      return Promise.resolve();
+    },
+  };
+  Object.defineProperty(document, 'modelContext', { value: ctx, configurable: true });
+`;
+
+test.describe('Spec document.modelContext', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_SPEC_WEBMCP);
+  });
+
+  test('registers tools on document.modelContext when navigator has none', async ({ page }) => {
+    await initWithConfig(page, '/tests/fixtures/multi-form.html', {});
+    const tools = await getRegisteredTools(page);
+    expect(tools.length).toBeGreaterThanOrEqual(2);
+    const errors = await page.evaluate(() => (window as unknown as Record<string, unknown>)['__registerErrors']);
+    expect(errors).toEqual([]);
+  });
+
+  test('prefers document.modelContext over navigator.modelContext', async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as Record<string, unknown>)['__legacyCalls'] = 0;
+      (navigator as unknown as Record<string, unknown>)['modelContext'] = {
+        registerTool() {
+          ((window as unknown as Record<string, number>)['__legacyCalls'])++;
+          return Promise.resolve();
+        },
+      };
+    });
+    await initWithConfig(page, '/tests/fixtures/search.html', {});
+    const tools = await getRegisteredTools(page);
+    expect(tools).toHaveLength(1);
+    const legacyCalls = await page.evaluate(() => (window as unknown as Record<string, number>)['__legacyCalls']);
+    expect(legacyCalls).toBe(0);
+  });
+
+  test('destroy() unregisters by aborting the registration signal', async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_NO_AUTOINIT'] = true;
+    });
+    await page.goto('/tests/fixtures/multi-form.html');
+    const remaining = await page.evaluate(async () => {
+      const mod = await import('/dist/auto-webmcp.esm.js');
+      const handle = await mod.autoWebMCP();
+      await handle.destroy();
+      return ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length;
+    });
+    expect(remaining).toBe(0);
+  });
+
+  test('tool names are spec-valid and within the 30 character budget', async ({ page }) => {
+    await initWithConfig(page, '/tests/fixtures/checkout.html', {
+      overrides: { '#checkout-form': { name: 'complete_your_order_with_shipping_and_billing' } },
+    });
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    for (const tool of tools) {
+      const name = tool['name'] as string;
+      expect(name).toMatch(/^[A-Za-z0-9_.-]{1,128}$/);
+    }
+    // Inferred names are capped at 30 characters on a word boundary
+    const long = await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend',
+        '<form id="long"><input name="q"><button type="submit">Search every product in the entire catalogue now</button></form>');
+    });
+    void long;
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length >= 2,
+      { timeout: 5000 },
+    );
+    const all = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const inferred = all.find((t) => (t['name'] as string).startsWith('search_every'));
+    expect(inferred?.['name']).toBe('search_every_product_in_the');
+  });
+
+  test('select anyOf entries carry type string (Chrome declarative shape)', async ({ page }) => {
+    await initWithConfig(page, '/tests/fixtures/native-attrs.html', { declarativeMode: 'force' });
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const props = (tools[0]?.['inputSchema'] as Record<string, Record<string, Record<string, unknown>>>)['properties'];
+    const anyOf = props['frequency']?.['anyOf'] as Array<Record<string, string>>;
+    expect(anyOf.every((o) => o['type'] === 'string')).toBe(true);
+    expect(props['frequency']?.['oneOf']).toBeUndefined();
+  });
+
+  test('tool title is inferred from the nearest heading', async ({ page }) => {
+    await initWithConfig(page, '/tests/fixtures/checkout.html', {});
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    expect(tools[0]?.['title']).toBe('Complete Your Order');
+  });
+
+  test('no outputSchema is sent (not part of the spec)', async ({ page }) => {
+    await initWithConfig(page, '/tests/fixtures/search.html', {});
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    expect(tools[0]?.['outputSchema']).toBeUndefined();
+  });
+
+  test('execute honours an already-aborted signal', async ({ page }) => {
+    await initWithConfig(page, '/tests/fixtures/contact.html', {});
+    const result = await page.evaluate(async () => {
+      const handlers = (window as unknown as Record<string, Record<string, (p: unknown, o: unknown) => Promise<unknown>>>)['__executeHandlers'];
+      const name = Object.keys(handlers)[0]!;
+      const controller = new AbortController();
+      controller.abort();
+      return handlers[name]!({}, { signal: controller.signal });
+    }) as { content: Array<{ text: string }> };
+    expect(JSON.parse(result.content[1]!.text).status).toBe('cancelled');
+  });
+
+  test('aborting an in-flight execute resolves as cancelled and fires toolcancel', async ({ page }) => {
+    await initWithConfig(page, '/tests/fixtures/contact.html', {});
+    const outcome = await page.evaluate(async () => {
+      let cancelEvents = 0;
+      window.addEventListener('toolcancel', () => cancelEvents++);
+      const handlers = (window as unknown as Record<string, Record<string, (p: unknown, o: unknown) => Promise<unknown>>>)['__executeHandlers'];
+      const name = Object.keys(handlers)[0]!;
+      const controller = new AbortController();
+      const pending = handlers[name]!({ name: 'Ada' }, { signal: controller.signal });
+      setTimeout(() => controller.abort(), 50);
+      const result = await pending as { content: Array<{ text: string }> };
+      return { status: JSON.parse(result.content[1]!.text).status, cancelEvents };
+    });
+    expect(outcome.status).toBe('cancelled');
+    expect(outcome.cancelEvents).toBe(1);
+  });
+});
+
+test.describe('consequentialHint', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+  });
+
+  test('checkout form ("Place Order") is consequential', async ({ page }) => {
+    await initWithConfig(page, '/tests/fixtures/checkout.html', {});
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const annotations = tools[0]?.['annotations'] as Record<string, unknown>;
+    expect(annotations?.['consequentialHint']).toBe(true);
+  });
+
+  test('destructive form is consequential, read-only and neutral forms are not', async ({ page }) => {
+    await page.goto('/tests/fixtures/annotations-form.html');
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as unknown[]).length >= 5,
+      { timeout: 5000 },
+    );
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const hint = (name: string) =>
+      ((tools.find((t) => t['name'] === name)?.['annotations'] ?? {}) as Record<string, unknown>)['consequentialHint'];
+    expect(hint('delete_account')).toBe(true);
+    expect(hint('search_products')).toBeUndefined();
+    expect(hint('update_profile')).toBeUndefined();
+  });
+
+  test('card fields (autocomplete cc-*) make a form consequential', async ({ page }) => {
+    await page.goto('/tests/fixtures/contact.html');
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend',
+        '<form id="card"><input name="card" autocomplete="cc-number"><button type="submit">Save</button></form>');
+    });
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as Array<Record<string, unknown>>)
+        .some((t) => t['name'] === 'save'),
+      { timeout: 5000 },
+    );
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const card = tools.find((t) => t['name'] === 'save');
+    expect((card?.['annotations'] as Record<string, unknown>)?.['consequentialHint']).toBe(true);
+  });
+
+  test('data-webmcp-consequential="false" overrides inference', async ({ page }) => {
+    await page.goto('/tests/fixtures/checkout.html');
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend',
+        '<form id="b" data-webmcp-consequential="false"><input name="q"><button type="submit">Book</button></form>');
+    });
+    await page.waitForFunction(
+      () => ((window as unknown as Record<string, unknown>)['__registeredTools'] as Array<Record<string, unknown>>)
+        .some((t) => t['name'] === 'book'),
+      { timeout: 5000 },
+    );
+    const tools = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const book = tools.find((t) => t['name'] === 'book');
+    expect(((book?.['annotations'] ?? {}) as Record<string, unknown>)['consequentialHint']).toBe(false);
   });
 });

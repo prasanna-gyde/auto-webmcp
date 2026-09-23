@@ -10,7 +10,7 @@
  */
 
 import { AutoWebMCPConfig, resolveConfig } from './config.js';
-import { startDiscovery, stopDiscovery } from './discovery.js';
+import { startDiscovery, stopDiscovery, unregisterOrphanTools } from './discovery.js';
 import { unregisterAll, getAllRegisteredTools, isWebMCPSupported } from './registry.js';
 
 export type { AutoWebMCPConfig } from './config.js';
@@ -47,7 +47,7 @@ export async function autoWebMCP(config?: AutoWebMCPConfig): Promise<AutoWebMCPH
   return {
     destroy: async () => {
       stopDiscovery();
-      await unregisterAll();
+      await Promise.all([unregisterAll(), unregisterOrphanTools()]);
     },
     getTools: getAllRegisteredTools,
     isSupported: isWebMCPSupported(),

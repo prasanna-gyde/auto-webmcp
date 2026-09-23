@@ -9,7 +9,8 @@ export interface JsonSchemaProperty {
     description?: string;
     title?: string;
     enum?: string[];
-    oneOf?: Array<{
+    anyOf?: Array<{
+        type: 'string';
         const: string;
         title: string;
         group?: string;
@@ -37,8 +38,9 @@ export declare function inputTypeToSchema(input: HTMLInputElement | HTMLTextArea
 export declare function collectCheckboxEnum(form: HTMLFormElement, name: string): string[];
 /** Collect all radio button values for a given name within a form */
 export declare function collectRadioEnum(form: HTMLFormElement, name: string): string[];
-/** Collect radio button values + label titles as oneOf entries */
-export declare function collectRadioOneOf(form: HTMLFormElement, name: string): Array<{
+/** Collect radio button values + label titles as anyOf entries */
+export declare function collectRadioAnyOf(form: HTMLFormElement, name: string): Array<{
+    type: 'string';
     const: string;
     title: string;
 }>;

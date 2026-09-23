@@ -1,12 +1,18 @@
 /**
- * analyzer.ts — Infer tool name, description, and JSON Schema from form DOM
+ * analyzer.ts: Infer tool name, description, and JSON Schema from form DOM
  */
 
-import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum, collectRadioOneOf, collectCheckboxEnum, ARIA_ROLES_TO_SCAN, AriaRole, ariaRoleToSchema } from './schema.js';
+import { JsonSchema, JsonSchemaProperty, inputTypeToSchema, collectRadioEnum, collectRadioAnyOf, collectCheckboxEnum, ARIA_ROLES_TO_SCAN, AriaRole, ariaRoleToSchema } from './schema.js';
 import { FormOverride } from './config.js';
 
 export interface ToolAnnotations {
+  /** WebMCP spec: the tool does not modify state. */
   readOnlyHint?: boolean;
+  /** WebMCP spec: the tool performs a high-stakes action (payment, booking, deletion). */
+  consequentialHint?: boolean;
+  /** WebMCP spec: the tool output may contain untrusted content. */
+  untrustedContentHint?: boolean;
+  /** MCP hints, kept for MCP bridges. Ignored by WebMCP browsers. */
   destructiveHint?: boolean;
   idempotentHint?: boolean;
   openWorldHint?: boolean;
@@ -14,6 +20,8 @@ export interface ToolAnnotations {
 
 export interface ToolMetadata {
   name: string;
+  /** Human-readable label for browser UIs (spec `title`). */
+  title?: string;
   description: string;
   inputSchema: JsonSchema;
   annotations?: ToolAnnotations;
@@ -35,8 +43,14 @@ export function analyzeForm(form: HTMLFormElement, override?: FormOverride): Too
   const description = override?.description ?? inferToolDescription(form);
   const { schema: inputSchema, fieldElements } = buildSchema(form);
   const annotations = inferAnnotations(form);
+  const title = inferToolTitle(form);
 
-  return { name, description, inputSchema, annotations, fieldElements };
+  return { name, ...(title && { title }), description, inputSchema, annotations, fieldElements };
+}
+
+function inferToolTitle(form: HTMLFormElement): string {
+  const raw = form.dataset['webmcpToolTitle'] || getNearestHeadingText(form) || getSubmitButtonText(form);
+  return raw.replace(/\s+/g, ' ').trim().slice(0, 60);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,13 +88,23 @@ function inferToolName(form: HTMLFormElement): string {
   return `form_${++formIndex}`;
 }
 
+/** Chrome recommends tool names of at most 30 characters. */
+const MAX_TOOL_NAME_LENGTH = 30;
+
 function sanitizeName(raw: string): string {
-  return raw
+  const name = raw
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 64) || 'form';
+    .replace(/^_+|_+$/g, '');
+  return truncateAtWord(name, MAX_TOOL_NAME_LENGTH) || 'form';
+}
+
+function truncateAtWord(name: string, max: number): string {
+  if (name.length <= max) return name;
+  const cut = name.slice(0, max);
+  const lastSep = cut.lastIndexOf('_');
+  return (lastSep > 0 ? cut.slice(0, lastSep) : cut).replace(/_+$/, '');
 }
 
 function getSubmitButtonText(form: HTMLFormElement): string {
@@ -174,9 +198,20 @@ function inferToolDescription(form: HTMLFormElement): string {
 const READONLY_BUTTON_PATTERNS = /^(search|find|look|filter|browse|view|show|check|preview|get|fetch|retrieve|load)\b/i;
 const DESTRUCTIVE_BUTTON_PATTERNS = /^(delete|remove|cancel|terminate|destroy|purge|revoke|unsubscribe|deactivate)\b/i;
 const DESTRUCTIVE_URL_PATTERNS = /\/(delete|remove|cancel|destroy)\b/i;
+const CONSEQUENTIAL_BUTTON_PATTERNS = /^(pay|buy|purchase|place\s+(an\s+)?order|check\s?out|complete\s+(order|purchase|payment)|confirm\s+(order|purchase|payment|booking)|book|reserve|transfer|send\s+money|donate|withdraw)\b/i;
+const PAYMENT_FIELD_SELECTOR = 'input[autocomplete^="cc-"], input[autocomplete*=" cc-"]';
+
+/** Consequential: destructive, payment-like button text, or card fields present. */
+function isConsequential(submitText: string, destructive: boolean, root: ParentNode | null): boolean {
+  if (destructive) return true;
+  if (submitText && CONSEQUENTIAL_BUTTON_PATTERNS.test(submitText.trim())) return true;
+  return !!root?.querySelector(PAYMENT_FIELD_SELECTOR);
+}
 
 function inferAnnotations(form: HTMLFormElement): ToolAnnotations {
   const annotations: ToolAnnotations = {};
+  // Card fields imply a payment, even on JS-handled forms that default to GET.
+  const hasPaymentFields = !!form.querySelector(PAYMENT_FIELD_SELECTOR);
 
   // Manual overrides via data-webmcp-* attributes take highest priority
   if (form.dataset['webmcpReadonly'] !== undefined) {
@@ -191,13 +226,16 @@ function inferAnnotations(form: HTMLFormElement): ToolAnnotations {
   if (form.dataset['webmcpOpenworld'] !== undefined) {
     annotations.openWorldHint = form.dataset['webmcpOpenworld'] !== 'false';
   }
+  if (form.dataset['webmcpConsequential'] !== undefined) {
+    annotations.consequentialHint = form.dataset['webmcpConsequential'] !== 'false';
+  }
 
   // readOnlyHint: GET method or common read-action button text
   if (annotations.readOnlyHint === undefined) {
     const isGet = form.method.toLowerCase() === 'get';
     const submitText = getSubmitButtonText(form);
     const isReadLabel = submitText ? READONLY_BUTTON_PATTERNS.test(submitText.trim()) : false;
-    if (isGet || isReadLabel) annotations.readOnlyHint = true;
+    if ((isGet || isReadLabel) && !hasPaymentFields) annotations.readOnlyHint = true;
   }
 
   // destructiveHint: common delete/cancel button text or URL path
@@ -208,9 +246,16 @@ function inferAnnotations(form: HTMLFormElement): ToolAnnotations {
     if (isDestructiveLabel || isDestructiveUrl) annotations.destructiveHint = true;
   }
 
+  // consequentialHint: lets the browser or agent require confirmation before high-stakes actions
+  if (annotations.consequentialHint === undefined && annotations.readOnlyHint !== true) {
+    if (isConsequential(getSubmitButtonText(form), annotations.destructiveHint === true, form)) {
+      annotations.consequentialHint = true;
+    }
+  }
+
   // idempotentHint: read-only forms and GET requests are naturally idempotent
   if (annotations.idempotentHint === undefined) {
-    if (annotations.readOnlyHint === true || form.method.toLowerCase() === 'get') {
+    if (annotations.readOnlyHint === true || (form.method.toLowerCase() === 'get' && !hasPaymentFields)) {
       annotations.idempotentHint = true;
     }
   }
@@ -223,6 +268,7 @@ function inferAnnotations(form: HTMLFormElement): ToolAnnotations {
   // Return empty object if no non-default hints were inferred (avoids polluting registrations)
   const hasNonDefault =
     annotations.readOnlyHint === true ||
+    annotations.consequentialHint === true ||
     annotations.destructiveHint === true ||
     annotations.idempotentHint === true ||
     annotations.openWorldHint === false;
@@ -361,11 +407,11 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
     const defaultVal = extractDefaultValue(control);
     if (defaultVal !== undefined) schemaProp.default = defaultVal;
 
-    // For radio groups, add enum, oneOf, and default (currently checked value)
+    // For radio groups, add enum, anyOf, and default (currently checked value)
     if (control instanceof HTMLInputElement && control.type === 'radio') {
       schemaProp.enum = collectRadioEnum(form, fieldKey);
-      const radioOneOf = collectRadioOneOf(form, fieldKey);
-      if (radioOneOf.length > 0) schemaProp.oneOf = radioOneOf;
+      const radioAnyOf = collectRadioAnyOf(form, fieldKey);
+      if (radioAnyOf.length > 0) schemaProp.anyOf = radioAnyOf;
       const checkedRadio = Array.from(form.elements).find(
         (el): el is HTMLInputElement =>
           el instanceof HTMLInputElement &&
@@ -434,7 +480,7 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
   const ariaControls = collectAriaControls(form);
   const processedAriaRadioGroups = new Set<string>();
 
-  for (const { el, role, key, enumValues, enumOneOf } of ariaControls) {
+  for (const { el, role, key, enumValues, enumAnyOf } of ariaControls) {
     if (properties[key]) continue; // already covered by a native control
 
     if (role === 'radio') {
@@ -447,7 +493,7 @@ function buildSchema(form: HTMLFormElement): { schema: JsonSchema; fieldElements
     // Apply pre-computed enum for grouped ARIA radiogroups (role="radiogroup" ancestor)
     if (enumValues && enumValues.length > 0) {
       schemaProp.enum = enumValues;
-      if (enumOneOf && enumOneOf.length > 0) schemaProp.oneOf = enumOneOf;
+      if (enumAnyOf && enumAnyOf.length > 0) schemaProp.anyOf = enumAnyOf;
     }
 
     schemaProp.title = inferAriaFieldTitle(el);
@@ -539,7 +585,7 @@ type AriaControlEntry = {
   role: AriaRole;
   key: string;
   enumValues?: string[];
-  enumOneOf?: Array<{ const: string; title: string }>;
+  enumAnyOf?: Array<{ type: 'string'; const: string; title: string }>;
 };
 
 /** Collect ARIA-role-based interactive elements inside a form, excluding native inputs.
@@ -591,15 +637,15 @@ function collectAriaControls(form: HTMLFormElement): Array<AriaControlEntry> {
     const enumValues = members
       .map((el) => (el.getAttribute('data-value') ?? el.getAttribute('aria-label') ?? el.textContent ?? '').trim())
       .filter(Boolean);
-    const enumOneOf = members
+    const enumAnyOf = members
       .map((el) => {
         const val = (el.getAttribute('data-value') ?? el.getAttribute('aria-label') ?? el.textContent ?? '').trim();
         const title = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim();
-        return { const: val, title: title || val };
+        return { type: 'string' as const, const: val, title: title || val };
       })
       .filter((e) => e.const !== '');
     if (enumValues.length > 0) {
-      groupedEntries.push({ el: group, role: 'radio', key: groupKey, enumValues, enumOneOf });
+      groupedEntries.push({ el: group, role: 'radio', key: groupKey, enumValues, enumAnyOf });
     }
   }
 
@@ -844,12 +890,16 @@ function inferOrphanAnnotations(
   if (DESTRUCTIVE_BUTTON_PATTERNS.test(submitText)) {
     annotations.destructiveHint = true;
   }
+  if (annotations.readOnlyHint !== true && isConsequential(submitText, annotations.destructiveHint === true, null)) {
+    annotations.consequentialHint = true;
+  }
   if (annotations.readOnlyHint !== true) {
     annotations.openWorldHint = true;
   }
 
   const hasNonDefault =
     annotations.readOnlyHint === true ||
+    annotations.consequentialHint === true ||
     annotations.destructiveHint === true ||
     annotations.idempotentHint === true ||
     annotations.openWorldHint === false;

@@ -10,6 +10,9 @@ import {
   isWebMCPSupported,
   getAllRegisteredTools,
   getRegisteredToolName,
+  registerToolDefinition,
+  unregisterToolDefinition,
+  WebMCPTool,
 } from './registry.js';
 import { buildExecuteHandler, fillElement, fillComboboxButton, fillLookupInput } from './interceptor.js';
 import { ARIA_ROLES_TO_SCAN, JsonSchema } from './schema.js';
@@ -114,12 +117,12 @@ async function registerForm(form: HTMLFormElement, config: ResolvedConfig): Prom
   metadata.name = resolvedName;
 
   if (config.debug) {
-    warnToolQuality(metadata.name, metadata.description);
+    warnToolQuality(metadata.name, metadata.description, metadata.inputSchema);
   }
 
   const execute = buildExecuteHandler(form, config, metadata.name, metadata);
 
-  await registerFormTool(form, metadata, execute);
+  await registerFormTool(form, metadata, execute, config.debug);
   registeredForms.add(form);
   registeredFormCount++;
 
@@ -192,6 +195,8 @@ const ORPHAN_RESCAN_DELAYED_MS = 2000;
 /** Names of already-registered orphan tools. Prevents double-registration when
  * the observer fires multiple times for the same modal opening. */
 const registeredOrphanToolNames = new Set<string>();
+/** Abort controllers for orphan tool registrations, keyed by tool name. */
+const orphanToolControllers = new Map<string, AbortController>();
 
 function scheduleOrphanRescan(config: ResolvedConfig): void {
   if (orphanRescanTimer) clearTimeout(orphanRescanTimer);
@@ -685,7 +690,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     const toolName = metadata.name;
     const execute = async (
       params: Record<string, unknown>,
-      _client?: unknown,
+      _options?: unknown,
     ): Promise<{ content: Array<{ type: 'text'; text: string }> }> => {
       console.log(`[auto-webmcp] orphan execute: tool="${toolName}" params=`, params);
       console.log(`[auto-webmcp] orphan execute: inputPairs=`, inputPairs.map(p => p.key));
@@ -797,16 +802,7 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
     };
 
     try {
-      const toolDef: {
-        name: string;
-        description: string;
-        inputSchema: JsonSchema;
-        annotations?: ToolAnnotations;
-        execute: (
-          params: Record<string, unknown>,
-          client?: unknown,
-        ) => Promise<{ content: Array<{ type: 'text'; text: string }> }>;
-      } = {
+      const toolDef: WebMCPTool = {
         name: metadata.name,
         description: metadata.description,
         inputSchema: metadata.inputSchema,
@@ -815,7 +811,9 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
       if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
         toolDef.annotations = metadata.annotations;
       }
-      await navigator.modelContext!.registerTool(toolDef);
+      const controller = await registerToolDefinition(toolDef, config.debug);
+      if (!controller) continue;
+      orphanToolControllers.set(metadata.name, controller);
       registeredOrphanToolNames.add(metadata.name);
       // Expose the submit button reference so background.js can click it via CDP.
       // GitHub and other React apps use type="button" (not type="submit"), so
@@ -835,7 +833,24 @@ async function scanOrphanInputs(config: ResolvedConfig): Promise<void> {
 // Public API
 // ---------------------------------------------------------------------------
 
-function warnToolQuality(name: string, description: string): void {
+/** Chrome's recommended character budgets (developer.chrome.com/docs/ai/webmcp/secure-tools). */
+const BUDGET = { name: 30, description: 500, paramName: 30, paramDescription: 150 };
+
+function warnToolQuality(name: string, description: string, schema?: JsonSchema): void {
+  if (name.length > BUDGET.name) {
+    console.warn(`[auto-webmcp] Tool "${name}" name exceeds ${BUDGET.name} characters.`);
+  }
+  if (description.length > BUDGET.description) {
+    console.warn(`[auto-webmcp] Tool "${name}" description is ${description.length} characters (budget ${BUDGET.description}).`);
+  }
+  for (const [param, prop] of Object.entries(schema?.properties ?? {})) {
+    if (param.length > BUDGET.paramName) {
+      console.warn(`[auto-webmcp] Tool "${name}" parameter "${param}" name exceeds ${BUDGET.paramName} characters.`);
+    }
+    if ((prop.description?.length ?? 0) > BUDGET.paramDescription) {
+      console.warn(`[auto-webmcp] Tool "${name}" parameter "${param}" description exceeds ${BUDGET.paramDescription} characters.`);
+    }
+  }
   if (/^form_\d+$|^submit$|^form$/.test(name)) {
     console.warn(`[auto-webmcp] Tool "${name}" has a generic name. Consider adding a toolname or data-webmcp-name attribute.`);
   }
@@ -868,4 +883,12 @@ export async function startDiscovery(config: ResolvedConfig): Promise<void> {
 export function stopDiscovery(): void {
   observer?.disconnect();
   observer = null;
+}
+
+/** Unregister every orphan (form-less) tool registered by discovery. */
+export async function unregisterOrphanTools(): Promise<void> {
+  const entries = Array.from(orphanToolControllers.entries());
+  orphanToolControllers.clear();
+  registeredOrphanToolNames.clear();
+  await Promise.all(entries.map(([name, controller]) => unregisterToolDefinition(name, controller)));
 }

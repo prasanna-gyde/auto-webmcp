@@ -544,7 +544,7 @@
     <div class="navbar-inner">
       <div class="navbar-brand">
         <span><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" style="vertical-align:-2px;flex-shrink:0"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> auto-webmcp</span>
-        <span class="version">v0.3.24</span>
+        <span class="version">v0.4.0</span>
       </div>
       <div class="navbar-links">
         <a href="platforms">Platforms</a>
@@ -582,14 +582,14 @@
       <div class="tab-panels">
         <div class="tab-panel" id="panel-cdn">
           <div class="code-block-wrapper">
-            <button class="copy-btn" data-copy="&lt;script src=&quot;https://unpkg.com/auto-webmcp@0.3.24&quot;&gt;&lt;/script&gt;" aria-label="Copy CDN snippet">Copy</button>
-            <pre><code class="language-xml">&lt;script src="https://unpkg.com/auto-webmcp@0.3.24"&gt;&lt;/script&gt;</code></pre>
+            <button class="copy-btn" data-copy="&lt;script src=&quot;https://unpkg.com/auto-webmcp@0.4.0&quot;&gt;&lt;/script&gt;" aria-label="Copy CDN snippet">Copy</button>
+            <pre><code class="language-xml">&lt;script src="https://unpkg.com/auto-webmcp@0.4.0"&gt;&lt;/script&gt;</code></pre>
           </div>
         </div>
         <div class="tab-panel" id="panel-npm">
           <div class="code-block-wrapper">
-            <button class="copy-btn" data-copy="npm install auto-webmcp@0.3.24" aria-label="Copy npm install">Copy</button>
-            <pre><code class="language-bash">npm install auto-webmcp@0.3.24</code></pre>
+            <button class="copy-btn" data-copy="npm install auto-webmcp@0.4.0" aria-label="Copy npm install">Copy</button>
+            <pre><code class="language-bash">npm install auto-webmcp@0.4.0</code></pre>
           </div>
         </div>
       </div>
@@ -653,12 +653,12 @@
         <div class="how-card">
           <div class="how-card-num">03</div>
           <h3>Registers tools</h3>
-          <p>Calls <code>navigator.modelContext.registerTool()</code> per form with the inferred name, description, and input schema. Fills fields and triggers submission when an AI agent invokes the tool.</p>
+          <p>Calls <code>document.modelContext.registerTool()</code> per form with the inferred name, description, and input schema. Fills fields and triggers submission when an AI agent invokes the tool.</p>
         </div>
         <div class="how-card">
           <div class="how-card-num">04</div>
           <h3>Degrades gracefully</h3>
-          <p>When <code>navigator.modelContext</code> is absent (any browser other than Chrome 146+ with the flag enabled), auto-webmcp silently no-ops. Your page is unaffected for regular users.</p>
+          <p>When <code>document.modelContext</code> is absent (browsers without WebMCP, or Chrome 149+ outside the origin trial and without the flag), auto-webmcp silently no-ops. Your page is unaffected for regular users.</p>
         </div>
       </div>
     </div>
@@ -873,7 +873,7 @@ autoWebMCP({
       &nbsp;·&nbsp;
       <a href="https://github.com/prasanna-gyde/auto-webmcp/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
       &nbsp;·&nbsp;
-      v0.3.24
+      v0.4.0
     </p>
   </footer>
 

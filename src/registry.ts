@@ -1,8 +1,8 @@
 /**
- * registry.ts — Wrapper around navigator.modelContext WebMCP Imperative API
+ * registry.ts: Wrapper around the WebMCP Imperative API (document.modelContext)
  */
 
-import { ToolMetadata } from './analyzer.js';
+import { ToolMetadata, ToolAnnotations } from './analyzer.js';
 
 // ---------------------------------------------------------------------------
 // WebMCP type declarations (not yet in TypeScript DOM lib)
@@ -12,78 +12,38 @@ export interface WebMCPTool {
   name: string;
   description: string;
   inputSchema: object;
-  outputSchema?: object;
-  annotations?: {
-    readOnlyHint?: boolean;
-    destructiveHint?: boolean;
-    idempotentHint?: boolean;
-    openWorldHint?: boolean;
-  };
-  execute: (params: Record<string, unknown>, client?: unknown) => Promise<unknown>;
+  title?: string;
+  annotations?: ToolAnnotations;
+  execute: ExecuteFn;
 }
 
 /**
- * Describes the structured JSON object returned by every auto-webmcp execute handler.
- * Declared as outputSchema on tool registration so agents can parse results reliably.
+ * Current spec passes `{ signal }` as the second argument. Legacy Chrome builds
+ * passed a client object exposing requestUserInteraction().
  */
-const EXECUTE_OUTPUT_SCHEMA: object = {
-  type: 'object',
-  properties: {
-    status: {
-      type: 'string',
-      enum: ['success', 'partial', 'error', 'awaiting_user_action', 'timed_out', 'blocked_invalid'],
-      description: 'Outcome of the form execution.',
-    },
-    filled_fields: {
-      type: 'object',
-      description: 'Field name to submitted value map.',
-    },
-    skipped_fields: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Fields the agent provided but that could not be filled.',
-    },
-    missing_required: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Required fields not supplied by the agent.',
-    },
-    validation_errors: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          field: { type: 'string' },
-          constraint: { type: 'string', description: 'HTML ValidityState key that failed.' },
-          message: { type: 'string' },
-        },
-        required: ['field', 'constraint', 'message'],
-      },
-      description: 'Per-field HTML5 validation failures (present when status is blocked_invalid).',
-    },
-    existing_values: {
-      type: 'object',
-      description: 'Field values present in the form before the agent filled it.',
-    },
-    warnings: {
-      type: 'array',
-      items: { type: 'object' },
-      description: 'Non-fatal fill warnings (alias_resolved, clamped, not_filled, etc.).',
-    },
-  },
-  required: ['status', 'filled_fields', 'skipped_fields', 'missing_required', 'warnings'],
-};
+export type ExecuteFn = (params: Record<string, unknown>, options?: unknown) => Promise<unknown>;
 
 interface ModelContextRegisterOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * The subset of the WebMCP ModelContext interface this library relies on.
+ * Current spec: document.modelContext, unregister by aborting the signal.
+ * Legacy Chrome builds: navigator.modelContext with unregisterTool(name).
+ */
+export interface ModelContextLike {
+  registerTool(tool: WebMCPTool, options?: ModelContextRegisterOptions): Promise<void> | void;
+  /** Legacy only. Removed from the spec in favour of AbortSignal. */
+  unregisterTool?(name: string): Promise<void> | void;
+}
+
 declare global {
+  interface Document {
+    modelContext?: ModelContextLike | null;
+  }
   interface Navigator {
-    modelContext?: {
-      registerTool(tool: WebMCPTool, options?: ModelContextRegisterOptions): Promise<void> | void;
-      unregisterTool?(name: string): Promise<void> | void;
-    };
+    modelContext?: ModelContextLike;
   }
 }
 
@@ -96,9 +56,77 @@ const registeredTools = new Map<HTMLFormElement, string>();
 /** Tracks abort controllers for registrations, enabling signal-based unregister */
 const registrationControllers = new Map<HTMLFormElement, AbortController>();
 
-/** True if the browser supports navigator.modelContext */
+/**
+ * Resolve the active ModelContext. Prefers the spec location (document.modelContext)
+ * and falls back to navigator.modelContext for older Chrome builds and polyfills.
+ */
+export function getModelContext(): ModelContextLike | null {
+  if (typeof document !== 'undefined' && document.modelContext) return document.modelContext;
+  if (typeof navigator !== 'undefined' && navigator.modelContext) return navigator.modelContext;
+  return null;
+}
+
+/** True if the browser exposes a WebMCP ModelContext */
 export function isWebMCPSupported(): boolean {
-  return typeof navigator !== 'undefined' && typeof navigator.modelContext !== 'undefined';
+  return getModelContext() !== null;
+}
+
+/**
+ * Register a tool definition and return an AbortController that unregisters it.
+ * Returns null if WebMCP is unsupported or registration was rejected.
+ */
+export async function registerToolDefinition(
+  toolDef: WebMCPTool,
+  debug = false,
+): Promise<AbortController | null> {
+  const ctx = getModelContext();
+  if (!ctx) return null;
+
+  const controller = new AbortController();
+  try {
+    await ctx.registerTool(toolDef, { signal: controller.signal });
+    return controller;
+  } catch (err) {
+    // Legacy Chrome could hold a stale registration from a previous page load.
+    // Only the legacy API offers unregister-by-name, so only retry there.
+    if (isDuplicateNameError(err) && typeof ctx.unregisterTool === 'function') {
+      try {
+        await ctx.unregisterTool(toolDef.name);
+        await ctx.registerTool(toolDef, { signal: controller.signal });
+        return controller;
+      } catch (retryErr) {
+        err = retryErr;
+      }
+    }
+    if (debug) warnRegistrationError(toolDef.name, err);
+    return null;
+  }
+}
+
+/** Unregister a tool registered via registerToolDefinition. */
+export async function unregisterToolDefinition(name: string, controller: AbortController | undefined): Promise<void> {
+  // Spec: aborting the registration signal unregisters the tool.
+  controller?.abort();
+  // Legacy builds may not honour the signal, so also unregister by name where that API exists.
+  try {
+    await getModelContext()?.unregisterTool?.(name);
+  } catch {
+    // Tool may have already been removed
+  }
+}
+
+function isDuplicateNameError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'InvalidStateError';
+}
+
+function warnRegistrationError(name: string, err: unknown): void {
+  const kind = err instanceof DOMException ? err.name : '';
+  const hint =
+    kind === 'NotAllowedError' ? ' The "tools" Permissions Policy blocks this document (cross-origin iframes need allow="tools").' :
+    kind === 'SecurityError' ? ' WebMCP requires an origin-keyed agent cluster (is document.domain set?).' :
+    kind === 'InvalidStateError' ? ' Check for a duplicate name, an invalid name (allowed: A-Z a-z 0-9 _ - .), or an empty description.' :
+    '';
+  console.warn(`[auto-webmcp] registerTool("${name}") failed: ${String(err)}.${hint}`);
 }
 
 /**
@@ -108,13 +136,13 @@ export function isWebMCPSupported(): boolean {
 export async function registerFormTool(
   form: HTMLFormElement,
   metadata: ToolMetadata,
-  execute: (params: Record<string, unknown>, client?: unknown) => Promise<unknown>,
+  execute: ExecuteFn,
+  debug = false,
 ): Promise<void> {
   if (!isWebMCPSupported()) return;
 
   // Unregister any previously-registered tool for this same form element
-  const existing = registeredTools.get(form);
-  if (existing) {
+  if (registeredTools.has(form)) {
     await unregisterFormTool(form);
   }
 
@@ -122,29 +150,17 @@ export async function registerFormTool(
     name: metadata.name,
     description: metadata.description,
     inputSchema: metadata.inputSchema,
-    outputSchema: EXECUTE_OUTPUT_SCHEMA,
     execute,
   };
+  if (metadata.title) toolDef.title = metadata.title;
   if (metadata.annotations && Object.keys(metadata.annotations).length > 0) {
     toolDef.annotations = metadata.annotations;
   }
 
-  const controller = new AbortController();
-  registrationControllers.set(form, controller);
+  const controller = await registerToolDefinition(toolDef, debug);
+  if (controller) registrationControllers.set(form, controller);
 
-  try {
-    await navigator.modelContext!.registerTool(toolDef, { signal: controller.signal });
-  } catch {
-    // Chrome may hold a stale registration from a previous page load.
-    // Unregister by name and retry once.
-    try {
-      await navigator.modelContext!.unregisterTool?.(metadata.name);
-      await navigator.modelContext!.registerTool(toolDef, { signal: controller.signal });
-    } catch {
-      // Give up Chrome registration — local handlers and form:registered still work.
-    }
-  }
-
+  // Track even when the browser rejected it: local handlers and form:registered still work.
   registeredTools.set(form, metadata.name);
 }
 
@@ -153,23 +169,11 @@ export async function registerFormTool(
  * Silently no-ops if not registered or WebMCP not supported.
  */
 export async function unregisterFormTool(form: HTMLFormElement): Promise<void> {
-  if (!isWebMCPSupported()) return;
-
   const name = registeredTools.get(form);
   if (!name) return;
 
-  const controller = registrationControllers.get(form);
-  if (controller) {
-    controller.abort();
-    registrationControllers.delete(form);
-  }
-
-  try {
-    await navigator.modelContext!.unregisterTool?.(name);
-  } catch {
-    // Tool may have already been removed — ignore
-  }
-
+  await unregisterToolDefinition(name, registrationControllers.get(form));
+  registrationControllers.delete(form);
   registeredTools.delete(form);
 }
 

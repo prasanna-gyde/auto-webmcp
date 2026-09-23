@@ -259,12 +259,21 @@
     window.__executeHandlers = {};
     window.__registeredToolMeta = {};
 
-    var _isSupported = typeof navigator !== 'undefined' && !!navigator.modelContext;
+    // Detect the real WebMCP API BEFORE we proxy it.
+    // Spec location is document.modelContext; older Chrome builds used navigator.modelContext.
+    var _real = (typeof document !== 'undefined' && document.modelContext) ||
+      (typeof navigator !== 'undefined' && navigator.modelContext) || null;
+    var _isSupported = !!_real;
     window.__awmcp_real_supported = _isSupported;
-    var _real = navigator.modelContext;
+
+    function _forget(name) {
+      delete window.__executeHandlers[name];
+      delete window.__registeredToolMeta[name];
+      if (typeof window.__onToolUnregistered === 'function') window.__onToolUnregistered(name);
+    }
 
     var _proxyObj = {
-      registerTool: function(tool) {
+      registerTool: function(tool, options) {
         window.__executeHandlers[tool.name] = tool.execute;
         window.__registeredToolMeta[tool.name] = {
           description: tool.description,
@@ -272,29 +281,35 @@
           inputSchema: tool.inputSchema || null
         };
         if (typeof window.__onToolRegistered === 'function') window.__onToolRegistered(tool.name);
-        if (_isSupported && _real) {
-          try { return _real.registerTool(tool).catch(function(e) { console.warn('[auto-webmcp]', e); }); }
-          catch(e) { console.warn('[auto-webmcp]', e); return Promise.resolve(); }
+        // Spec: aborting the registration signal unregisters the tool.
+        if (options && options.signal) {
+          options.signal.addEventListener('abort', function() { _forget(tool.name); }, { once: true });
+        }
+        if (_real) {
+          try { return Promise.resolve(_real.registerTool(tool, options)).catch(function(e) { console.warn('[auto-webmcp] registerTool failed:', e); }); }
+          catch(e) { console.warn('[auto-webmcp] registerTool failed (sync):', e); }
         }
         return Promise.resolve();
       },
+      // Legacy API, kept for older Chrome builds.
       unregisterTool: function(name) {
-        delete window.__executeHandlers[name];
-        delete window.__registeredToolMeta[name];
-        if (typeof window.__onToolUnregistered === 'function') window.__onToolUnregistered(name);
-        if (_isSupported && _real) {
-          try { return _real.unregisterTool(name).catch(function(e) { console.warn('[auto-webmcp]', e); }); }
-          catch(e) { console.warn('[auto-webmcp]', e); return Promise.resolve(); }
+        _forget(name);
+        if (_real && typeof _real.unregisterTool === 'function') {
+          try { return Promise.resolve(_real.unregisterTool(name)).catch(function() {}); }
+          catch(e) {}
         }
         return Promise.resolve();
       }
     };
 
-    try {
-      Object.defineProperty(navigator, 'modelContext', { get: function() { return _proxyObj; }, configurable: true });
-    } catch(e) {
-      navigator.modelContext = _proxyObj;
-    }
+    ['document', 'navigator'].forEach(function(key) {
+      var target = window[key];
+      try {
+        Object.defineProperty(target, 'modelContext', { get: function() { return _proxyObj; }, configurable: true });
+      } catch(e) {
+        try { target.modelContext = _proxyObj; } catch(e2) {}
+      }
+    });
   </script>
 </head>
 <body>
@@ -729,7 +744,7 @@
   </footer>
 
   <!-- IIFE -->
-  <script src="https://unpkg.com/auto-webmcp@0.3.24/dist/auto-webmcp.iife.js"></script>
+  <script src="https://unpkg.com/auto-webmcp@0.4.0/dist/auto-webmcp.iife.js"></script>
 
   <!-- UI logic -->
   <script>
