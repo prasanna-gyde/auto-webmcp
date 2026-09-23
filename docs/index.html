@@ -452,6 +452,11 @@
       padding: 1.25rem;
     }
 
+    /* Grid items holding code blocks must shrink so the <pre> scrolls instead of widening the page. */
+    .how-grid > *, .compare-grid > *, .config-grid > *, .links-grid > * { min-width: 0; }
+    .compare-list li { overflow-wrap: anywhere; }
+    .how-grid + .note-callout, .config-snippet + .note-callout { margin-top: 1.5rem; }
+
     /* ─── Testing tip ─── */
     .tip-section { background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
     .tip-box {
@@ -562,9 +567,9 @@
 
   <!-- ═══ Hero ═══ -->
   <div class="hero">
-    <a class="badge" href="https://developer.chrome.com/blog/webmcp-epp" target="_blank" rel="noopener">
+    <a class="badge" href="https://developer.chrome.com/blog/ai-webmcp-origin-trial" target="_blank" rel="noopener">
       <span class="badge-dot"></span>
-      Chrome WebMCP · Early Preview
+      WebMCP origin trial · Chrome 149+ · Edge 150+
     </a>
     <h1>Drop in one script tag.<br>Every <code>&lt;form&gt;</code> is instantly callable by AI agents.</h1>
     <p class="hero-sub">
@@ -669,7 +674,7 @@
     <div class="section-inner">
       <div class="section-label">Why auto-webmcp?</div>
       <h2 class="section-title">Native Chrome API vs. auto-webmcp</h2>
-      <p class="section-sub">Chrome 146+ ships WebMCP with two paths. auto-webmcp is a polyfill + enhancement layer that works with both.</p>
+      <p class="section-sub">WebMCP has two paths: a declarative API (form attributes) and an imperative API (JavaScript). auto-webmcp builds on both.</p>
       <div class="compare-grid">
         <div class="compare-card">
           <h3>Native Declarative API</h3>
@@ -677,7 +682,7 @@
             <li>Add <code>toolname</code> to each <code>&lt;form&gt;</code> manually</li>
             <li>Full manual control over name and schema</li>
             <li>Best for new sites built with WebMCP in mind</li>
-            <li>Requires Chrome 146+ with <code>#enable-webmcp-testing</code> flag</li>
+            <li>Available in Chrome 149+ and Edge 150+ through the origin trial</li>
             <li>Each form requires explicit annotation</li>
           </ul>
         </div>
@@ -699,6 +704,68 @@
     </div>
   </section>
 
+  <!-- ═══ Sensitive fields & country packs ═══ -->
+  <section style="border-top: 1px solid var(--border);">
+    <div class="section-inner">
+      <div class="section-label">Safety</div>
+      <h2 class="section-title">Sensitive fields stay with the user</h2>
+      <p class="section-sub">Credentials, card data and restricted national IDs are never exposed to agents, with no setup. Country packs add format hints so agents fill IDs correctly, and mask personal IDs in tool results.</p>
+      <div class="how-grid">
+        <div class="how-card">
+          <h3>India <code>packs/in</code></h3>
+          <p>Masks PAN, UPI ID, bank account, passport, voter ID and ABHA. Formats GSTIN (with checksum), IFSC, PIN code and mobile.</p>
+        </div>
+        <div class="how-card">
+          <h3>United States <code>packs/us</code></h3>
+          <p>Masks ITIN, bank account, date of birth, driver&#39;s license and Medicare number. Formats ABA routing, EIN and NPI (with checksums), ZIP and phone.</p>
+        </div>
+        <div class="how-card">
+          <h3>Singapore <code>packs/sg</code></h3>
+          <p>Masks passport and date of birth. Formats UEN, postal code and phone. NRIC/FIN is always blocked.</p>
+        </div>
+        <div class="how-card">
+          <h3>United Kingdom <code>packs/gb</code></h3>
+          <p>Masks National Insurance number, NHS number, UTR and bank account. Formats sort code, company number, VAT (with checksum) and postcode.</p>
+        </div>
+      </div>
+      <div class="note-callout">
+        <strong>Limits:</strong> Packs control what auto-webmcp puts into the agent&#39;s context and logs. An agent that reads the page directly can still see the values, so also send <code>Permissions-Policy: tools=()</code> on KYC and payment pages.
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Razorpay adapter ═══ -->
+  <section style="border-top: 1px solid var(--border);">
+    <div class="section-inner">
+      <div class="section-label">Payments</div>
+      <h2 class="section-title">Razorpay Checkout for agents</h2>
+      <p class="section-sub">Checkout is a button and a hosted modal, so form scanning cannot see it. The Razorpay adapter registers checkout tools directly. The agent starts checkout, the user pays in Razorpay&#39;s modal with their UPI PIN or card OTP, and your webhook confirms the payment. The agent never sees payment details.</p>
+      <div class="config-snippet">
+        <div class="code-block-wrapper">
+          <button class="copy-btn" data-copy="import { razorpay } from 'auto-webmcp/adapters/razorpay';
+
+razorpay({
+  merchant: 'Acme',
+  plans: async () => [{ id: 'inr-monthly', name: 'Pro', amount: 49900, currency: 'INR' }],
+  createSubscription: async (planId) => (await fetch('/billing/subscribe', { method: 'POST', body: planId })).json(),
+  subscriptionStatus: async () => (await fetch('/billing/status')).json(),
+});" aria-label="Copy Razorpay adapter example">Copy</button>
+          <pre><code class="language-javascript">import { razorpay } from 'auto-webmcp/adapters/razorpay';
+
+razorpay({
+  merchant: 'Acme',
+  plans: async () =&gt; [{ id: 'inr-monthly', name: 'Pro', amount: 49900, currency: 'INR' }],
+  createSubscription: async (planId) =&gt; (await fetch('/billing/subscribe', { method: 'POST', body: planId })).json(),
+  subscriptionStatus: async () =&gt; (await fetch('/billing/status')).json(),
+});</code></pre>
+        </div>
+      </div>
+      <div class="note-callout">
+        <strong>Tools registered:</strong> <code>get_plans</code>, <code>start_subscription</code>, <code>get_subscription_status</code> and <code>cancel_subscription</code> (asks the user to confirm), plus <code>start_payment</code> and related tools for one-time Razorpay Orders.
+      </div>
+    </div>
+  </section>
+
   <!-- ═══ Config ═══ -->
   <section class="config-section" style="border-top: 1px solid var(--border);">
     <div class="section-inner">
@@ -711,24 +778,34 @@
           <div class="config-snippet">
             <div class="code-block-wrapper">
               <button class="copy-btn" data-copy="import { autoWebMCP } from 'auto-webmcp';
+import { india } from 'auto-webmcp/packs/in';
 
 autoWebMCP({
-  // Override tool name globally
-  toolName: (form) => form.id || 'my-form',
-  // Custom description
-  description: (form) => form.title || 'Submit this form',
-  // Auto-submit after agent fills fields
-  autoSubmit: true,
+  // Skip forms by CSS selector
+  exclude: ['#login-form'],
+  // Name and describe specific forms
+  overrides: {
+    '#search': { name: 'search_products', description: 'Search the product catalog' },
+  },
+  // Submit after the agent fills fields (default: false, the user submits)
+  autoSubmit: false,
+  // Country packs: format hints and redaction for Indian fields
+  packs: [india],
 });" aria-label="Copy JS config">Copy</button>
               <pre><code class="language-javascript">import { autoWebMCP } from 'auto-webmcp';
+import { india } from 'auto-webmcp/packs/in';
 
 autoWebMCP({
-  // Override tool name globally
-  toolName: (form) => form.id || 'my-form',
-  // Custom description
-  description: (form) => form.title || 'Submit this form',
-  // Auto-submit after agent fills fields
-  autoSubmit: true,
+  // Skip forms by CSS selector
+  exclude: ['#login-form'],
+  // Name and describe specific forms
+  overrides: {
+    '#search': { name: 'search_products', description: 'Search the product catalog' },
+  },
+  // Submit after the agent fills fields (default: false, the user submits)
+  autoSubmit: false,
+  // Country packs: format hints and redaction for Indian fields
+  packs: [india],
 });</code></pre>
             </div>
           </div>
@@ -777,12 +854,11 @@ autoWebMCP({
       <div class="tip-box">
         <div class="tip-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6m-5 0v7l-5 10a1 1 0 0 0 .9 1.5h10.2a1 1 0 0 0 .9-1.5l-5-10V3"/><line x1="6" y1="6" x2="18" y2="6"/></svg></div>
         <div class="tip-content">
-          <h3>Test with Chrome 146+</h3>
+          <h3>Test in Chrome 149+</h3>
           <p>
-            Enable <code>chrome://flags/#enable-webmcp-testing</code> in Chrome 146+ and install the
-            <strong>Model Context Tool Inspector</strong> Chrome Extension to inspect and invoke your
-            registered tools in real time. auto-webmcp registers your forms as first-class tools
-            visible directly in the inspector.
+            Enable <code>chrome://flags/#enable-webmcp-testing</code> and install the
+            <strong>Model Context Tool Inspector</strong> extension to inspect and invoke your
+            registered tools. Tools from auto-webmcp appear there like any hand-written WebMCP tool.
           </p>
         </div>
       </div>
@@ -798,7 +874,7 @@ autoWebMCP({
         <details class="faq-item">
           <summary class="faq-q">Does this require a special Chrome flag?</summary>
           <div class="faq-a">
-            Yes, for now. WebMCP is in Early Preview and requires enabling <code>chrome://flags/#enable-webmcp-testing</code> in Chrome 146+. For regular users without the flag, auto-webmcp silently does nothing. Your page is completely unaffected. Once Chrome ships WebMCP to stable, it will activate automatically for all users.
+            Only for local testing. For real visitors, register your site for the <a href="https://developer.chrome.com/blog/ai-webmcp-origin-trial" target="_blank" rel="noopener">WebMCP origin trial</a> (Chrome 149+, Edge 150+) and add the trial token to your pages, either as a <code>&lt;meta http-equiv="origin-trial"&gt;</code> tag or an <code>Origin-Trial</code> HTTP header. Visitors on other browsers, or outside the trial, see no difference, because auto-webmcp does nothing when WebMCP is absent.
           </div>
         </details>
         <details class="faq-item">
@@ -822,7 +898,7 @@ autoWebMCP({
         <details class="faq-item">
           <summary class="faq-q">Will AI agents see passwords or sensitive data?</summary>
           <div class="faq-a">
-            No. <code>password</code>, <code>file</code>, and <code>hidden</code> inputs are never included in the tool schema exposed to agents. You can also add <code>data-no-webmcp</code> to any form to exclude it entirely from agent access.
+            No. auto-webmcp never exposes passwords, one-time codes, PINs, card numbers, CVVs, card expiry dates, or restricted national IDs (Aadhaar, US SSN, Singapore NRIC/FIN, Dutch BSN, Irish PPSN, Belgian national register number). The agent is told the user must fill those fields. Tool results only include fields the agent can see, so hidden inputs such as CSRF tokens never leave the page. Override a field with <code>data-webmcp-sensitive="allow|redact|block"</code>, or exclude a whole form with <code>data-no-webmcp</code>.
           </div>
         </details>
         <details class="faq-item">
@@ -855,10 +931,10 @@ autoWebMCP({
           <h3>npm</h3>
           <p>Install via npm, yarn, or pnpm. ESM and IIFE builds included.</p>
         </a>
-        <a class="link-card" href="https://developer.chrome.com/blog/webmcp-epp" target="_blank" rel="noopener">
+        <a class="link-card" href="https://developer.chrome.com/docs/ai/webmcp" target="_blank" rel="noopener">
           <div class="link-card-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
-          <h3>Chrome WebMCP Early Preview</h3>
-          <p>Official documentation from the Chrome team on the WebMCP APIs and early preview program.</p>
+          <h3>Chrome WebMCP docs</h3>
+          <p>Official Chrome documentation: the APIs, best practices, security guidance and the origin trial.</p>
         </a>
       </div>
     </div>
