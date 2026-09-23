@@ -1266,11 +1266,11 @@
       if (supported) {
         badge.className = 'status-badge status-active';
         text.textContent = 'ACTIVE';
-        hint.textContent = 'Chrome 146+ WebMCP flag is enabled. Registered tools are visible to AI agents and the Model Context Tool Inspector extension.';
+        hint.textContent = 'WebMCP is enabled in this browser. Registered tools are visible to AI agents and the Model Context Tool Inspector extension.';
       } else {
         badge.className = 'status-badge status-inactive';
         text.textContent = 'INACTIVE';
-        hint.innerHTML = 'Enable at <code>chrome://flags/#enable-webmcp-testing</code> in Chrome 146+. The Agent Simulator below works regardless.';
+        hint.innerHTML = 'Enable <code>chrome://flags/#enable-webmcp-testing</code> in Chrome 149+. The Agent Simulator below works regardless.';
       }
     })();
 
