@@ -24,6 +24,16 @@
       "import": "./dist/packs/us.esm.js",
       "require": "./dist/packs/us.cjs.js"
     },
+    "./packs/sg": {
+      "types": "./dist/packs/sg.d.ts",
+      "import": "./dist/packs/sg.esm.js",
+      "require": "./dist/packs/sg.cjs.js"
+    },
+    "./packs/gb": {
+      "types": "./dist/packs/gb.d.ts",
+      "import": "./dist/packs/gb.esm.js",
+      "require": "./dist/packs/gb.cjs.js"
+    },
     "./adapters/razorpay": {
       "types": "./dist/adapters/razorpay.d.ts",
       "import": "./dist/adapters/razorpay.esm.js",

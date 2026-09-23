@@ -7,6 +7,8 @@ const watch = process.argv.includes('--watch');
 const PACKS = [
   { id: 'in', exportName: 'india' },
   { id: 'us', exportName: 'unitedStates' },
+  { id: 'sg', exportName: 'singapore' },
+  { id: 'gb', exportName: 'unitedKingdom' },
 ];
 
 const packTarget = ['chrome112', 'firefox115', 'safari16'];

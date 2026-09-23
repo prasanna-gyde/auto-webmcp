@@ -1686,3 +1686,104 @@ test.describe('Razorpay adapter', () => {
     expect(accepted.data.status).toBe('cancel_requested');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Singapore and UK packs
+// ---------------------------------------------------------------------------
+
+async function initPackFixture(page: import('@playwright/test').Page, packs: string[], extra: Record<string, unknown> = {}) {
+  await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+  await page.addInitScript(() => {
+    (window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_NO_AUTOINIT'] = true;
+  });
+  await page.goto('/tests/fixtures/sg-gb-form.html');
+  await page.evaluate(async ({ packs, extra }) => {
+    const mod = await import('/dist/auto-webmcp.esm.js');
+    const loaded = [];
+    for (const id of packs) {
+      const packMod = await import(`/dist/packs/${id}.esm.js`);
+      loaded.push(Object.values(packMod).find((v) => v && typeof v === 'object' && 'rules' in (v as object)));
+    }
+    await mod.autoWebMCP({ packs: loaded, ...extra });
+  }, { packs, extra });
+  const tools = await getRegisteredTools(page) as Tool[];
+  return {
+    sg: tools.find((t) => (t['name'] as string).startsWith('register_company'))!,
+    gb: tools.find((t) => (t['name'] as string).startsWith('save_payroll'))!,
+  };
+}
+
+test.describe('Singapore pack', () => {
+  test('NRIC/FIN stays blocked; UEN, postal code and phone get formats', async ({ page }) => {
+    const { sg } = await initPackFixture(page, ['sg']);
+    const props = sg.inputSchema.properties;
+    expect(Object.keys(props)).not.toContain('nric');
+    expect(sg['description']).toContain('The user must enter: NRIC/FIN');
+    expect(props['uen']?.['pattern']).toBeDefined();
+    expect(props['postal_code']?.['pattern']).toBe('^\\d{6}$');
+    expect(props['mobile']?.['description']).toContain('Singapore');
+  });
+
+  test('UEN and phone patterns accept real formats and reject others', async ({ page }) => {
+    const { sg } = await initPackFixture(page, ['sg']);
+    const props = sg.inputSchema.properties;
+    const uen = new RegExp(props['uen']!['pattern'] as string);
+    expect(uen.test('201912345K')).toBe(true);
+    expect(uen.test('53123456A')).toBe(true);
+    expect(uen.test('T09LL0001B')).toBe(true);
+    expect(uen.test('12345')).toBe(false);
+    const phone = new RegExp(props['mobile']!['pattern'] as string);
+    expect(phone.test('+65 9123 4567')).toBe(true);
+    expect(phone.test('61234567')).toBe(true);
+    expect(phone.test('51234567')).toBe(false);
+  });
+});
+
+test.describe('UK pack', () => {
+  test('redacts NINO, NHS number and account number; formats sort code, VAT and postcode', async ({ page }) => {
+    const { gb } = await initPackFixture(page, ['gb'], { execution: { timeoutMs: 300 } });
+    const props = gb.inputSchema.properties;
+    expect(props['sort_code']?.['pattern']).toBe('^\\d{2}-?\\d{2}-?\\d{2}$');
+    expect(props['account_number']?.['pattern']).toBe('^\\d{8}$');
+    const postcode = new RegExp(props['postcode']!['pattern'] as string);
+    expect(postcode.test('SW1A 1AA')).toBe(true);
+    expect(postcode.test('M1 1AE')).toBe(true);
+    expect(postcode.test('12345')).toBe(false);
+    const nino = new RegExp(props['nino']!['pattern'] as string);
+    expect(nino.test('AB 12 34 56 C')).toBe(true);
+    expect(nino.test('QQ 12 34 56 C')).toBe(false);
+    expect(nino.test('BG123456A')).toBe(false);
+
+    const { structured, text } = await runTool(page, gb['name'] as string, {
+      nino: 'AB123456C', nhs_number: '9434765919', account_number: '31926819', sort_code: '60-16-13',
+    });
+    expect(structured.filled_fields.nino).toBe('XXXXX456C');
+    expect(structured.filled_fields.nhs_number).toBe('XXXXXX5919');
+    expect(structured.filled_fields.account_number).toBe('XXXX6819');
+    expect(structured.filled_fields.sort_code).toBe('60-16-13');
+    expect(text).not.toContain('AB123456C');
+    expect((gb['annotations'] as Record<string, unknown>)['consequentialHint']).toBe(true);
+  });
+
+  test('NHS number and UK VAT checksums produce invalid_format warnings', async ({ page }) => {
+    const { gb } = await initPackFixture(page, ['gb'], { execution: { timeoutMs: 300 } });
+    const bad = await runTool(page, gb['name'] as string, { nhs_number: '9434765918', vat_number: 'GB123456789' });
+    const fields = bad.structured.warnings.filter((w: { type: string }) => w.type === 'invalid_format').map((w: { field: string }) => w.field);
+    expect(fields.sort()).toEqual(['nhs_number', 'vat_number']);
+    const good = await runTool(page, gb['name'] as string, { nhs_number: '943 476 5919', vat_number: 'GB999999973' });
+    expect(good.structured.warnings.some((w: { type: string }) => w.type === 'invalid_format')).toBe(false);
+  });
+
+  test('IIFE pack bundles for sg and gb queue themselves', async ({ page }) => {
+    await page.addInitScript(MOCK_WEBMCP);
+    await page.addInitScript(() => {
+      (window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_NO_AUTOINIT'] = true;
+    });
+    await page.goto('/tests/fixtures/sg-gb-form.html');
+    await page.addScriptTag({ url: '/dist/packs/sg.iife.js' });
+    await page.addScriptTag({ url: '/dist/packs/gb.iife.js' });
+    const ids = await page.evaluate(() =>
+      ((window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_PACKS'] as Array<{ id: string }>).map((p) => p.id));
+    expect(ids).toEqual(['sg', 'gb']);
+  });
+});
