@@ -1552,3 +1552,127 @@ test.describe('US pack', () => {
     expect(good.structured.warnings.some((w: { type: string }) => w.type === 'invalid_format')).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Razorpay adapter
+// ---------------------------------------------------------------------------
+
+// Stub of Razorpay Checkout. window.__rzpBehaviour picks how the modal "resolves".
+const MOCK_RAZORPAY = `
+  window.__rzpOpened = [];
+  window.__rzpBehaviour = 'pay';
+  window.Razorpay = function (opts) {
+    const handlers = {};
+    return {
+      on(evt, cb) { handlers[evt] = cb; },
+      close() { window.__rzpClosed = true; },
+      open() {
+        window.__rzpOpened.push({ key: opts.key, subscription_id: opts.subscription_id, order_id: opts.order_id, name: opts.name });
+        setTimeout(() => {
+          const b = window.__rzpBehaviour;
+          if (b === 'pay') opts.handler({ razorpay_payment_id: 'pay_test_123', razorpay_subscription_id: opts.subscription_id });
+          else if (b === 'dismiss') opts.modal.ondismiss();
+          else if (b === 'fail') handlers['payment.failed']({ error: { description: 'Card declined' } });
+        }, 20);
+      },
+    };
+  };
+`;
+
+async function initRazorpay(page: import('@playwright/test').Page, extra = '') {
+  await page.addInitScript(MOCK_WEBMCP_WITH_EXECUTE);
+  await page.addInitScript(MOCK_RAZORPAY);
+  await page.addInitScript(() => {
+    (window as unknown as Record<string, unknown>)['__AUTO_WEBMCP_NO_AUTOINIT'] = true;
+  });
+  await page.goto('/tests/fixtures/razorpay.html');
+  return page.evaluate(async (extraSrc) => {
+    const { razorpay } = await import('/dist/adapters/razorpay.esm.js');
+    const w = window as unknown as Record<string, unknown>;
+    w['__cancelled'] = 0;
+    const handle = await razorpay({
+      merchant: 'Arbr',
+      plans: async () => [{ id: 'inr-monthly', name: 'Paid', amount: 10000, currency: 'INR', period: 'monthly' }],
+      createSubscription: async (planId: string) => ({ keyId: 'rzp_test_x', subscriptionId: `sub_for_${planId}` }),
+      subscriptionStatus: async () => ({ plan: 'free' }),
+      cancelSubscription: async () => { w['__cancelled'] = (w['__cancelled'] as number) + 1; },
+      checkoutTimeoutMs: 2000,
+    });
+    if (extraSrc) new Function(extraSrc)();
+    return handle.tools;
+  }, extra);
+}
+
+async function callTool(page: import('@playwright/test').Page, name: string, params: Record<string, unknown> = {}, abortAfterMs?: number) {
+  const r = await page.evaluate(async ({ name, params, abortAfterMs }) => {
+    const handlers = (window as unknown as Record<string, Record<string, (p: unknown, o?: unknown) => Promise<unknown>>>)['__executeHandlers'];
+    const controller = new AbortController();
+    if (abortAfterMs !== undefined) setTimeout(() => controller.abort(), abortAfterMs);
+    return handlers[name]!(params, { signal: controller.signal });
+  }, { name, params, abortAfterMs }) as { content: Array<{ text: string }> };
+  return { text: r.content[0]!.text, data: JSON.parse(r.content[1]!.text) };
+}
+
+test.describe('Razorpay adapter', () => {
+  test('registers only tools whose hooks are supplied, with spec annotations', async ({ page }) => {
+    const tools = await initRazorpay(page);
+    expect(tools.sort()).toEqual(['cancel_subscription', 'get_plans', 'get_subscription_status', 'start_subscription']);
+    const registered = await getRegisteredTools(page) as Array<Record<string, unknown>>;
+    const ann = (n: string) => registered.find((t) => t['name'] === n)?.['annotations'] as Record<string, unknown>;
+    expect(ann('get_plans')['readOnlyHint']).toBe(true);
+    expect(ann('start_subscription')['consequentialHint']).toBe(true);
+    expect(ann('cancel_subscription')['consequentialHint']).toBe(true);
+  });
+
+  test('get_plans returns merchant plans', async ({ page }) => {
+    await initRazorpay(page);
+    const { data } = await callTool(page, 'get_plans');
+    expect(data.plans[0].id).toBe('inr-monthly');
+  });
+
+  test('start_subscription opens Checkout with the server session and reports submission', async ({ page }) => {
+    await initRazorpay(page);
+    const { data, text } = await callTool(page, 'start_subscription', { plan_id: 'inr-monthly' });
+    expect(data.status).toBe('submitted');
+    expect(data.payment_id).toBe('pay_test_123');
+    expect(text).toContain('get_subscription_status');
+    const opened = await page.evaluate(() => (window as unknown as Record<string, unknown>)['__rzpOpened']);
+    expect(opened).toEqual([{ key: 'rzp_test_x', subscription_id: 'sub_for_inr-monthly', name: 'Arbr' }]);
+  });
+
+  test('dismissed and failed checkouts are reported, not treated as paid', async ({ page }) => {
+    await initRazorpay(page);
+    await page.evaluate(() => { (window as unknown as Record<string, unknown>)['__rzpBehaviour'] = 'dismiss'; });
+    expect((await callTool(page, 'start_subscription', { plan_id: 'inr-monthly' })).data.status).toBe('dismissed');
+    await page.evaluate(() => { (window as unknown as Record<string, unknown>)['__rzpBehaviour'] = 'fail'; });
+    const failed = await callTool(page, 'start_subscription', { plan_id: 'inr-monthly' });
+    expect(failed.data.status).toBe('failed');
+    expect(failed.data.reason).toBe('Card declined');
+  });
+
+  test('an open checkout times out to awaiting_user_action; abort closes it', async ({ page }) => {
+    await initRazorpay(page);
+    await page.evaluate(() => { (window as unknown as Record<string, unknown>)['__rzpBehaviour'] = 'hang'; });
+    expect((await callTool(page, 'start_subscription', { plan_id: 'inr-monthly' })).data.status).toBe('awaiting_user_action');
+    const aborted = await callTool(page, 'start_subscription', { plan_id: 'inr-monthly' }, 50);
+    expect(aborted.data.status).toBe('cancelled');
+    expect(await page.evaluate(() => (window as unknown as Record<string, unknown>)['__rzpClosed'])).toBe(true);
+  });
+
+  test('start_subscription without plan_id asks for one', async ({ page }) => {
+    await initRazorpay(page);
+    const { data } = await callTool(page, 'start_subscription', {});
+    expect(data.status).toBe('error');
+  });
+
+  test('cancel_subscription asks the user and respects a decline', async ({ page }) => {
+    await initRazorpay(page);
+    page.once('dialog', (d) => d.dismiss());
+    const declined = await callTool(page, 'cancel_subscription');
+    expect(declined.data.status).toBe('declined');
+    expect(await page.evaluate(() => (window as unknown as Record<string, unknown>)['__cancelled'])).toBe(0);
+    page.once('dialog', (d) => d.accept());
+    const accepted = await callTool(page, 'cancel_subscription');
+    expect(accepted.data.status).toBe('cancel_requested');
+  });
+});

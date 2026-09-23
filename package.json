@@ -23,6 +23,11 @@
       "types": "./dist/packs/us.d.ts",
       "import": "./dist/packs/us.esm.js",
       "require": "./dist/packs/us.cjs.js"
+    },
+    "./adapters/razorpay": {
+      "types": "./dist/adapters/razorpay.d.ts",
+      "import": "./dist/adapters/razorpay.esm.js",
+      "require": "./dist/adapters/razorpay.cjs.js"
     }
   },
   "files": [

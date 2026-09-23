@@ -11,6 +11,17 @@ const PACKS = [
 
 const packTarget = ['chrome112', 'firefox115', 'safari16'];
 
+/** Adapters: src/adapters/<id>.ts; IIFE exposes the module on `globalName`. */
+const ADAPTERS = [{ id: 'razorpay', globalName: 'AutoWebMCPRazorpay' }];
+
+function adapterBuilds() {
+  return ADAPTERS.flatMap(({ id, globalName }) => [
+    esbuild.build({ entryPoints: [`src/adapters/${id}.ts`], bundle: true, format: 'esm', target: packTarget, outfile: `dist/adapters/${id}.esm.js` }),
+    esbuild.build({ entryPoints: [`src/adapters/${id}.ts`], bundle: true, format: 'cjs', target: packTarget, outfile: `dist/adapters/${id}.cjs.js` }),
+    esbuild.build({ entryPoints: [`src/adapters/${id}.ts`], bundle: true, format: 'iife', globalName, minify: true, target: packTarget, outfile: `dist/adapters/${id}.iife.js` }),
+  ]);
+}
+
 /** ESM + CJS per pack, and an IIFE that queues the pack for script-tag users. */
 function packBuilds() {
   return PACKS.flatMap(({ id, exportName }) => [
@@ -82,6 +93,7 @@ async function build() {
         minify: false,
       }),
       ...packBuilds(),
+      ...adapterBuilds(),
     ]);
     console.log('Build complete: dist/');
   }
